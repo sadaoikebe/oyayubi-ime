@@ -22,6 +22,10 @@ TIP の fail-open 規則と登録手順は [`src/tip/README.md`](src/tip/README.
 
 - [`C:\Users\marur\qmk_userspace\docs\NICOLA-SPEC.md`](C:\Users\marur\qmk_userspace\docs\NICOLA-SPEC.md)
 
+## License
+
+自前のコードは [MIT](LICENSE)。Mozc の OSS 辞書（実行時に取得する本体と、同梱の `suffix.txt` など）は Google の BSD-3-Clause に加え IPAdic（NAIST / ICOT）と沖縄辞書の条件が付く。条文は [NOTICE.md](NOTICE.md) と `third_party/mozc_oss_dict/README.txt`。GPL の `nicola.c` は入れていません。
+
 禁止していること（詳細は設計書）:
 
 - 左右あいまい打鍵をいったん 1 本のひらがなに潰して、既存 IME に渡すこと
