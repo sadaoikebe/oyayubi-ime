@@ -54,6 +54,8 @@ def main() -> None:
                     "fsm": sess.fsm.state,
                     "n_tokens": len(sess.tokens),
                     "timer": deadline,
+                    "candidates": sess.candidates,
+                    "cand_index": sess.cand_index,
                 },
                 ensure_ascii=False,
             ),

@@ -16,6 +16,7 @@
 #include <msctf.h>
 #include <cstdio>
 #include <string>
+#include <vector>
 
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "oleaut32.lib")
@@ -89,11 +90,15 @@ static bool ModHeld() {
 }
 
 // NICOLA keys. Edit keys only while composing (SampleIME IsVirtualKeyNeed).
-static bool WantVk(UINT vk, bool composing) {
+static bool WantVk(UINT vk, bool composing, bool converted) {
     if (ModHeld()) return false;
     if (vk >= 'A' && vk <= 'Z') return true;
     if (vk == VK_SPACE) return true;
     if (vk == VK_RETURN || vk == VK_BACK || vk == VK_ESCAPE) return composing;
+    if (converted) {
+        if (vk >= '1' && vk <= '9') return true;
+        if (vk == VK_UP || vk == VK_DOWN) return true;
+    }
     switch (vk) {
         case VK_OEM_1:
         case VK_OEM_COMMA:
@@ -218,6 +223,8 @@ struct ServerReply {
     int n_tokens = 0;
     bool has_timer = false;
     ULONGLONG timer = 0;
+    std::vector<std::wstring> candidates;
+    int cand_index = 0;
 };
 
 static std::string GrabJsonString(const std::string& s, const char* key) {
@@ -254,6 +261,34 @@ static bool GrabJsonInt(const std::string& s, const char* key, long long& out) {
     return end != s.c_str() + p;
 }
 
+static std::vector<std::wstring> GrabJsonStringList(const std::string& s, const char* key) {
+    std::string k = std::string("\"") + key + "\":";
+    auto p = s.find(k);
+    std::vector<std::wstring> out;
+    if (p == std::string::npos) return out;
+    p += k.size();
+    while (p < s.size() && s[p] != '[') p++;
+    if (p >= s.size()) return out;
+    p++;
+    while (p < s.size() && s[p] != ']') {
+        while (p < s.size() && (s[p] == ' ' || s[p] == ',')) p++;
+        if (p >= s.size() || s[p] != '"') break;
+        p++;
+        std::string o;
+        for (; p < s.size() && s[p] != '"'; ++p) {
+            if (s[p] == '\\' && p + 1 < s.size()) {
+                ++p;
+                o.push_back(s[p]);
+            } else {
+                o.push_back(s[p]);
+            }
+        }
+        if (p < s.size()) p++;
+        out.push_back(Utf8ToWide(o));
+    }
+    return out;
+}
+
 static ServerReply ParseReply(const std::string& s) {
     ServerReply r;
     r.composition = Utf8ToWide(GrabJsonString(s, "composition"));
@@ -266,6 +301,8 @@ static ServerReply ParseReply(const std::string& s) {
         r.has_timer = true;
         r.timer = (ULONGLONG)n;
     }
+    if (GrabJsonInt(s, "cand_index", n)) r.cand_index = (int)n;
+    r.candidates = GrabJsonStringList(s, "candidates");
     return r;
 }
 
@@ -557,11 +594,15 @@ public:
     ITfComposition* composition_ = nullptr;
     Server server_;
     HWND timer_hwnd_ = nullptr;
+    HWND cand_hwnd_ = nullptr;
     std::wstring last_comp_;
     bool composing_ = false;
+    bool converted_ = false;
     bool pending_timer_ = false;
     ULONGLONG timer_at_ = 0;
     bool down_eaten_[256]{};
+    std::vector<std::wstring> cands_;
+    int cand_index_ = 0;
 
     static LRESULT CALLBACK TimerWnd(HWND h, UINT m, WPARAM w, LPARAM l) {
         if (m == WM_TIMER) {
@@ -585,11 +626,92 @@ public:
         SetTimer(timer_hwnd_, 1, 16, nullptr);
     }
 
+    static LRESULT CALLBACK CandWnd(HWND h, UINT m, WPARAM w, LPARAM l) {
+        if (m == WM_PAINT) {
+            auto* self = (Tip*)GetWindowLongPtrW(h, GWLP_USERDATA);
+            PAINTSTRUCT ps;
+            HDC hdc = BeginPaint(h, &ps);
+            RECT rc;
+            GetClientRect(h, &rc);
+            FillRect(hdc, &rc, (HBRUSH)GetStockObject(WHITE_BRUSH));
+            if (self) {
+                HFONT font = CreateFontW(18, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                         SHIFTJIS_CHARSET, 0, 0, 0, 0, L"Yu Gothic UI");
+                HGDIOBJ old = SelectObject(hdc, font);
+                int y = 2;
+                for (size_t i = 0; i < self->cands_.size(); ++i) {
+                    RECT line = {4, y, rc.right - 4, y + 22};
+                    wchar_t buf[256];
+                    swprintf_s(buf, L"%d. %s", (int)i + 1, self->cands_[i].c_str());
+                    if ((int)i == self->cand_index_) {
+                        SetBkColor(hdc, RGB(0x20, 0x60, 0xC0));
+                        SetTextColor(hdc, RGB(255, 255, 255));
+                    } else {
+                        SetBkColor(hdc, RGB(255, 255, 255));
+                        SetTextColor(hdc, RGB(0, 0, 0));
+                    }
+                    ExtTextOutW(hdc, 6, y + 2, ETO_OPAQUE, &line, buf, (UINT)wcslen(buf), nullptr);
+                    y += 22;
+                }
+                SelectObject(hdc, old);
+                DeleteObject(font);
+            }
+            EndPaint(h, &ps);
+            return 0;
+        }
+        if (m == WM_MOUSEACTIVATE) return MA_NOACTIVATE;
+        return DefWindowProcW(h, m, w, l);
+    }
+
+    void HideCands() {
+        if (cand_hwnd_) ShowWindow(cand_hwnd_, SW_HIDE);
+        cands_.clear();
+        cand_index_ = 0;
+    }
+
+    void ShowCands() {
+        if (cands_.empty()) {
+            HideCands();
+            return;
+        }
+        if (!cand_hwnd_) {
+            WNDCLASSW wc{};
+            wc.lpfnWndProc = CandWnd;
+            wc.hInstance = g_hinst;
+            wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+            wc.lpszClassName = L"OyayubiCand";
+            RegisterClassW(&wc);
+            cand_hwnd_ = CreateWindowExW(
+                WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST, wc.lpszClassName, L"",
+                WS_POPUP | WS_BORDER, 0, 0, 280, 24, nullptr, nullptr, g_hinst, nullptr);
+            SetWindowLongPtrW(cand_hwnd_, GWLP_USERDATA, (LONG_PTR)this);
+        }
+        int rows = (int)cands_.size();
+        int w = 280, h = 6 + rows * 22;
+        int x = 80, y = 80;
+        GUITHREADINFO gi{};
+        gi.cbSize = sizeof(gi);
+        if (GetGUIThreadInfo(GetCurrentThreadId(), &gi) && !IsRectEmpty(&gi.rcCaret)) {
+            x = gi.rcCaret.left;
+            y = gi.rcCaret.bottom + 4;
+        }
+        SetWindowPos(cand_hwnd_, HWND_TOPMOST, x, y, w, h,
+                     SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        InvalidateRect(cand_hwnd_, nullptr, TRUE);
+    }
+
     void NoteReply(const ServerReply& r) {
         last_comp_ = r.composition;
         composing_ = !r.composition.empty() || r.n_tokens > 0;
+        converted_ = r.converted;
         pending_timer_ = r.has_timer;
         timer_at_ = r.timer;
+        cands_ = r.candidates;
+        cand_index_ = r.cand_index;
+        if (r.converted && !r.candidates.empty() && r.commit.empty())
+            ShowCands();
+        else
+            HideCands();
     }
 
     void OnTimerImpl() {
@@ -655,7 +777,7 @@ public:
         if (!server_.ok || !server_.Alive()) return false;
         if (KeyboardDisabled(tm_)) return false;
         if (KeyboardClosed(tm_)) return false;
-        return WantVk(vk, composing_);
+        return WantVk(vk, composing_, converted_);
     }
 
     bool HandleKeyImpl(bool down, UINT vk) {
@@ -721,6 +843,10 @@ public:
             KillTimer(timer_hwnd_, 1);
             DestroyWindow(timer_hwnd_);
             timer_hwnd_ = nullptr;
+        }
+        if (cand_hwnd_) {
+            DestroyWindow(cand_hwnd_);
+            cand_hwnd_ = nullptr;
         }
         server_.Stop();
         composing_ = false;

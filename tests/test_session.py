@@ -52,3 +52,30 @@ class SessionTest(unittest.TestCase):
             "かえ" in self.s.composition or self.s.composition.startswith("変"),
             self.s.composition,
         )
+
+    def test_convert_lists_kidoku_and_kioku(self):
+        self.s.tokens = [Plain("k"), AmbShift("j"), Plain("i")]
+        self.s.converted = False
+        self.s._clear_cands()
+        self.s._refresh()
+        self.s.on_key(True, 0x20, 0)
+        self.s.on_key(False, 0x20, 20)
+        self.assertTrue(self.s.converted)
+        blob = " ".join(self.s.candidates)
+        self.assertIn("既読", blob)
+        self.assertIn("記憶", blob)
+
+    def test_space_cycles_candidates(self):
+        self.s.tokens = [Plain("k"), AmbShift("j"), Plain("i")]
+        self.s.converted = False
+        self.s._clear_cands()
+        self.s._refresh()
+        self.s.on_key(True, 0x20, 0)
+        self.s.on_key(False, 0x20, 20)
+        if len(self.s.candidates) < 2:
+            self.skipTest("need two surfaces")
+        first = self.s.composition
+        self.s.on_key(True, 0x20, 40)
+        self.s.on_key(False, 0x20, 60)
+        self.assertNotEqual(self.s.composition, first)
+        self.assertEqual(self.s.composition, self.s.candidates[self.s.cand_index])

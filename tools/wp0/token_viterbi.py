@@ -187,12 +187,14 @@ def nbest_tokens(
 
     seen: set[str] = set()
     out: list[DecodeResult] = []
-    for sc, i, reading in ranked:
-        if reading in seen:
-            continue
-        seen.add(reading)
+    for sc, i, _reading in ranked:
         dec = _rebuild(words, states, i, n)
         dec.score = sc
+        if dec.surface in seen:
+            continue
+        if any(p.cost >= UNK_COST for p in dec.pieces):
+            continue
+        seen.add(dec.surface)
         out.append(dec)
         if len(out) >= k:
             break

@@ -112,6 +112,8 @@ def view_key() -> tuple:
         session.fsm.state,
         len(session.tokens),
         tuple(session.tokens),
+        tuple(session.candidates),
+        session.cand_index,
     )
 
 
@@ -150,11 +152,19 @@ def paint(hwnd) -> None:
             f"{body}|"
         )
     else:
+        cands = ""
+        if session.converted and session.candidates:
+            bits = []
+            for i, c in enumerate(session.candidates):
+                mark = ">" if i == session.cand_index else " "
+                bits.append(f"{mark}{i + 1}.{c}")
+            cands = "\n" + "  ".join(bits)
         text = (
             "oyayubi-ime 試験窓  （Notepad 用ではない。TSF TIP は src/tip）\n"
             "Space+文字 = 親指シフト（左右不明）。Space 単独 = 変換。Enter = 確定。Esc = 取消。\n"
             f"[{status}] tokens={len(session.tokens)} fsm={session.fsm.state}\n\n"
             f"{body}〖{comp}〗"
+            f"{cands}"
         )
     user32.DrawTextW(hdc, text, -1, ctypes.byref(rc), DT_WORDBREAK | DT_NOPREFIX)
     user32.EndPaint(hwnd, ctypes.byref(ps))
