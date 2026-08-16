@@ -1,0 +1,11 @@
+data/cache/
+third_party/mozc_oss_dict/dictionary*.txt
+third_party/mozc_oss_dict/connection_single_column.txt
+__pycache__/
+*.pyc
+src/tip/build/
+dist/
+*.pdb
+*.exp
+*.lib
+*.obj
