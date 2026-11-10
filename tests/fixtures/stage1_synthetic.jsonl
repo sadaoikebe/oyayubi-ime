@@ -1,0 +1,84 @@
+{"type": "session", "ms": 0, "schema": "oyayubi.stage1.v1", "clock": "QPC", "time_unit": "ms", "qpc_frequency": 10000000, "qpc_origin": 123456789, "layout": "NICOLA-A", "keyboard": "single-space-laptop", "next_prompt_vk": 120, "prompt_count": 8}
+{"type": "prompt_start", "ms": 0, "id": "clean", "text": "おはよう、2。", "reading": "おはよう、2。"}
+{"type": "key", "ms": 100, "id": "clean", "vk": 32, "action": "down"}
+{"type": "key", "ms": 120, "id": "clean", "vk": 74, "action": "down"}
+{"type": "key", "ms": 150, "id": "clean", "vk": 74, "action": "up"}
+{"type": "key", "ms": 160, "id": "clean", "vk": 32, "action": "up"}
+{"type": "key", "ms": 250, "id": "clean", "vk": 72, "action": "down"}
+{"type": "key", "ms": 280, "id": "clean", "vk": 72, "action": "up"}
+{"type": "key", "ms": 350, "id": "clean", "vk": 32, "action": "down"}
+{"type": "key", "ms": 370, "id": "clean", "vk": 89, "action": "down"}
+{"type": "key", "ms": 400, "id": "clean", "vk": 89, "action": "up"}
+{"type": "key", "ms": 410, "id": "clean", "vk": 32, "action": "up"}
+{"type": "key", "ms": 500, "id": "clean", "vk": 65, "action": "down"}
+{"type": "key", "ms": 530, "id": "clean", "vk": 65, "action": "up"}
+{"type": "key", "ms": 600, "id": "clean", "vk": 80, "action": "down"}
+{"type": "key", "ms": 630, "id": "clean", "vk": 80, "action": "up"}
+{"type": "key", "ms": 700, "id": "clean", "vk": 50, "action": "down"}
+{"type": "key", "ms": 730, "id": "clean", "vk": 50, "action": "up"}
+{"type": "key", "ms": 800, "id": "clean", "vk": 81, "action": "down"}
+{"type": "key", "ms": 830, "id": "clean", "vk": 81, "action": "up"}
+{"type": "key", "ms": 950, "id": "clean", "vk": 32, "action": "down"}
+{"type": "key", "ms": 980, "id": "clean", "vk": 32, "action": "up"}
+{"type": "key", "ms": 1050, "id": "clean", "vk": 13, "action": "down"}
+{"type": "key", "ms": 1080, "id": "clean", "vk": 13, "action": "up"}
+{"type": "key", "ms": 1300, "id": "clean", "vk": 120, "action": "down"}
+{"type": "key", "ms": 1330, "id": "clean", "vk": 120, "action": "up"}
+{"type": "prompt_end", "ms": 1330, "id": "clean", "status": "complete", "event_count": 24, "held_vks": []}
+{"type": "prompt_start", "ms": 1330, "id": "overlap", "text": "おの", "reading": "おの"}
+{"type": "key", "ms": 2100, "id": "overlap", "vk": 32, "action": "down"}
+{"type": "key", "ms": 2110, "id": "overlap", "vk": 74, "action": "down"}
+{"type": "key", "ms": 2140, "id": "overlap", "vk": 74, "action": "up"}
+{"type": "key", "ms": 2150, "id": "overlap", "vk": 75, "action": "down"}
+{"type": "key", "ms": 2170, "id": "overlap", "vk": 75, "action": "up"}
+{"type": "key", "ms": 2175, "id": "overlap", "vk": 32, "action": "up"}
+{"type": "key", "ms": 3300, "id": "overlap", "vk": 120, "action": "down"}
+{"type": "key", "ms": 3330, "id": "overlap", "vk": 120, "action": "up"}
+{"type": "prompt_end", "ms": 3330, "id": "overlap", "status": "complete", "event_count": 8, "held_vks": []}
+{"type": "prompt_start", "ms": 3330, "id": "unintended", "text": "は", "reading": "は"}
+{"type": "key", "ms": 4100, "id": "unintended", "vk": 72, "action": "down"}
+{"type": "key", "ms": 4160, "id": "unintended", "vk": 32, "action": "down"}
+{"type": "key", "ms": 4200, "id": "unintended", "vk": 72, "action": "up"}
+{"type": "key", "ms": 4210, "id": "unintended", "vk": 32, "action": "up"}
+{"type": "key", "ms": 5300, "id": "unintended", "vk": 120, "action": "down"}
+{"type": "key", "ms": 5330, "id": "unintended", "vk": 120, "action": "up"}
+{"type": "prompt_end", "ms": 5330, "id": "unintended", "status": "complete", "event_count": 6, "held_vks": []}
+{"type": "prompt_start", "ms": 5330, "id": "missed", "text": "お", "reading": "お"}
+{"type": "key", "ms": 6100, "id": "missed", "vk": 32, "action": "down"}
+{"type": "key", "ms": 6110, "id": "missed", "vk": 32, "action": "up"}
+{"type": "key", "ms": 6200, "id": "missed", "vk": 74, "action": "down"}
+{"type": "key", "ms": 6230, "id": "missed", "vk": 74, "action": "up"}
+{"type": "key", "ms": 7300, "id": "missed", "vk": 120, "action": "down"}
+{"type": "key", "ms": 7330, "id": "missed", "vk": 120, "action": "up"}
+{"type": "prompt_end", "ms": 7330, "id": "missed", "status": "complete", "event_count": 6, "held_vks": []}
+{"type": "prompt_start", "ms": 7330, "id": "other", "text": "と", "reading": "と"}
+{"type": "key", "ms": 8100, "id": "other", "vk": 75, "action": "down"}
+{"type": "key", "ms": 8130, "id": "other", "vk": 75, "action": "up"}
+{"type": "key", "ms": 9300, "id": "other", "vk": 120, "action": "down"}
+{"type": "key", "ms": 9330, "id": "other", "vk": 120, "action": "up"}
+{"type": "prompt_end", "ms": 9330, "id": "other", "status": "complete", "event_count": 4, "held_vks": []}
+{"type": "prompt_start", "ms": 9330, "id": "edits", "text": "と", "reading": "と"}
+{"type": "key", "ms": 10100, "id": "edits", "vk": 74, "action": "down"}
+{"type": "key", "ms": 10130, "id": "edits", "vk": 74, "action": "up"}
+{"type": "key", "ms": 10200, "id": "edits", "vk": 8, "action": "down"}
+{"type": "key", "ms": 10230, "id": "edits", "vk": 8, "action": "up"}
+{"type": "key", "ms": 10300, "id": "edits", "vk": 13, "action": "down"}
+{"type": "key", "ms": 10330, "id": "edits", "vk": 13, "action": "up"}
+{"type": "key", "ms": 11300, "id": "edits", "vk": 120, "action": "down"}
+{"type": "key", "ms": 11330, "id": "edits", "vk": 120, "action": "up"}
+{"type": "prompt_end", "ms": 11330, "id": "edits", "status": "complete", "event_count": 8, "held_vks": []}
+{"type": "prompt_start", "ms": 11330, "id": "insertion", "text": "と", "reading": "と"}
+{"type": "key", "ms": 12100, "id": "insertion", "vk": 74, "action": "down"}
+{"type": "key", "ms": 12130, "id": "insertion", "vk": 74, "action": "up"}
+{"type": "key", "ms": 12200, "id": "insertion", "vk": 75, "action": "down"}
+{"type": "key", "ms": 12230, "id": "insertion", "vk": 75, "action": "up"}
+{"type": "key", "ms": 13300, "id": "insertion", "vk": 120, "action": "down"}
+{"type": "key", "ms": 13330, "id": "insertion", "vk": 120, "action": "up"}
+{"type": "prompt_end", "ms": 13330, "id": "insertion", "status": "complete", "event_count": 6, "held_vks": []}
+{"type": "prompt_start", "ms": 13330, "id": "deletion", "text": "とき", "reading": "とき"}
+{"type": "key", "ms": 14100, "id": "deletion", "vk": 74, "action": "down"}
+{"type": "key", "ms": 14130, "id": "deletion", "vk": 74, "action": "up"}
+{"type": "key", "ms": 15300, "id": "deletion", "vk": 120, "action": "down"}
+{"type": "key", "ms": 15330, "id": "deletion", "vk": 120, "action": "up"}
+{"type": "prompt_end", "ms": 15330, "id": "deletion", "status": "complete", "event_count": 4, "held_vks": []}
+{"type": "session_end", "ms": 15330, "reason": "complete"}

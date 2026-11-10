@@ -2,6 +2,9 @@
 
 リポジトリ直下で実行する。標準ライブラリのみ使用する。
 
+実打鍵（Stage 1）の採取・JSONL仕様・トークン評価は [STAGE1.md](STAGE1.md)。
+以下の Mozc / AJIMEE 評価とは別の物差しで、辞書を使わず FSM だけを再生する。
+
 ```sh
 python3 -m tools.wp0.run_mozc_eval --details /tmp/mozc-results.jsonl
 python3 -m tools.wp0.run_mozc_eval --unambiguous
