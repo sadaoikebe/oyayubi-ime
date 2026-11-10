@@ -43,14 +43,10 @@
   },
   "literal_source": "docs/PLAN.md: upper/lower row table (plain faces only). Kana faces and empty thumb faces remain as in the author-derived JSON; contradictory PLAN thumb faces are not imported.",
   "todos": {
-    "sadao_confirmation": [
-      "q/right: null in author-derived data; PLAN excerpt says ゜ (conflict)",
-      "z/right: null in author-derived data; PLAN excerpt says び (conflict)",
-      ";/left: null in author-derived data; PLAN excerpt says ぱ (conflict)",
-      "//left: null in author-derived data; PLAN excerpt says ゛ (conflict)",
+    "implementation": [
+      "//left: Sadao decided ？ on 2026-11-10; runtime handling of mixed literal/kana faces remains unresolved",
       "NICOLA thumb faces outside keys (number row and other ANSI symbols): absent; no assignments added",
-      "NICOLA Shift symbol layer: absent; Shift uses native US ANSI characters only",
-      "P plain is ， in PLAN; IME punctuation presentation policy is separate from this canonical assignment"
+      "NICOLA Shift symbol layer: absent; Shift uses native US ANSI characters only"
     ]
   }
 }
