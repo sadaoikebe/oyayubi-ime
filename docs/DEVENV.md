@@ -32,7 +32,7 @@ cmake --version
 | CUDA Toolkit（nvcc） | 推論だけなら pip の PyTorch 車輪にランタイムが付く |
 | Visual Studio 本体（Community） | ビルドだけなら Build Tools で足りる。IDE が欲しければ別途 |
 | AutoHotkey | 使わない |
-| 自前 `src/tip` の再登録 | 入力全体を止めた。使わない |
+| 自前 `src/tip` の旧版の再登録 | 初版は入力全体を止めた。使わない。現行版の登録は下の節 |
 
 ## ユーザー権限で入れるもの
 
