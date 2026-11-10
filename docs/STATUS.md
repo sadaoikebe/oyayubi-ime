@@ -1,6 +1,6 @@
 # いまどこまでできているか
 
-日付: 2026-08-16。設計の正本は [PLAN.md](PLAN.md)。変換のオフライン数字は [WP0-investigation.md](WP0-investigation.md)。
+日付: 2026-11-10。設計の正本は [PLAN.md](PLAN.md)。Stage 2前半の実装・プロトコル・確認事項は [STAGE2.md](STAGE2.md)。変換のオフライン数字は [EVALUATION.md](EVALUATION.md) と [WP0-investigation.md](WP0-investigation.md)。
 
 ## 本線（残しているもの）
 
@@ -11,7 +11,7 @@
   → src/tip（自前 TSF、fail-open）
   → python -m oyayubi.ime.server
   → ChordFsm（NICOLA-SPEC のホスト移植。nicola.c はコピーしていない）
-  → トークン列をそのまま並べる（Plain / AmbShift / ThumbTap）
+  → トークン列をそのまま並べる（Plain / AmbShift / ThumbTap / Literal）
   → トークン同期 Viterbi + Mozc OSS 辞書テキスト
   → composition / 確定
 ```
@@ -25,18 +25,19 @@
 | 格子変換 | トークン列から漢字かな交じりへ直行できる。読みを 1 本に潰して既存 IME に渡していない |
 | オフライン品質 | Mozc 評価読み約 92%。日常 66 件はユーザ辞書後に読み約 89%。残りは既読／記憶のような、両方正しい語 |
 | FSM | TIMEOUT 80 ms / OVERLAP 20 ms。Space@0 のあと 80 ms 超えて J は空白＋「と」。テスト 11 件 |
-| セッション | FSM が出したトークンを append するだけ。ThumbTap は composition 中なら変換、空なら空白 |
+| セッション | 句読点・数字・記号・Shift英字のリテラル、変換後の打ち続けで確定、Enter/Esc/BS、reset通知。時刻つきトランスクリプト19ケースで検証。TIPへの新機能接続はStage 3 |
 | TSF | Notepad で NicolaIME として打てる。`かえる`（W 単独→Space+W→Space+I）で「か」が残る |
 | 登録 | `ITfInputProcessorProfileMgr` のみ。日本語の第 2 IME。Alt+Shift は言語巡回なので Microsoft IME が当たる。切替は Win+Space かトレイ |
 
 試験窓: `python -m oyayubi.ime.host_win32`（TSF を通さない）。
 
-候補窓: Space で変換、もう一度 Space / ↑↓ で移動、1–9 で確定。既読と記憶のように別読みの語は並べる。左右ラベルは付けない。
+候補窓: Space で変換、もう一度 Space / ↑↓ で移動、Enterで確定。数字はリテラル入力。既読と記憶のように別読みの語は並べる。左右ラベルは付けない。文節候補と数字による文節候補選択は次段。
 
 まだ無いもの:
 
 - 常駐サーバ（今はアプリごとに Python。起動直後はローマ字素通し）
 - 上文リスコア、確定学習
+- 文節保持・移動、文節候補、直接入力切替（キーはSadao決定待ち）
 
 ## 方針メモ（2026-11-10）
 

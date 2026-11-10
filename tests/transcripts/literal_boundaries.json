@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "description": "数字の両側はBOS/EOS。辞書の連結語もPOS連接もリテラルを跨がない。候補も同じ。",
+  "lexicon": [
+    {
+      "reading": "か",
+      "surface": "蚊",
+      "cost": 0
+    },
+    {
+      "reading": "か",
+      "surface": "科",
+      "lid": 2,
+      "rid": 2,
+      "cost": 100
+    },
+    {
+      "reading": "かか",
+      "surface": "連結",
+      "lid": 2,
+      "rid": 2,
+      "cost": -5000
+    }
+  ],
+  "connection": [
+    [
+      0,
+      5000,
+      0
+    ],
+    [
+      5000,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0
+    ]
+  ],
+  "steps": [
+    {"event": {"op": "down", "t": 100, "vk": 87}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S2", "n_tokens": 0, "timer": 180, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "up", "t": 130, "vk": 87}, "expect": {"composition": "科", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "down", "t": 230, "vk": 87}, "expect": {"composition": "科", "commit": "", "converted": false, "fsm": "S2", "n_tokens": 1, "timer": 310, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "up", "t": 260, "vk": 87}, "expect": {"composition": "連結", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 2, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "down", "t": 360, "vk": 32}, "expect": {"composition": "連結", "commit": "", "converted": false, "fsm": "S3", "n_tokens": 2, "timer": 440, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "up", "t": 390, "vk": 32}, "expect": {"composition": "連結", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 2, "timer": null, "candidates": ["連結", "科科", "科蚊", "蚊科", "蚊蚊"], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "down", "t": 490, "vk": 27}, "expect": {"composition": "連結", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 2, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "up", "t": 520, "vk": 27}, "expect": {"composition": "連結", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 2, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "down", "t": 620, "vk": 27}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "up", "t": 650, "vk": 27}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "down", "t": 750, "vk": 87}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S2", "n_tokens": 0, "timer": 830, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "up", "t": 780, "vk": 87}, "expect": {"composition": "科", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "down", "t": 880, "vk": 50}, "expect": {"composition": "科2", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 2, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "up", "t": 910, "vk": 50}, "expect": {"composition": "科2", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 2, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "down", "t": 1010, "vk": 87}, "expect": {"composition": "科2", "commit": "", "converted": false, "fsm": "S2", "n_tokens": 2, "timer": 1090, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "up", "t": 1040, "vk": 87}, "expect": {"composition": "科2科", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 3, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "down", "t": 1140, "vk": 32}, "expect": {"composition": "科2科", "commit": "", "converted": false, "fsm": "S3", "n_tokens": 3, "timer": 1220, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "up", "t": 1170, "vk": 32}, "expect": {"composition": "科2科", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 3, "timer": null, "candidates": ["科2科", "科2蚊", "蚊2科", "蚊2蚊"], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "down", "t": 1270, "vk": 13}, "expect": {"composition": "", "commit": "科2科", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "committed": "科2科"}},
+    {"event": {"op": "up", "t": 1300, "vk": 13}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "committed": "科2科"}}
+  ],
+  "committed": "科2科",
+  "composition": ""
+}

@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "description": "Enterはまだkeyup前のかなも含めて全確定。Enter/upは何もしない。",
+  "lexicon": [],
+  "steps": [
+    {"event": {"op": "down", "t": 100, "vk": 87}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S2", "n_tokens": 0, "timer": 180, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "down", "t": 110, "vk": 13}, "expect": {"composition": "", "commit": "か", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "committed": "か"}},
+    {"event": {"op": "up", "t": 120, "vk": 13}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "committed": "か"}},
+    {"event": {"op": "up", "t": 130, "vk": 87}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "committed": "か"}},
+    {"event": {"op": "timeout", "t": 230}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "committed": "か"}}
+  ],
+  "committed": "か",
+  "composition": ""
+}

@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "description": "候補を↓で変更後、次の文字のdownで選択表示を確定。次の親指同時打鍵も保持。",
+  "lexicon": [
+    {
+      "reading": "きどく",
+      "surface": "既読",
+      "cost": 100
+    },
+    {
+      "reading": "きおく",
+      "surface": "記憶",
+      "cost": 200
+    },
+    {
+      "reading": "の",
+      "surface": "の"
+    }
+  ],
+  "steps": [
+    {"event": {"op": "down", "t": 100, "vk": 75}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S2", "n_tokens": 0, "timer": 180, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "up", "t": 130, "vk": 75}, "expect": {"composition": "き", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "down", "t": 230, "vk": 32}, "expect": {"composition": "き", "commit": "", "converted": false, "fsm": "S3", "n_tokens": 1, "timer": 310, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "down", "t": 260, "vk": 74}, "expect": {"composition": "き", "commit": "", "converted": false, "fsm": "S5", "n_tokens": 1, "timer": 340, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "up", "t": 300, "vk": 32}, "expect": {"composition": "きど", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 2, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "up", "t": 330, "vk": 74}, "expect": {"composition": "きど", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 2, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "down", "t": 430, "vk": 73}, "expect": {"composition": "きど", "commit": "", "converted": false, "fsm": "S2", "n_tokens": 2, "timer": 510, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "up", "t": 460, "vk": 73}, "expect": {"composition": "既読", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 3, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "down", "t": 560, "vk": 32}, "expect": {"composition": "既読", "commit": "", "converted": false, "fsm": "S3", "n_tokens": 3, "timer": 640, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "up", "t": 590, "vk": 32}, "expect": {"composition": "既読", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 3, "timer": null, "candidates": ["既読", "記憶"], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "down", "t": 690, "vk": 40}, "expect": {"composition": "記憶", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 3, "timer": null, "candidates": ["既読", "記憶"], "cand_index": 1, "committed": ""}},
+    {"event": {"op": "up", "t": 720, "vk": 40}, "expect": {"composition": "記憶", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 3, "timer": null, "candidates": ["既読", "記憶"], "cand_index": 1, "committed": ""}},
+    {"event": {"op": "down", "t": 820, "vk": 87}, "expect": {"composition": "", "commit": "記憶", "converted": false, "fsm": "S2", "n_tokens": 0, "timer": 900, "candidates": [], "cand_index": 0, "committed": "記憶"}},
+    {"event": {"op": "up", "t": 850, "vk": 87}, "expect": {"composition": "か", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": [], "cand_index": 0, "committed": "記憶"}},
+    {"event": {"op": "down", "t": 950, "vk": 13}, "expect": {"composition": "", "commit": "か", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "committed": "記憶か"}},
+    {"event": {"op": "up", "t": 980, "vk": 13}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "committed": "記憶か"}},
+    {"event": {"op": "down", "t": 1080, "vk": 75}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S2", "n_tokens": 0, "timer": 1160, "candidates": [], "cand_index": 0, "committed": "記憶か"}},
+    {"event": {"op": "up", "t": 1110, "vk": 75}, "expect": {"composition": "き", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": [], "cand_index": 0, "committed": "記憶か"}},
+    {"event": {"op": "down", "t": 1210, "vk": 32}, "expect": {"composition": "き", "commit": "", "converted": false, "fsm": "S3", "n_tokens": 1, "timer": 1290, "candidates": [], "cand_index": 0, "committed": "記憶か"}},
+    {"event": {"op": "down", "t": 1240, "vk": 74}, "expect": {"composition": "き", "commit": "", "converted": false, "fsm": "S5", "n_tokens": 1, "timer": 1320, "candidates": [], "cand_index": 0, "committed": "記憶か"}},
+    {"event": {"op": "up", "t": 1280, "vk": 32}, "expect": {"composition": "きど", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 2, "timer": null, "candidates": [], "cand_index": 0, "committed": "記憶か"}},
+    {"event": {"op": "up", "t": 1310, "vk": 74}, "expect": {"composition": "きど", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 2, "timer": null, "candidates": [], "cand_index": 0, "committed": "記憶か"}},
+    {"event": {"op": "down", "t": 1410, "vk": 73}, "expect": {"composition": "きど", "commit": "", "converted": false, "fsm": "S2", "n_tokens": 2, "timer": 1490, "candidates": [], "cand_index": 0, "committed": "記憶か"}},
+    {"event": {"op": "up", "t": 1440, "vk": 73}, "expect": {"composition": "既読", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 3, "timer": null, "candidates": [], "cand_index": 0, "committed": "記憶か"}},
+    {"event": {"op": "down", "t": 1540, "vk": 32}, "expect": {"composition": "既読", "commit": "", "converted": false, "fsm": "S3", "n_tokens": 3, "timer": 1620, "candidates": [], "cand_index": 0, "committed": "記憶か"}},
+    {"event": {"op": "up", "t": 1570, "vk": 32}, "expect": {"composition": "既読", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 3, "timer": null, "candidates": ["既読", "記憶"], "cand_index": 0, "committed": "記憶か"}},
+    {"event": {"op": "down", "t": 1670, "vk": 40}, "expect": {"composition": "記憶", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 3, "timer": null, "candidates": ["既読", "記憶"], "cand_index": 1, "committed": "記憶か"}},
+    {"event": {"op": "up", "t": 1700, "vk": 40}, "expect": {"composition": "記憶", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 3, "timer": null, "candidates": ["既読", "記憶"], "cand_index": 1, "committed": "記憶か"}},
+    {"event": {"op": "down", "t": 1800, "vk": 32}, "expect": {"composition": "記憶", "commit": "", "converted": true, "fsm": "S3", "n_tokens": 3, "timer": 1880, "candidates": ["既読", "記憶"], "cand_index": 1, "committed": "記憶か"}},
+    {"event": {"op": "down", "t": 1830, "vk": 75}, "expect": {"composition": "", "commit": "記憶", "converted": false, "fsm": "S5", "n_tokens": 0, "timer": 1910, "candidates": [], "cand_index": 0, "committed": "記憶か記憶"}},
+    {"event": {"op": "up", "t": 1870, "vk": 32}, "expect": {"composition": "の", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": [], "cand_index": 0, "committed": "記憶か記憶"}},
+    {"event": {"op": "up", "t": 1900, "vk": 75}, "expect": {"composition": "の", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": [], "cand_index": 0, "committed": "記憶か記憶"}},
+    {"event": {"op": "down", "t": 2000, "vk": 13}, "expect": {"composition": "", "commit": "の", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "committed": "記憶か記憶の"}},
+    {"event": {"op": "up", "t": 2030, "vk": 13}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "committed": "記憶か記憶の"}}
+  ],
+  "committed": "記憶か記憶の",
+  "composition": ""
+}

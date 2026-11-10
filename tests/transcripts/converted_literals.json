@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "description": "変換後の数字/Shift英字/句読点は、現在の表示を確定して新compositionへ。",
+  "lexicon": [],
+  "steps": [
+    {"event": {"op": "down", "t": 100, "vk": 87}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S2", "n_tokens": 0, "timer": 180, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "up", "t": 130, "vk": 87}, "expect": {"composition": "か", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "down", "t": 230, "vk": 32}, "expect": {"composition": "か", "commit": "", "converted": false, "fsm": "S3", "n_tokens": 1, "timer": 310, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "up", "t": 260, "vk": 32}, "expect": {"composition": "か", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["か"], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "down", "t": 360, "vk": 49}, "expect": {"composition": "1", "commit": "か", "converted": false, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": [], "cand_index": 0, "committed": "か"}},
+    {"event": {"op": "up", "t": 390, "vk": 49}, "expect": {"composition": "1", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": [], "cand_index": 0, "committed": "か"}},
+    {"event": {"op": "down", "t": 490, "vk": 32}, "expect": {"composition": "1", "commit": "", "converted": false, "fsm": "S3", "n_tokens": 1, "timer": 570, "candidates": [], "cand_index": 0, "committed": "か"}},
+    {"event": {"op": "up", "t": 520, "vk": 32}, "expect": {"composition": "1", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["1"], "cand_index": 0, "committed": "か"}},
+    {"event": {"op": "down", "t": 620, "vk": 66, "mods": ["shift"]}, "expect": {"composition": "B", "commit": "1", "converted": false, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": [], "cand_index": 0, "committed": "か1"}},
+    {"event": {"op": "up", "t": 650, "vk": 66, "mods": ["shift"]}, "expect": {"composition": "B", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": [], "cand_index": 0, "committed": "か1"}},
+    {"event": {"op": "down", "t": 750, "vk": 32}, "expect": {"composition": "B", "commit": "", "converted": false, "fsm": "S3", "n_tokens": 1, "timer": 830, "candidates": [], "cand_index": 0, "committed": "か1"}},
+    {"event": {"op": "up", "t": 780, "vk": 32}, "expect": {"composition": "B", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["B"], "cand_index": 0, "committed": "か1"}},
+    {"event": {"op": "down", "t": 880, "vk": 80}, "expect": {"composition": "", "commit": "B", "converted": false, "fsm": "S2", "n_tokens": 0, "timer": 960, "candidates": [], "cand_index": 0, "committed": "か1B"}},
+    {"event": {"op": "up", "t": 910, "vk": 80}, "expect": {"composition": "、", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": [], "cand_index": 0, "committed": "か1B"}},
+    {"event": {"op": "down", "t": 1010, "vk": 13}, "expect": {"composition": "", "commit": "、", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "committed": "か1B、"}},
+    {"event": {"op": "up", "t": 1040, "vk": 13}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "committed": "か1B、"}}
+  ],
+  "committed": "か1B、",
+  "composition": ""
+}

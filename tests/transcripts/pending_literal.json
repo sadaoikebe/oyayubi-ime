@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "description": "未解決のかなの後に数字を押しても順序を保持。Spaceの後の数字は変換を終えてから次compositionへ。",
+  "lexicon": [],
+  "steps": [
+    {"event": {"op": "down", "t": 100, "vk": 87}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S2", "n_tokens": 0, "timer": 180, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "down", "t": 110, "vk": 51}, "expect": {"composition": "か3", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 2, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "up", "t": 120, "vk": 87}, "expect": {"composition": "か3", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 2, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "up", "t": 130, "vk": 51}, "expect": {"composition": "か3", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 2, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "down", "t": 230, "vk": 32}, "expect": {"composition": "か3", "commit": "", "converted": false, "fsm": "S3", "n_tokens": 2, "timer": 310, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "down", "t": 240, "vk": 52}, "expect": {"composition": "4", "commit": "か3", "converted": false, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": [], "cand_index": 0, "committed": "か3"}},
+    {"event": {"op": "up", "t": 250, "vk": 32}, "expect": {"composition": "4", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": [], "cand_index": 0, "committed": "か3"}},
+    {"event": {"op": "up", "t": 260, "vk": 52}, "expect": {"composition": "4", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": [], "cand_index": 0, "committed": "か3"}},
+    {"event": {"op": "down", "t": 360, "vk": 13}, "expect": {"composition": "", "commit": "4", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "committed": "か34"}},
+    {"event": {"op": "up", "t": 390, "vk": 13}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "committed": "か34"}}
+  ],
+  "committed": "か34",
+  "composition": ""
+}

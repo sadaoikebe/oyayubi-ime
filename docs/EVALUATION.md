@@ -9,6 +9,7 @@ python3 -m tools.wp0.run_mozc_eval --no-user-lexicon
 python3 -m tools.wp0.fetch_ajimee
 python3 -m tools.wp0.run_ajimee_eval --details /tmp/ajimee-results.jsonl
 python3 -m unittest tests.test_fsm tests.test_session tests.test_evaluation tests.test_server
+python3 -m unittest tests.test_transcripts -v
 python3 -m tools.wp0.run_regression
 ```
 
@@ -62,6 +63,10 @@ Fable E3 と同じく、入力のカタカナをひらがなにし、NICOLA 表�
 `--details` の出力はデータ由来の本文を含む。
 
 ## サーバ
+
+Stage 2前半の入力・確定・resetプロトコルとトランスクリプトは [STAGE2.md](STAGE2.md)。
+NICOLAの句読点を追加しても、このオフライン評価の逆引きは従来どおりかなのみを対象にし、
+評価件数と比較条件を維持する。
 
 `python3 -m oyayubi.ime.server` は辞書ロード直後に `gc.freeze()` する。
 標準出力は従来どおり TIP への JSON 返信であり、composition/commit を含む。

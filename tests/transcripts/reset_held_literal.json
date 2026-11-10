@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "description": "リテラルとShiftを押したままリセットし、同じキーを再度使える。",
+  "lexicon": [],
+  "steps": [
+    {"event": {"op": "down", "t": 100, "vk": 16}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "down", "t": 200, "vk": 65}, "expect": {"composition": "A", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "reset", "t": 300}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "down", "t": 400, "vk": 65}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S2", "n_tokens": 0, "timer": 480, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "up", "t": 430, "vk": 65}, "expect": {"composition": "う", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "down", "t": 530, "vk": 13}, "expect": {"composition": "", "commit": "う", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "committed": "う"}},
+    {"event": {"op": "up", "t": 560, "vk": 13}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "committed": "う"}}
+  ],
+  "committed": "う",
+  "composition": ""
+}

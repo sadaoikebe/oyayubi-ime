@@ -46,7 +46,9 @@ def reverse_table(table: dict) -> dict[str, dict]:
     # Plain faces take precedence if a kana appears on multiple keys.
     for key, faces in table["keys"].items():
         kana = faces.get("plain")
-        if kana:
+        # Evaluation encodes kana readings only; punctuation is handled by the
+        # IME as a literal boundary, not as a kana dictionary arc.
+        if kana and ("ぁ" <= kana <= "ゖ" or kana == "ー"):
             result.setdefault(kana, {"kind": "plain", "key": key, "kana": kana})
     for key, faces in table["keys"].items():
         shifts = {face: faces[face] for face in ("left", "right") if faces.get(face)}

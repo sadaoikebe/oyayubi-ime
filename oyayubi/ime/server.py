@@ -4,6 +4,8 @@ One JSON object per line:
   {"op":"down","vk":74,"t":123}
   {"op":"up","vk":74,"t":150}
   {"op":"timeout","t":200}
+  {"op":"down","vk":65,"t":220,"mods":["shift"]}
+  {"op":"reset"}  # focus loss or application-terminated composition; no commit
   {"op":"context","text":"確定済み"}
 Reply: {"composition":"...","commit":"...","converted":false,"fsm":"S1"}
 """
@@ -21,6 +23,31 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from oyayubi.ime.session import ImeSession
+
+
+def dispatch(sess: ImeSession, msg: dict) -> dict:
+    """Shared protocol path for stdio and timestamped transcript tests."""
+    op = msg.get("op")
+    commit = ""
+    t = int(msg.get("t", 0))
+    if op in ("down", "up"):
+        args = (op == "down", int(msg["vk"]), t)
+        commit = (sess.on_key(*args, mods=msg["mods"]) if "mods" in msg
+                  else sess.on_key(*args)) or ""
+    elif op == "timeout":
+        commit = sess.on_timeout(t) or ""
+    elif op == "reset":
+        sess.reset()
+    return {
+        "composition": sess.composition,
+        "commit": commit,
+        "converted": sess.converted,
+        "fsm": sess.fsm.state,
+        "n_tokens": len(sess.tokens),
+        "timer": sess.fsm.timer_deadline,
+        "candidates": sess.candidates,
+        "cand_index": sess.cand_index,
+    }
 
 
 def main() -> None:
@@ -42,33 +69,15 @@ def main() -> None:
         if not line:
             continue
         msg = json.loads(line)
-        op = msg.get("op")
-        commit = ""
-        t = int(msg.get("t", 0))
-        if op == "down":
-            commit = sess.on_key(True, int(msg["vk"]), t) or ""
-        elif op == "up":
-            commit = sess.on_key(False, int(msg["vk"]), t) or ""
-        elif op == "timeout":
-            commit = sess.on_timeout(t) or ""
-        elif op == "quit":
+        if msg.get("op") == "quit":
             break
-        deadline = sess.fsm.timer_deadline
+        reply = dispatch(sess, msg)
         if args.log_text:
-            print(json.dumps({"composition": sess.composition, "commit": commit},
+            print(json.dumps({"composition": reply["composition"], "commit": reply["commit"]},
                              ensure_ascii=False), file=sys.stderr, flush=True)
         print(
             json.dumps(
-                {
-                    "composition": sess.composition,
-                    "commit": commit,
-                    "converted": sess.converted,
-                    "fsm": sess.fsm.state,
-                    "n_tokens": len(sess.tokens),
-                    "timer": deadline,
-                    "candidates": sess.candidates,
-                    "cand_index": sess.cand_index,
-                },
+                reply,
                 ensure_ascii=False,
             ),
             flush=True,

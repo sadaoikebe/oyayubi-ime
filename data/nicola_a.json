@@ -10,7 +10,7 @@
     "n": "R", "m": "R", ",": "R", ".": "R", "/": "R"
   },
   "keys": {
-    "q": {"plain": null, "left": "ぁ", "right": null},
+    "q": {"plain": "。", "left": "ぁ", "right": null},
     "w": {"plain": "か", "left": "え", "right": "が"},
     "e": {"plain": "た", "left": "り", "right": "だ"},
     "r": {"plain": "こ", "left": "ゃ", "right": "ご"},
@@ -19,7 +19,7 @@
     "u": {"plain": "ち", "left": "ぢ", "right": "に"},
     "i": {"plain": "く", "left": "ぐ", "right": "る"},
     "o": {"plain": "つ", "left": "づ", "right": "ま"},
-    "p": {"plain": null, "left": "ぴ", "right": "ぇ"},
+    "p": {"plain": "，", "left": "ぴ", "right": "ぇ"},
     "a": {"plain": "う", "left": "を", "right": "ゔ"},
     "s": {"plain": "し", "left": "あ", "right": "じ"},
     "d": {"plain": "て", "left": "な", "right": "で"},
@@ -30,7 +30,7 @@
     "k": {"plain": "き", "left": "ぎ", "right": "の"},
     "l": {"plain": "い", "left": "ぽ", "right": "ょ"},
     ";": {"plain": "ん", "left": null, "right": "っ"},
-    "z": {"plain": null, "left": "ぅ", "right": null},
+    "z": {"plain": "．", "left": "ぅ", "right": null},
     "x": {"plain": "ひ", "left": "ー", "right": "び"},
     "c": {"plain": "す", "left": "ろ", "right": "ず"},
     "v": {"plain": "ふ", "left": "や", "right": "ぶ"},
@@ -39,6 +39,18 @@
     "m": {"plain": "そ", "left": "ぞ", "right": "ゆ"},
     ",": {"plain": "ね", "left": "ぺ", "right": "む"},
     ".": {"plain": "ほ", "left": "ぼ", "right": "わ"},
-    "/": {"plain": null, "left": null, "right": "ぉ"}
+    "/": {"plain": "・", "left": null, "right": "ぉ"}
+  },
+  "literal_source": "docs/PLAN.md: upper/lower row table (plain faces only). Kana faces and empty thumb faces remain as in the author-derived JSON; contradictory PLAN thumb faces are not imported.",
+  "todos": {
+    "sadao_confirmation": [
+      "q/right: null in author-derived data; PLAN excerpt says ゜ (conflict)",
+      "z/right: null in author-derived data; PLAN excerpt says び (conflict)",
+      ";/left: null in author-derived data; PLAN excerpt says ぱ (conflict)",
+      "//left: null in author-derived data; PLAN excerpt says ゛ (conflict)",
+      "NICOLA thumb faces outside keys (number row and other ANSI symbols): absent; no assignments added",
+      "NICOLA Shift symbol layer: absent; Shift uses native US ANSI characters only",
+      "P plain is ， in PLAN; IME punctuation presentation policy is separate from this canonical assignment"
+    ]
   }
 }

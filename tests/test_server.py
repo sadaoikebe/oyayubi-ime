@@ -7,6 +7,9 @@ import unittest
 from unittest.mock import patch
 
 from oyayubi.ime import server
+from oyayubi.ime.session import ImeSession
+from tools.wp0.mozc_dict import MozcLex
+from tools.wp0.table import load_table
 
 
 class Stream(io.StringIO):
@@ -46,6 +49,37 @@ class ServerTest(unittest.TestCase):
         log = self.run_server(True)
         self.assertIn("編集中の秘密", log)
         self.assertIn("確定秘密", log)
+
+    def test_reset_and_modifier_snapshot_on_stdio(self):
+        session = ImeSession(_table=load_table(), _lex=MozcLex({}, set(), [0] * 4, 2))
+        requests = [
+            {"op": "down", "vk": 65, "t": 0, "mods": ["shift"]},
+            {"op": "reset", "t": 10},
+            {"op": "up", "vk": 65, "t": 20},
+            {"op": "timeout", "t": 100},
+            {"op": "down", "vk": 65, "t": 200, "mods": []},
+            {"op": "up", "vk": 65, "t": 230, "mods": []},
+            {"op": "down", "vk": 13, "t": 300},
+            {"op": "quit"},
+        ]
+        stdout, stderr = Stream(), Stream()
+        stdin = Stream("".join(json.dumps(request) + "\n" for request in requests))
+        with patch.object(server, "ImeSession", return_value=session), \
+             patch.object(server.gc, "freeze"), \
+             patch.object(server.sys, "stdin", stdin), \
+             patch.object(server.sys, "stdout", stdout), \
+             patch.object(server.sys, "stderr", stderr), \
+             patch.object(server.sys, "argv", ["server"]):
+            server.main()
+        replies = [json.loads(line) for line in stdout.getvalue().splitlines()][1:]
+        self.assertEqual(replies[0]["composition"], "A")
+        for reply in replies[1:4]:
+            self.assertEqual(reply, {
+                "composition": "", "commit": "", "converted": False, "fsm": "S1",
+                "n_tokens": 0, "timer": None, "candidates": [], "cand_index": 0,
+            })
+        self.assertEqual(replies[-1]["commit"], "う")
+        self.assertEqual(stderr.getvalue(), "")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "description": "フォーカス喪失/composition打ち切り: S4のトークン・FSM・押下キー・タイマーを破棄。遅れたup/timeoutは無効。",
+  "lexicon": [],
+  "steps": [
+    {"event": {"op": "down", "t": 100, "vk": 56}, "expect": {"composition": "8", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "up", "t": 130, "vk": 56}, "expect": {"composition": "8", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "down", "t": 140, "vk": 87}, "expect": {"composition": "8", "commit": "", "converted": false, "fsm": "S2", "n_tokens": 1, "timer": 220, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "down", "t": 150, "vk": 32}, "expect": {"composition": "8", "commit": "", "converted": false, "fsm": "S4", "n_tokens": 1, "timer": 230, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "reset", "t": 155}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "up", "t": 165, "vk": 87}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "up", "t": 175, "vk": 32}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "timeout", "t": 275}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "down", "t": 375, "vk": 87}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S2", "n_tokens": 0, "timer": 455, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "up", "t": 405, "vk": 87}, "expect": {"composition": "か", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "down", "t": 505, "vk": 13}, "expect": {"composition": "", "commit": "か", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "committed": "か"}},
+    {"event": {"op": "up", "t": 535, "vk": 13}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "committed": "か"}}
+  ],
+  "committed": "か",
+  "composition": ""
+}

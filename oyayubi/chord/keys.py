@@ -73,6 +73,30 @@ MODIFIER_VKS = {
     0xA5,  # L/R shift/ctrl/alt
 }
 
+# Native US ANSI characters, not additional NICOLA thumb-face assignments.
+# Shift+letters bypass the kana table. Ctrl/Alt/Win shortcuts bypass the session.
+SHIFT_VKS = {VK_SHIFT, 0xA0, 0xA1}
+SHORTCUT_VKS = MODIFIER_VKS - SHIFT_VKS
+ANSI_SYMBOLS = {
+    VK_OEM_1: (";", ":"), VK_OEM_PLUS: ("=", "+"),
+    VK_OEM_COMMA: (",", "<"), VK_OEM_MINUS: ("-", "_"),
+    VK_OEM_PERIOD: (".", ">"), VK_OEM_2: ("/", "?"),
+    VK_OEM_3: ("`", "~"), VK_OEM_4: ("[", "{"),
+    VK_OEM_5: ("\\", "|"), VK_OEM_6: ("]", "}"),
+    VK_OEM_7: ("'", '"'),
+}
+
+
+def literal_character(vk: int, shift: bool) -> str | None:
+    """Native character for a key outside the unmodified NICOLA kana layer."""
+    if shift and ord("A") <= vk <= ord("Z"):
+        return chr(vk)
+    if ord("0") <= vk <= ord("9"):
+        return ")!@#$%^&*("[vk - ord("0")] if shift else chr(vk)
+    if vk in ANSI_SYMBOLS and (shift or vk not in VK_TO_M):
+        return ANSI_SYMBOLS[vk][int(shift)]
+    return None
+
 
 def classify(vk: int) -> tuple[str, str | None]:
     """Return (kind, key_id). kind is M, O, MOD, EDIT, OTHER."""

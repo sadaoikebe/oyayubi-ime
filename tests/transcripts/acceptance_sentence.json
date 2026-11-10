@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "description": "固定辞書: 候補選択なし。句読点、変換後の打ち続け、Enterで「今日は、機関の校正をした。」",
+  "lexicon": [
+    {
+      "reading": "きょうは",
+      "surface": "今日は"
+    },
+    {
+      "reading": "きかんの",
+      "surface": "機関の"
+    },
+    {
+      "reading": "こうせい",
+      "surface": "校正"
+    },
+    {
+      "reading": "をした",
+      "surface": "をした"
+    }
+  ],
+  "steps": [
+    {"event": {"op": "down", "t": 100, "vk": 75}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S2", "n_tokens": 0, "timer": 180, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "up", "t": 130, "vk": 75}, "expect": {"composition": "き", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "down", "t": 230, "vk": 32}, "expect": {"composition": "き", "commit": "", "converted": false, "fsm": "S3", "n_tokens": 1, "timer": 310, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "down", "t": 260, "vk": 76}, "expect": {"composition": "き", "commit": "", "converted": false, "fsm": "S5", "n_tokens": 1, "timer": 340, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "up", "t": 300, "vk": 32}, "expect": {"composition": "きぽ", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 2, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "up", "t": 330, "vk": 76}, "expect": {"composition": "きぽ", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 2, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "down", "t": 430, "vk": 65}, "expect": {"composition": "きぽ", "commit": "", "converted": false, "fsm": "S2", "n_tokens": 2, "timer": 510, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "up", "t": 460, "vk": 65}, "expect": {"composition": "きぽう", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 3, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "down", "t": 560, "vk": 72}, "expect": {"composition": "きぽう", "commit": "", "converted": false, "fsm": "S2", "n_tokens": 3, "timer": 640, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "up", "t": 590, "vk": 72}, "expect": {"composition": "今日は", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 4, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "down", "t": 690, "vk": 80}, "expect": {"composition": "今日は", "commit": "", "converted": false, "fsm": "S2", "n_tokens": 4, "timer": 770, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "up", "t": 720, "vk": 80}, "expect": {"composition": "今日は、", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 5, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "down", "t": 820, "vk": 32}, "expect": {"composition": "今日は、", "commit": "", "converted": false, "fsm": "S3", "n_tokens": 5, "timer": 900, "candidates": [], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "up", "t": 850, "vk": 32}, "expect": {"composition": "今日は、", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 5, "timer": null, "candidates": ["今日は、"], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "down", "t": 950, "vk": 75}, "expect": {"composition": "", "commit": "今日は、", "converted": false, "fsm": "S2", "n_tokens": 0, "timer": 1030, "candidates": [], "cand_index": 0, "committed": "今日は、"}},
+    {"event": {"op": "up", "t": 980, "vk": 75}, "expect": {"composition": "き", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": [], "cand_index": 0, "committed": "今日は、"}},
+    {"event": {"op": "down", "t": 1080, "vk": 87}, "expect": {"composition": "き", "commit": "", "converted": false, "fsm": "S2", "n_tokens": 1, "timer": 1160, "candidates": [], "cand_index": 0, "committed": "今日は、"}},
+    {"event": {"op": "up", "t": 1110, "vk": 87}, "expect": {"composition": "きか", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 2, "timer": null, "candidates": [], "cand_index": 0, "committed": "今日は、"}},
+    {"event": {"op": "down", "t": 1210, "vk": 186}, "expect": {"composition": "きか", "commit": "", "converted": false, "fsm": "S2", "n_tokens": 2, "timer": 1290, "candidates": [], "cand_index": 0, "committed": "今日は、"}},
+    {"event": {"op": "up", "t": 1240, "vk": 186}, "expect": {"composition": "きかん", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 3, "timer": null, "candidates": [], "cand_index": 0, "committed": "今日は、"}},
+    {"event": {"op": "down", "t": 1340, "vk": 32}, "expect": {"composition": "きかん", "commit": "", "converted": false, "fsm": "S3", "n_tokens": 3, "timer": 1420, "candidates": [], "cand_index": 0, "committed": "今日は、"}},
+    {"event": {"op": "down", "t": 1370, "vk": 75}, "expect": {"composition": "きかん", "commit": "", "converted": false, "fsm": "S5", "n_tokens": 3, "timer": 1450, "candidates": [], "cand_index": 0, "committed": "今日は、"}},
+    {"event": {"op": "up", "t": 1410, "vk": 32}, "expect": {"composition": "機関の", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 4, "timer": null, "candidates": [], "cand_index": 0, "committed": "今日は、"}},
+    {"event": {"op": "up", "t": 1440, "vk": 75}, "expect": {"composition": "機関の", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 4, "timer": null, "candidates": [], "cand_index": 0, "committed": "今日は、"}},
+    {"event": {"op": "down", "t": 1540, "vk": 32}, "expect": {"composition": "機関の", "commit": "", "converted": false, "fsm": "S3", "n_tokens": 4, "timer": 1620, "candidates": [], "cand_index": 0, "committed": "今日は、"}},
+    {"event": {"op": "up", "t": 1570, "vk": 32}, "expect": {"composition": "機関の", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 4, "timer": null, "candidates": ["機関の"], "cand_index": 0, "committed": "今日は、"}},
+    {"event": {"op": "down", "t": 1670, "vk": 82}, "expect": {"composition": "", "commit": "機関の", "converted": false, "fsm": "S2", "n_tokens": 0, "timer": 1750, "candidates": [], "cand_index": 0, "committed": "今日は、機関の"}},
+    {"event": {"op": "up", "t": 1700, "vk": 82}, "expect": {"composition": "こ", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": [], "cand_index": 0, "committed": "今日は、機関の"}},
+    {"event": {"op": "down", "t": 1800, "vk": 65}, "expect": {"composition": "こ", "commit": "", "converted": false, "fsm": "S2", "n_tokens": 1, "timer": 1880, "candidates": [], "cand_index": 0, "committed": "今日は、機関の"}},
+    {"event": {"op": "up", "t": 1830, "vk": 65}, "expect": {"composition": "こう", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 2, "timer": null, "candidates": [], "cand_index": 0, "committed": "今日は、機関の"}},
+    {"event": {"op": "down", "t": 1930, "vk": 71}, "expect": {"composition": "こう", "commit": "", "converted": false, "fsm": "S2", "n_tokens": 2, "timer": 2010, "candidates": [], "cand_index": 0, "committed": "今日は、機関の"}},
+    {"event": {"op": "up", "t": 1960, "vk": 71}, "expect": {"composition": "こうせ", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 3, "timer": null, "candidates": [], "cand_index": 0, "committed": "今日は、機関の"}},
+    {"event": {"op": "down", "t": 2060, "vk": 76}, "expect": {"composition": "こうせ", "commit": "", "converted": false, "fsm": "S2", "n_tokens": 3, "timer": 2140, "candidates": [], "cand_index": 0, "committed": "今日は、機関の"}},
+    {"event": {"op": "up", "t": 2090, "vk": 76}, "expect": {"composition": "校正", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 4, "timer": null, "candidates": [], "cand_index": 0, "committed": "今日は、機関の"}},
+    {"event": {"op": "down", "t": 2190, "vk": 32}, "expect": {"composition": "校正", "commit": "", "converted": false, "fsm": "S3", "n_tokens": 4, "timer": 2270, "candidates": [], "cand_index": 0, "committed": "今日は、機関の"}},
+    {"event": {"op": "up", "t": 2220, "vk": 32}, "expect": {"composition": "校正", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 4, "timer": null, "candidates": ["校正"], "cand_index": 0, "committed": "今日は、機関の"}},
+    {"event": {"op": "down", "t": 2320, "vk": 32}, "expect": {"composition": "校正", "commit": "", "converted": true, "fsm": "S3", "n_tokens": 4, "timer": 2400, "candidates": ["校正"], "cand_index": 0, "committed": "今日は、機関の"}},
+    {"event": {"op": "down", "t": 2350, "vk": 65}, "expect": {"composition": "", "commit": "校正", "converted": false, "fsm": "S5", "n_tokens": 0, "timer": 2430, "candidates": [], "cand_index": 0, "committed": "今日は、機関の校正"}},
+    {"event": {"op": "up", "t": 2390, "vk": 32}, "expect": {"composition": "を", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": [], "cand_index": 0, "committed": "今日は、機関の校正"}},
+    {"event": {"op": "up", "t": 2420, "vk": 65}, "expect": {"composition": "を", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": [], "cand_index": 0, "committed": "今日は、機関の校正"}},
+    {"event": {"op": "down", "t": 2520, "vk": 83}, "expect": {"composition": "を", "commit": "", "converted": false, "fsm": "S2", "n_tokens": 1, "timer": 2600, "candidates": [], "cand_index": 0, "committed": "今日は、機関の校正"}},
+    {"event": {"op": "up", "t": 2550, "vk": 83}, "expect": {"composition": "をし", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 2, "timer": null, "candidates": [], "cand_index": 0, "committed": "今日は、機関の校正"}},
+    {"event": {"op": "down", "t": 2650, "vk": 69}, "expect": {"composition": "をし", "commit": "", "converted": false, "fsm": "S2", "n_tokens": 2, "timer": 2730, "candidates": [], "cand_index": 0, "committed": "今日は、機関の校正"}},
+    {"event": {"op": "up", "t": 2680, "vk": 69}, "expect": {"composition": "をした", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 3, "timer": null, "candidates": [], "cand_index": 0, "committed": "今日は、機関の校正"}},
+    {"event": {"op": "down", "t": 2780, "vk": 81}, "expect": {"composition": "をした", "commit": "", "converted": false, "fsm": "S2", "n_tokens": 3, "timer": 2860, "candidates": [], "cand_index": 0, "committed": "今日は、機関の校正"}},
+    {"event": {"op": "up", "t": 2810, "vk": 81}, "expect": {"composition": "をした。", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 4, "timer": null, "candidates": [], "cand_index": 0, "committed": "今日は、機関の校正"}},
+    {"event": {"op": "down", "t": 2910, "vk": 13}, "expect": {"composition": "", "commit": "をした。", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "committed": "今日は、機関の校正をした。"}},
+    {"event": {"op": "up", "t": 2940, "vk": 13}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "committed": "今日は、機関の校正をした。"}}
+  ],
+  "committed": "今日は、機関の校正をした。",
+  "composition": ""
+}

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "description": "かなを押したまま変換した後のHIDリピートは新打鍵ではない。離して押し直すと確定。",
+  "lexicon": [],
+  "steps": [
+    {"event": {"op": "down", "t": 0, "vk": 87}, "expect": {"composition": "", "converted": false, "fsm": "S2", "n_tokens": 0, "timer": 80, "candidates": [], "cand_index": 0, "commit": "", "committed": ""}},
+    {"event": {"op": "timeout", "t": 80}, "expect": {"composition": "か", "converted": false, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": [], "cand_index": 0, "commit": "", "committed": ""}},
+    {"event": {"op": "down", "t": 200, "vk": 32}, "expect": {"composition": "か", "converted": false, "fsm": "S3", "n_tokens": 1, "timer": 280, "candidates": [], "cand_index": 0, "commit": "", "committed": ""}},
+    {"event": {"op": "up", "t": 230, "vk": 32}, "expect": {"composition": "か", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["か"], "cand_index": 0, "commit": "", "committed": ""}},
+    {"event": {"op": "down", "t": 300, "vk": 87}, "expect": {"composition": "か", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["か"], "cand_index": 0, "commit": "", "committed": ""}},
+    {"event": {"op": "up", "t": 330, "vk": 87}, "expect": {"composition": "か", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["か"], "cand_index": 0, "commit": "", "committed": ""}},
+    {"event": {"op": "down", "t": 400, "vk": 87}, "expect": {"composition": "", "converted": false, "fsm": "S2", "n_tokens": 0, "timer": 480, "candidates": [], "cand_index": 0, "commit": "か", "committed": "か"}},
+    {"event": {"op": "up", "t": 430, "vk": 87}, "expect": {"composition": "か", "converted": false, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": [], "cand_index": 0, "commit": "", "committed": "か"}},
+    {"event": {"op": "down", "t": 500, "vk": 13}, "expect": {"composition": "", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "commit": "か", "committed": "かか"}},
+    {"event": {"op": "up", "t": 530, "vk": 13}, "expect": {"composition": "", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "commit": "", "committed": "かか"}}
+  ],
+  "committed": "かか",
+  "composition": ""
+}
