@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
+from typing import Literal
 
 from .decode import DecodeResult, Piece
 from .expand import token_branches
@@ -51,23 +52,26 @@ def _spans_from(tokens: list[dict], i: int, lex: MozcLex) -> list[_Word]:
     return out
 
 
-def _prune(sts: list[_St]) -> list[_St]:
-    """Keep cheapest path per reading prefix.
+def _prune(sts: list[_St], *, mode: Literal["rid", "reading"]) -> list[_St]:
+    """Keep the cheapest path per mode key, capped at POS_KEEP.
 
-    Unique-by-rid would collapse 既読 and 記憶 (both nouns) into one
-    survivor and throw away the L/R alternative before the sentence ends.
+    RID pruning preserves POS alternatives for 1-best accuracy (WP0 §10).
+    Reading-prefix pruning preserves L/R pairs such as 既読/記憶 for
+    future n-best context rescoring (WP0 §13), at a cost to 1-best accuracy.
     """
     sts.sort(key=lambda s: s.score)
-    best: dict[str, _St] = {}
+    best: dict[int | str, _St] = {}
     for s in sts:
-        if s.reading not in best:
-            best[s.reading] = s
+        key = s.rid if mode == "rid" else s.reading
+        if key not in best:
+            best[key] = s
         if len(best) >= POS_KEEP:
             break
     return list(best.values())
 
 
 def decode_tokens(tokens: list[dict], lex: MozcLex) -> tuple[DecodeResult, dict]:
+    """Decode 1-best using RID pruning for accuracy without rescoring (WP0 §10/13)."""
     n = len(tokens)
     t0 = time.perf_counter()
     states: list[list[_St]] = [[] for _ in range(n + 1)]
@@ -79,7 +83,7 @@ def decode_tokens(tokens: list[dict], lex: MozcLex) -> tuple[DecodeResult, dict]
         if not states[i]:
             continue
         if len(states[i]) > POS_KEEP:
-            states[i] = _prune(states[i])
+            states[i] = _prune(states[i], mode="rid")
         spans = _spans_from(tokens, i, lex)
         n_spans += len(spans)
         for w in spans:
@@ -93,7 +97,7 @@ def decode_tokens(tokens: list[dict], lex: MozcLex) -> tuple[DecodeResult, dict]
 
     if not states[n]:
         raise RuntimeError("no path")
-    states[n] = _prune(states[n])
+    states[n] = _prune(states[n], mode="rid")
 
     best_i = 0
     best_score = 10**18
@@ -156,7 +160,11 @@ def nbest_tokens(
     lex: MozcLex,
     k: int = 8,
 ) -> tuple[list[DecodeResult], dict]:
-    """Same search as decode_tokens, then unique readings at the end."""
+    """Return distinct surfaces using reading-prefix pruning (WP0 §13).
+
+    Preserve L/R alternatives for future context rescoring, accepting the
+    1-best accuracy tradeoff documented in WP0 §10/13.
+    """
     n = len(tokens)
     t0 = time.perf_counter()
     states: list[list[_St]] = [[] for _ in range(n + 1)]
@@ -167,7 +175,7 @@ def nbest_tokens(
         if not states[i]:
             continue
         if len(states[i]) > POS_KEEP:
-            states[i] = _prune(states[i])
+            states[i] = _prune(states[i], mode="reading")
         for w in _spans_from(tokens, i, lex):
             wi = len(words)
             words.append(w)

@@ -14,6 +14,7 @@ def main() -> int:
         "どうぞ 1-best",
         "どうぞ n-best excludes 王族 and 翁",
         "きどく n-best includes 既読 and 記憶",
+        "きどくにない n-best includes 既読にない and 記憶にない",
     )
     try:
         reverse = reverse_table(load_table())
@@ -42,6 +43,8 @@ def main() -> int:
         lambda: best("どうぞ"),
         lambda: candidates("どうぞ", {"王族", "翁"}, exclude=True),
         lambda: candidates("きどく", {"既読", "記憶"}, exclude=False),
+        # WP0 §13: RID pruning loses 既読 before the rest of the phrase.
+        lambda: candidates("きどくにない", {"既読にない", "記憶にない"}, exclude=False),
     )
     all_passed = True
     for name, gate in zip(names, gates):
