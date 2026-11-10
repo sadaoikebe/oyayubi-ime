@@ -1,0 +1,102 @@
+{
+  "version": 2,
+  "description": "前後のかなに混ざるリテラル面で辞書語とPOS連接を分離。両隣の固定と、？→尾→？の選び直しを保持して「科？区」を確定。",
+  "lexicon": [
+    {
+      "reading": "か",
+      "surface": "蚊",
+      "lid": 12,
+      "rid": 12,
+      "cost": 100
+    },
+    {
+      "reading": "か",
+      "surface": "科",
+      "lid": 13,
+      "rid": 13,
+      "cost": 150
+    },
+    {
+      "reading": "く",
+      "surface": "区",
+      "lid": 14,
+      "rid": 14,
+      "cost": 100
+    },
+    {
+      "reading": "ぉ",
+      "surface": "尾",
+      "lid": 1,
+      "rid": 1,
+      "cost": 1000
+    },
+    {
+      "reading": "？",
+      "surface": "記号変換不可",
+      "cost": -90000
+    },
+    {
+      "reading": "か？く",
+      "surface": "境界越え不可",
+      "cost": -90000
+    }
+  ],
+  "connection": {
+    "size": 15,
+    "default": 0,
+    "overrides": [
+      [
+        0,
+        0,
+        77
+      ],
+      [
+        0,
+        13,
+        100
+      ],
+      [
+        13,
+        0,
+        100
+      ],
+      [
+        13,
+        14,
+        -10000
+      ]
+    ]
+  },
+  "steps": [
+    {"event": {"op": "down", "t": 0, "vk": 87}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S2", "n_tokens": 0, "timer": 80, "candidates": [], "cand_index": 0, "segments": [], "focus": -1, "candidate_page": 0, "candidate_kinds": [], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "up", "t": 30, "vk": 87}, "expect": {"composition": "蚊", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": [], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "蚊", "reading": "か", "literal": false, "fixed": false, "display_start": 0, "display_end": 1}], "focus": 0, "candidate_page": 0, "candidate_kinds": [], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "down", "t": 130, "vk": 32}, "expect": {"composition": "蚊", "commit": "", "converted": false, "fsm": "S3", "n_tokens": 1, "timer": 210, "candidates": [], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "蚊", "reading": "か", "literal": false, "fixed": false, "display_start": 0, "display_end": 1}], "focus": 0, "candidate_page": 0, "candidate_kinds": [], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "down", "t": 160, "vk": 191}, "expect": {"composition": "蚊", "commit": "", "converted": false, "fsm": "S5", "n_tokens": 1, "timer": 240, "candidates": [], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "蚊", "reading": "か", "literal": false, "fixed": false, "display_start": 0, "display_end": 1}], "focus": 0, "candidate_page": 0, "candidate_kinds": [], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "up", "t": 190, "vk": 191}, "expect": {"composition": "蚊？", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 2, "timer": null, "candidates": [], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "蚊", "reading": "か", "literal": false, "fixed": false, "display_start": 0, "display_end": 1}, {"start": 1, "end": 2, "surface": "？", "reading": "？", "literal": false, "fixed": false, "display_start": 1, "display_end": 2}], "focus": 0, "candidate_page": 0, "candidate_kinds": [], "has_next_page": false, "committed": ""}, "note": "Space＋/ は左右のあいまいトークン1個として保持"},
+    {"event": {"op": "up", "t": 220, "vk": 32}, "expect": {"composition": "蚊？", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 2, "timer": null, "candidates": [], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "蚊", "reading": "か", "literal": false, "fixed": false, "display_start": 0, "display_end": 1}, {"start": 1, "end": 2, "surface": "？", "reading": "？", "literal": false, "fixed": false, "display_start": 1, "display_end": 2}], "focus": 0, "candidate_page": 0, "candidate_kinds": [], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "down", "t": 320, "vk": 73}, "expect": {"composition": "蚊？", "commit": "", "converted": false, "fsm": "S2", "n_tokens": 2, "timer": 400, "candidates": [], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "蚊", "reading": "か", "literal": false, "fixed": false, "display_start": 0, "display_end": 1}, {"start": 1, "end": 2, "surface": "？", "reading": "？", "literal": false, "fixed": false, "display_start": 1, "display_end": 2}], "focus": 0, "candidate_page": 0, "candidate_kinds": [], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "up", "t": 350, "vk": 73}, "expect": {"composition": "蚊？区", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 3, "timer": null, "candidates": [], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "蚊", "reading": "か", "literal": false, "fixed": false, "display_start": 0, "display_end": 1}, {"start": 1, "end": 2, "surface": "？", "reading": "？", "literal": false, "fixed": false, "display_start": 1, "display_end": 2}, {"start": 2, "end": 3, "surface": "区", "reading": "く", "literal": false, "fixed": false, "display_start": 2, "display_end": 3}], "focus": 0, "candidate_page": 0, "candidate_kinds": [], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "down", "t": 450, "vk": 32}, "expect": {"composition": "蚊？区", "commit": "", "converted": false, "fsm": "S3", "n_tokens": 3, "timer": 530, "candidates": [], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "蚊", "reading": "か", "literal": false, "fixed": false, "display_start": 0, "display_end": 1}, {"start": 1, "end": 2, "surface": "？", "reading": "？", "literal": false, "fixed": false, "display_start": 1, "display_end": 2}, {"start": 2, "end": 3, "surface": "区", "reading": "く", "literal": false, "fixed": false, "display_start": 2, "display_end": 3}], "focus": 0, "candidate_page": 0, "candidate_kinds": [], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "up", "t": 480, "vk": 32}, "expect": {"composition": "蚊？区", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 3, "timer": null, "candidates": ["蚊", "科", "か", "カ"], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "蚊", "reading": "か", "literal": false, "fixed": false, "display_start": 0, "display_end": 1}, {"start": 1, "end": 2, "surface": "？", "reading": "？", "literal": false, "fixed": false, "display_start": 1, "display_end": 2}, {"start": 2, "end": 3, "surface": "区", "reading": "く", "literal": false, "fixed": false, "display_start": 2, "display_end": 3}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "kana", "kana"], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "down", "t": 580, "vk": 50}, "expect": {"composition": "科？区", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 3, "timer": null, "candidates": ["蚊", "科", "か", "カ"], "cand_index": 1, "segments": [{"start": 0, "end": 1, "surface": "科", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 1}, {"start": 1, "end": 2, "surface": "？", "reading": "？", "literal": false, "fixed": false, "display_start": 1, "display_end": 2}, {"start": 2, "end": 3, "surface": "区", "reading": "く", "literal": false, "fixed": false, "display_start": 2, "display_end": 3}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "kana", "kana"], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "up", "t": 610, "vk": 50}, "expect": {"composition": "科？区", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 3, "timer": null, "candidates": ["蚊", "科", "か", "カ"], "cand_index": 1, "segments": [{"start": 0, "end": 1, "surface": "科", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 1}, {"start": 1, "end": 2, "surface": "？", "reading": "？", "literal": false, "fixed": false, "display_start": 1, "display_end": 2}, {"start": 2, "end": 3, "surface": "区", "reading": "く", "literal": false, "fixed": false, "display_start": 2, "display_end": 3}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "kana", "kana"], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "down", "t": 710, "vk": 39}, "expect": {"composition": "科？区", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 3, "timer": null, "candidates": ["？", "尾", "ぉ", "ォ"], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "科", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 1}, {"start": 1, "end": 2, "surface": "？", "reading": "？", "literal": false, "fixed": false, "display_start": 1, "display_end": 2}, {"start": 2, "end": 3, "surface": "区", "reading": "く", "literal": false, "fixed": false, "display_start": 2, "display_end": 3}], "focus": 1, "candidate_page": 0, "candidate_kinds": ["literal", "dictionary", "kana", "kana"], "has_next_page": false, "committed": ""}, "note": "リテラル面を表示するあいまい区間にも移動し、両面から選べる"},
+    {"event": {"op": "up", "t": 740, "vk": 39}, "expect": {"composition": "科？区", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 3, "timer": null, "candidates": ["？", "尾", "ぉ", "ォ"], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "科", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 1}, {"start": 1, "end": 2, "surface": "？", "reading": "？", "literal": false, "fixed": false, "display_start": 1, "display_end": 2}, {"start": 2, "end": 3, "surface": "区", "reading": "く", "literal": false, "fixed": false, "display_start": 2, "display_end": 3}], "focus": 1, "candidate_page": 0, "candidate_kinds": ["literal", "dictionary", "kana", "kana"], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "down", "t": 840, "vk": 50}, "expect": {"composition": "科尾区", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 3, "timer": null, "candidates": ["？", "尾", "ぉ", "ォ"], "cand_index": 1, "segments": [{"start": 0, "end": 1, "surface": "科", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 1}, {"start": 1, "end": 2, "surface": "尾", "reading": "ぉ", "literal": false, "fixed": true, "display_start": 1, "display_end": 2}, {"start": 2, "end": 3, "surface": "区", "reading": "く", "literal": false, "fixed": false, "display_start": 2, "display_end": 3}], "focus": 1, "candidate_page": 0, "candidate_kinds": ["literal", "dictionary", "kana", "kana"], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "up", "t": 870, "vk": 50}, "expect": {"composition": "科尾区", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 3, "timer": null, "candidates": ["？", "尾", "ぉ", "ォ"], "cand_index": 1, "segments": [{"start": 0, "end": 1, "surface": "科", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 1}, {"start": 1, "end": 2, "surface": "尾", "reading": "ぉ", "literal": false, "fixed": true, "display_start": 1, "display_end": 2}, {"start": 2, "end": 3, "surface": "区", "reading": "く", "literal": false, "fixed": false, "display_start": 2, "display_end": 3}], "focus": 1, "candidate_page": 0, "candidate_kinds": ["literal", "dictionary", "kana", "kana"], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "down", "t": 970, "vk": 39}, "expect": {"composition": "科尾区", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 3, "timer": null, "candidates": ["区", "く", "ク"], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "科", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 1}, {"start": 1, "end": 2, "surface": "尾", "reading": "ぉ", "literal": false, "fixed": true, "display_start": 1, "display_end": 2}, {"start": 2, "end": 3, "surface": "区", "reading": "く", "literal": false, "fixed": false, "display_start": 2, "display_end": 3}], "focus": 2, "candidate_page": 0, "candidate_kinds": ["dictionary", "kana", "kana"], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "up", "t": 1000, "vk": 39}, "expect": {"composition": "科尾区", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 3, "timer": null, "candidates": ["区", "く", "ク"], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "科", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 1}, {"start": 1, "end": 2, "surface": "尾", "reading": "ぉ", "literal": false, "fixed": true, "display_start": 1, "display_end": 2}, {"start": 2, "end": 3, "surface": "区", "reading": "く", "literal": false, "fixed": false, "display_start": 2, "display_end": 3}], "focus": 2, "candidate_page": 0, "candidate_kinds": ["dictionary", "kana", "kana"], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "down", "t": 1100, "vk": 49}, "expect": {"composition": "科尾区", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 3, "timer": null, "candidates": ["区", "く", "ク"], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "科", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 1}, {"start": 1, "end": 2, "surface": "尾", "reading": "ぉ", "literal": false, "fixed": true, "display_start": 1, "display_end": 2}, {"start": 2, "end": 3, "surface": "区", "reading": "く", "literal": false, "fixed": true, "display_start": 2, "display_end": 3}], "focus": 2, "candidate_page": 0, "candidate_kinds": ["dictionary", "kana", "kana"], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "up", "t": 1130, "vk": 49}, "expect": {"composition": "科尾区", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 3, "timer": null, "candidates": ["区", "く", "ク"], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "科", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 1}, {"start": 1, "end": 2, "surface": "尾", "reading": "ぉ", "literal": false, "fixed": true, "display_start": 1, "display_end": 2}, {"start": 2, "end": 3, "surface": "区", "reading": "く", "literal": false, "fixed": true, "display_start": 2, "display_end": 3}], "focus": 2, "candidate_page": 0, "candidate_kinds": ["dictionary", "kana", "kana"], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "down", "t": 1230, "vk": 37}, "expect": {"composition": "科尾区", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 3, "timer": null, "candidates": ["？", "尾", "ぉ", "ォ"], "cand_index": 1, "segments": [{"start": 0, "end": 1, "surface": "科", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 1}, {"start": 1, "end": 2, "surface": "尾", "reading": "ぉ", "literal": false, "fixed": true, "display_start": 1, "display_end": 2}, {"start": 2, "end": 3, "surface": "区", "reading": "く", "literal": false, "fixed": true, "display_start": 2, "display_end": 3}], "focus": 1, "candidate_page": 0, "candidate_kinds": ["literal", "dictionary", "kana", "kana"], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "up", "t": 1260, "vk": 37}, "expect": {"composition": "科尾区", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 3, "timer": null, "candidates": ["？", "尾", "ぉ", "ォ"], "cand_index": 1, "segments": [{"start": 0, "end": 1, "surface": "科", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 1}, {"start": 1, "end": 2, "surface": "尾", "reading": "ぉ", "literal": false, "fixed": true, "display_start": 1, "display_end": 2}, {"start": 2, "end": 3, "surface": "区", "reading": "く", "literal": false, "fixed": true, "display_start": 2, "display_end": 3}], "focus": 1, "candidate_page": 0, "candidate_kinds": ["literal", "dictionary", "kana", "kana"], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "down", "t": 1360, "vk": 49}, "expect": {"composition": "科？区", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 3, "timer": null, "candidates": ["？", "尾", "ぉ", "ォ"], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "科", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 1}, {"start": 1, "end": 2, "surface": "？", "reading": "？", "literal": false, "fixed": true, "display_start": 1, "display_end": 2}, {"start": 2, "end": 3, "surface": "区", "reading": "く", "literal": false, "fixed": true, "display_start": 2, "display_end": 3}], "focus": 1, "candidate_page": 0, "candidate_kinds": ["literal", "dictionary", "kana", "kana"], "has_next_page": false, "committed": ""}, "note": "「？」へ戻しても前後の固定表示は変えない"},
+    {"event": {"op": "up", "t": 1390, "vk": 49}, "expect": {"composition": "科？区", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 3, "timer": null, "candidates": ["？", "尾", "ぉ", "ォ"], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "科", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 1}, {"start": 1, "end": 2, "surface": "？", "reading": "？", "literal": false, "fixed": true, "display_start": 1, "display_end": 2}, {"start": 2, "end": 3, "surface": "区", "reading": "く", "literal": false, "fixed": true, "display_start": 2, "display_end": 3}], "focus": 1, "candidate_page": 0, "candidate_kinds": ["literal", "dictionary", "kana", "kana"], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "down", "t": 1490, "vk": 37}, "expect": {"composition": "科？区", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 3, "timer": null, "candidates": ["蚊", "科", "か", "カ"], "cand_index": 1, "segments": [{"start": 0, "end": 1, "surface": "科", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 1}, {"start": 1, "end": 2, "surface": "？", "reading": "？", "literal": false, "fixed": true, "display_start": 1, "display_end": 2}, {"start": 2, "end": 3, "surface": "区", "reading": "く", "literal": false, "fixed": true, "display_start": 2, "display_end": 3}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "kana", "kana"], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "up", "t": 1520, "vk": 37}, "expect": {"composition": "科？区", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 3, "timer": null, "candidates": ["蚊", "科", "か", "カ"], "cand_index": 1, "segments": [{"start": 0, "end": 1, "surface": "科", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 1}, {"start": 1, "end": 2, "surface": "？", "reading": "？", "literal": false, "fixed": true, "display_start": 1, "display_end": 2}, {"start": 2, "end": 3, "surface": "区", "reading": "く", "literal": false, "fixed": true, "display_start": 2, "display_end": 3}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "kana", "kana"], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "down", "t": 1620, "vk": 13}, "expect": {"composition": "", "commit": "科？区", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "segments": [], "focus": -1, "candidate_page": 0, "candidate_kinds": [], "has_next_page": false, "committed": "科？区"}},
+    {"event": {"op": "up", "t": 1650, "vk": 13}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "segments": [], "focus": -1, "candidate_page": 0, "candidate_kinds": [], "has_next_page": false, "committed": "科？区"}}
+  ],
+  "committed": "科？区",
+  "composition": ""
+}

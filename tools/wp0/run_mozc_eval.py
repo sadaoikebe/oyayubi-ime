@@ -15,6 +15,7 @@ import re
 import time
 
 from .mozc_dict import DICT_DIR, load_lex
+from .expand import is_literal_face
 from .table import load_table
 from .token_viterbi import decode_tokens, nbest_tokens
 
@@ -48,13 +49,14 @@ def reverse_table(table: dict) -> dict[str, dict]:
         kana = faces.get("plain")
         # Evaluation encodes kana readings only; punctuation is handled by the
         # IME as a literal boundary, not as a kana dictionary arc.
-        if kana and ("ぁ" <= kana <= "ゖ" or kana == "ー"):
+        if kana and not is_literal_face(kana):
             result.setdefault(kana, {"kind": "plain", "key": key, "kana": kana})
     for key, faces in table["keys"].items():
         shifts = {face: faces[face] for face in ("left", "right") if faces.get(face)}
         token = {"kind": "amb" if len(shifts) > 1 else "shift", "key": key, "faces": shifts}
         for kana in shifts.values():
-            result.setdefault(kana, token)
+            if not is_literal_face(kana):
+                result.setdefault(kana, token)
     return result
 
 

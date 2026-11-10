@@ -31,10 +31,11 @@ FSMの80ms/20ms定数・同時打鍵規則は変更していない。
 | Q/右親指 | 空欄。PLAN抜粋の「゜」は採用しない |
 | Z/右親指 | 空欄。PLAN抜粋の「び」は採用しない |
 | ;/左親指 | 空欄。PLAN抜粋の「ぱ」は採用しない |
-| //左親指 | 「？」。PLAN抜粋の「゛」は採用しない |
+| //左親指 | 「？」。PLAN抜粋の「゛」は採用しない。データ反映・混在面のリテラル処理とも実装済み |
 | Pの読点表示 | 正本「，」を表示「、」に正規化。同じ文字を出すキーの重複を許容 |
 
-「/」左面のデータ反映とリテラル処理は、単一 Space では右面「ぉ」と区別できないため未実装。
+「/」左面のデータ反映とリテラル処理は実装済み（下記「リテラル面とかな面の混在」）。
+単一 Space の入力は左「？」・右「ぉ」のあいまいトークンのまま保持し、変換・文節候補で解消する。
 
 数字段および他のANSI記号のNICOLA親指面とNICOLAのShift専用記号面は正本に無く、追加しない。
 数字・記号自体はリテラル入力し、Shift時は通常のUS ANSI文字を入力する。
@@ -209,7 +210,7 @@ Ctrl/Alt/Win併用の素通し、Shift+←→が文節伸縮を行わないこ�
 - `focus`: 注目文節の `segments` 内index、なしは `-1`。
 - `candidates`: 注目文節の現在ページだけ、最大9件。`cand_index` もページ内index、選択行なしは `-1`。
 - `candidate_page`: 0始まり。`has_next_page`: 次ページの有無。
-- `candidate_kinds`: 各候補の `dictionary` / `kana`。候補自体は文字列。
+- `candidate_kinds`: 各候補の `dictionary` / `kana` / `literal`（混在面対応で追加）。候補自体は文字列。
 
 Stage 3のTIP側でこの情報を表示・UTF-16座標へ変換する。今回TIP・常駐化・直接入力切替は実装していない。
 
@@ -266,4 +267,91 @@ python3 -m tools.wp0.run_mozc_eval --details /tmp/oyayubi-stage2b-mozc.jsonl
   `native_literals.json`、`punctuation_faces.json`、`repeat_after_conversion.json`、`reset_converted.json`、
   `selected_then_continue.json`、`timeouts.json`。
 
+コミットは作成していない。
+
+## リテラル面とかな面の混在 — / 左親指「？」（実装済み）
+
+2026-11-10、ブランチ `docs-and-eval-2026-11-10` / 開始HEAD `e692ad9`。
+Sadaoの決定を反映し、`data/nicola_a.json` の `/` は単独「・」／左「？」／右「ぉ」。
+Terraの `//left` 保留注記も実装済みに更新した。Space＋/ の入力自体は左右未確定の1トークンである。
+
+### リテラル面の判定と根拠
+
+`tools/wp0/expand.py:is_literal_face()` を単独面・親指面・評価用の逆引きで共有する。
+読みとして辞書探索に渡す文字集合は **U+3041–U+3096（ぁ–ゖ）と U+30FC（ー）**。
+面にこの集合以外の文字を含む場合はリテラル面とし、1 Unicodeコードポイントであることを要求する。
+未定義のnull面は従来どおり除外する。
+
+これはStage 2Aの単独面判定をそのまま一般化したもの。小書き「ぉ」、濁音「ゔ」、長音「ー」を
+かな読みとして維持し、句読点・記号・数字・英字・片仮名・独立した濁点/半濁点はリテラルとする。
+Unicodeの句読点カテゴリだけでは数字・英字などのStage 2Aリテラルと揃わず、
+「ひらがな以外」だけでは長音「ー」を失うため、この既存の読み集合を根拠にする。
+NICOLA面の正本「，」→表示「、」も両面で共通化。明示的な `kind=literal` は既に表示文字なので保持する。
+今回、片仮名面や新しいキー割り当てを追加したわけではない。
+
+### デコードと候補
+
+`_spans_from()` はリテラル面を辞書prefix・未知かなに渡さず、表記＝読み＝その表示文字、
+単語コスト0の専用1トークンアークを作る。`Piece.literal` で辞書アークと区別する。
+同じトークンのかな面は従来どおり探索でき、かな側を通る辞書語は複数トークンに跨がれる。
+
+`decode_tokens()`、`nbest_tokens()`、文節候補のA*は同じアークと連接計算を使う。
+リテラルへ入る際は直前のかな列をEOSで閉じ、次のかな列はBOSから開始する。
+したがって辞書語もPOS連接もリテラルを跨がない。内部の境界状態は通常のRID=0とも区別し、
+先頭・末尾・連続リテラルの空のかな列には余分なBOS→EOSコストを加えない。
+これはStage 2Aで各かな列を独立に変換して連結する意味と同じ。
+1-bestのRID枝刈りとnbestの読みprefix枝刈りは、それぞれ従来のまま維持する。
+
+文節候補には `kind=literal` を追加。リテラル面だけで区間を覆う候補はそのまま1回表示し、
+ひらがな・カタカナの重複候補にはしない。かなとリテラルが混ざる経路のかな候補も、
+リテラル部分を保持する。リテラル面はコスト閾値外でも末尾の制限なし探索で必ず到達できる。
+辞書候補の幅6000は変更せず、その基準を**実際の辞書語を少なくとも1つ含む最良経路**に置く。
+リテラルだけの安い経路を基準にして「ぉ」側の既存辞書候補を脱落させないためである。
+両探索の接尾コストは逆向きDPで計算し、候補の件数上限は追加していない。
+
+最良経路でリテラル面を採った場合は前後と独立した区間にする。ただし、元はあいまいトークンなので
+`segments.literal=false` とし、注目・選択・再訪できる。「？」から「ぉ」側へも選び直せる。
+選択候補の両端POSは境界ならBOS/EOSとして隣の候補採点に渡す。
+Stage 2Aの明示的なリテラルトークンは従来どおり `segments.literal=true`、移動対象外。
+
+評価用の逆引きは読み集合だけをキーにする。「？」を新しい評価対象として読み扱いせず、
+「ぉ」の逆引きには**「？」を含むあいまいトークン全体**を返す。評価時にもリテラル面を隠さない。
+
+### 追加検証と変更ファイル
+
+| 追加テスト | 確認 |
+| --- | --- |
+| `tests/test_literal_faces.py`（4件） | 読み集合、1-best/nbestの独立列とのスコア一致、記号辞書語の遮断、連続リテラル、非自立POS隣接時の区間分離、全9通りの両隣POS、負コスト・閾値外のリテラル到達、高コストの実在辞書語、かな候補中のリテラル保持 |
+| `slash_literal_choice.json` | Space＋/ のかな側1-bestから、文節候補の「？」を選んで確定 |
+| `slash_kana_choice.json` | 同じトークンの「？」表示から「ぉ」・辞書変換「尾」を選べる。辞書コスト15000でも候補を保持 |
+| `slash_literal_context.json` | 前後のかなと固定表示を保持し、中を「？→尾→？」に選び直して「科？区」を確定 |
+
+トランスクリプトはversion 2。全イベントの表示・文節・候補種別・FSM・タイマー・確定文字を
+静的JSONに記し、本番の `server.dispatch()` を通す。既存ケースの期待値は変更していない。
+
+```sh
+python3 -m unittest tests.test_fsm tests.test_session tests.test_evaluation tests.test_server tests.test_bunsetsu tests.test_literal_faces tests.test_transcripts -v
+python3 -m tools.wp0.run_regression
+python3 -m tools.wp0.run_mozc_eval --details /tmp/oyayubi-slash-mozc.jsonl
+```
+
+| 検証 | 結果 | 変更前との差 |
+| --- | --- | --- |
+| 単体＋トランスクリプト | 60/60 PASS | 既存53件維持＋単体4件＋トランスクリプト3件 |
+| 回帰ゲート | 5/5 PASS | 維持 |
+| Mozc 読み一致 | 92.4%（549/594） | 同じ |
+| Mozc 表記一致 | 77.1%（458/594） | 同じ |
+| Mozc コマンド基準 | 64.2%（380/592） | 同じ |
+| Mozc 非エンコード行 | 7件 | 同じ |
+
+変更ファイル:
+
+- `data/nicola_a.json`
+- `tools/wp0/expand.py`、`tools/wp0/decode.py`、`tools/wp0/token_viterbi.py`、`tools/wp0/run_mozc_eval.py`
+- `oyayubi/ime/bunsetsu.py`、`oyayubi/ime/session.py`
+- `tests/test_literal_faces.py`、`tests/transcripts/slash_literal_choice.json`、
+  `tests/transcripts/slash_kana_choice.json`、`tests/transcripts/slash_literal_context.json`
+- `tests/transcripts/README.md`、`docs/STAGE2.md`
+
+FSMのタイミング定数・同時打鍵判定、枝刈りの分離、辞書・ユーザー辞書コストは変更していない。
 コミットは作成していない。

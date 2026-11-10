@@ -19,6 +19,7 @@ from oyayubi.chord.keys import (
     SHIFT_VKS, SHORTCUT_VKS, VK_BACK, VK_ESCAPE, VK_RETURN, classify, literal_character,
 )
 from tools.wp0.mozc_dict import MozcLex, load_lex
+from tools.wp0.expand import is_literal_face, literal_text
 from tools.wp0.table import load_table
 from tools.wp0.token_viterbi import decode_tokens
 from .bunsetsu import (BOS_ID, PAGE_SIZE, Candidate, CandidateStream, Segment,
@@ -48,10 +49,10 @@ def to_lattice_token(tok: Token | Literal, table: dict) -> dict | None:
         kana = table["keys"].get(tok.key, {}).get("plain")
         if not kana:
             return None
-        if not ("ぁ" <= kana <= "ゖ" or kana == "ー"):
+        if is_literal_face(kana):
             # Keep the canonical P=， assignment in the data. Japanese prose
             # presentation uses 、 (Stage 2 acceptance sentence).
-            return {"kind": "literal", "text": "、" if kana == "，" else kana}
+            return {"kind": "literal", "text": literal_text(kana)}
         return {"kind": "plain", "key": tok.key, "kana": kana}
     if isinstance(tok, AmbShift):
         faces = {}

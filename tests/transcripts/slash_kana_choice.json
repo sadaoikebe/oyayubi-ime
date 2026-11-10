@@ -1,0 +1,27 @@
+{
+  "version": 2,
+  "description": "Space＋/ の「？」1-bestから、同じ区間の「ぉ」側のかな・辞書候補を選んで確定。",
+  "lexicon": [
+    {
+      "reading": "ぉ",
+      "surface": "尾",
+      "cost": 15000
+    }
+  ],
+  "steps": [
+    {"event": {"op": "down", "t": 0, "vk": 32}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S3", "n_tokens": 0, "timer": 80, "candidates": [], "cand_index": 0, "segments": [], "focus": -1, "candidate_page": 0, "candidate_kinds": [], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "down", "t": 30, "vk": 191}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S5", "n_tokens": 0, "timer": 110, "candidates": [], "cand_index": 0, "segments": [], "focus": -1, "candidate_page": 0, "candidate_kinds": [], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "up", "t": 60, "vk": 191}, "expect": {"composition": "？", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": [], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "？", "reading": "？", "literal": false, "fixed": false, "display_start": 0, "display_end": 1}], "focus": 0, "candidate_page": 0, "candidate_kinds": [], "has_next_page": false, "committed": ""}, "note": "Space＋/ は左右のあいまいトークン1個として保持"},
+    {"event": {"op": "up", "t": 90, "vk": 32}, "expect": {"composition": "？", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": [], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "？", "reading": "？", "literal": false, "fixed": false, "display_start": 0, "display_end": 1}], "focus": 0, "candidate_page": 0, "candidate_kinds": [], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "down", "t": 190, "vk": 32}, "expect": {"composition": "？", "commit": "", "converted": false, "fsm": "S3", "n_tokens": 1, "timer": 270, "candidates": [], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "？", "reading": "？", "literal": false, "fixed": false, "display_start": 0, "display_end": 1}], "focus": 0, "candidate_page": 0, "candidate_kinds": [], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "up", "t": 220, "vk": 32}, "expect": {"composition": "？", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["？", "尾", "ぉ", "ォ"], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "？", "reading": "？", "literal": false, "fixed": false, "display_start": 0, "display_end": 1}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["literal", "dictionary", "kana", "kana"], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "down", "t": 320, "vk": 51}, "expect": {"composition": "ぉ", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["？", "尾", "ぉ", "ォ"], "cand_index": 2, "segments": [{"start": 0, "end": 1, "surface": "ぉ", "reading": "ぉ", "literal": false, "fixed": true, "display_start": 0, "display_end": 1}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["literal", "dictionary", "kana", "kana"], "has_next_page": false, "committed": ""}, "note": "3で右面のひらがな「ぉ」を選べる"},
+    {"event": {"op": "up", "t": 350, "vk": 51}, "expect": {"composition": "ぉ", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["？", "尾", "ぉ", "ォ"], "cand_index": 2, "segments": [{"start": 0, "end": 1, "surface": "ぉ", "reading": "ぉ", "literal": false, "fixed": true, "display_start": 0, "display_end": 1}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["literal", "dictionary", "kana", "kana"], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "down", "t": 450, "vk": 50}, "expect": {"composition": "尾", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["？", "尾", "ぉ", "ォ"], "cand_index": 1, "segments": [{"start": 0, "end": 1, "surface": "尾", "reading": "ぉ", "literal": false, "fixed": true, "display_start": 0, "display_end": 1}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["literal", "dictionary", "kana", "kana"], "has_next_page": false, "committed": ""}, "note": "2で同じ右面の辞書変換「尾」を選べる"},
+    {"event": {"op": "up", "t": 480, "vk": 50}, "expect": {"composition": "尾", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["？", "尾", "ぉ", "ォ"], "cand_index": 1, "segments": [{"start": 0, "end": 1, "surface": "尾", "reading": "ぉ", "literal": false, "fixed": true, "display_start": 0, "display_end": 1}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["literal", "dictionary", "kana", "kana"], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "down", "t": 580, "vk": 13}, "expect": {"composition": "", "commit": "尾", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "segments": [], "focus": -1, "candidate_page": 0, "candidate_kinds": [], "has_next_page": false, "committed": "尾"}},
+    {"event": {"op": "up", "t": 610, "vk": 13}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "segments": [], "focus": -1, "candidate_page": 0, "candidate_kinds": [], "has_next_page": false, "committed": "尾"}}
+  ],
+  "committed": "尾",
+  "composition": ""
+}

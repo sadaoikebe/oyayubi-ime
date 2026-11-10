@@ -61,6 +61,7 @@ class Piece:
     start: int = 0
     end: int = 0
     rid: int = 0
+    literal: bool = False
 
 
 @dataclass

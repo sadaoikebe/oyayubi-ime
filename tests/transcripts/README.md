@@ -68,7 +68,8 @@ version 2は従来の必須項目に加えて、各イベントの `expect` に�
 - `focus`: 注目文節のindex、なしは-1。リテラルは移動対象外。
 - `candidate_page`: 0始まりの9件ページ。`candidates` と `cand_index` はページ内。
   隣の変更で固定候補が閾値外になった場合、表示を保持し `cand_index=-1`（選択行なし）。
-- `candidate_kinds`: 各行の `dictionary` / `kana`。
+- `candidate_kinds`: 各行の `dictionary` / `kana` / `literal`。
+  `literal` はあいまいトークンのリテラル面だけで区間を覆う候補。
 - `has_next_page`: 次ページの有無。
 
 Space/上下で候補を巡回し、自動的にページも切り替える。PgUp/Downはページ先頭へ。
@@ -83,3 +84,14 @@ Space/上下で候補を巡回し、自動的にページも切り替える。Pg
 
 `overrides` は `[RID, LID, cost]`。品詞判定は本番の `id.def` を使い、たとえば12–14は副詞。
 全8ケースの意図・結果と設計根拠は [docs/STAGE2.md](../../docs/STAGE2.md) の「Stage 2B」節。
+
+## / 左親指「？」 / version 2
+
+- `slash_literal_choice`: Space＋/ の右面が最良表示のときも、コスト閾値外の「？」を数字で選んで確定。
+- `slash_kana_choice`: 左面「？」から右面のかな「ぉ」と辞書変換「尾」を選べる。
+  辞書コスト15000でもリテラル面に候補を押し出されない。
+- `slash_literal_context`: 前後のかなと混在させ、記号を含む辞書語を遮断し、BOS/EOSで分離。
+  前後を固定し、中を「？→尾→？」に選び直して「科？区」を確定。
+
+あいまい区間は表示が「？」でも `segments.literal=false` のままで候補選択できる。
+Stage 2Aの確定したリテラルトークン（移動で飛ばす `literal=true`）とは区別する。

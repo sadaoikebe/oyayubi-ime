@@ -39,12 +39,12 @@
     "m": {"plain": "そ", "left": "ぞ", "right": "ゆ"},
     ",": {"plain": "ね", "left": "ぺ", "right": "む"},
     ".": {"plain": "ほ", "left": "ぼ", "right": "わ"},
-    "/": {"plain": "・", "left": null, "right": "ぉ"}
+    "/": {"plain": "・", "left": "？", "right": "ぉ"}
   },
   "literal_source": "docs/PLAN.md: upper/lower row table (plain faces only). Kana faces and empty thumb faces remain as in the author-derived JSON; contradictory PLAN thumb faces are not imported.",
   "todos": {
     "implementation": [
-      "//left: Sadao decided ？ on 2026-11-10; runtime handling of mixed literal/kana faces remains unresolved",
+      "//left: Sadao decided ？ on 2026-11-10; implemented with literal/kana alternatives and BOS/EOS boundaries",
       "NICOLA thumb faces outside keys (number row and other ANSI symbols): absent; no assignments added",
       "NICOLA Shift symbol layer: absent; Shift uses native US ANSI characters only"
     ]

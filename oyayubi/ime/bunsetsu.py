@@ -9,7 +9,7 @@ from typing import Iterator
 
 from tools.wp0.decode import Piece
 from tools.wp0.mozc_dict import BOS_ID, DICT_DIR, UNK_COST, MozcLex
-from tools.wp0.token_viterbi import _spans_from
+from tools.wp0.token_viterbi import BOUNDARY_RID, _end_cost, _spans_from, _word_cost
 
 # Half a single unknown-character penalty. This bounds implausible dictionary
 # analyses, not the number of homonyms, and never limits the kana escape route.
@@ -53,14 +53,17 @@ class Segment:
 
 
 def segments_from(pieces: list[Piece], offset: int) -> list[Segment]:
+    # Literal pieces from ambiguous faces get their own selectable interval.
+    # Stage 2A's fixed literals are instead created by ImeSession._refresh().
     groups: list[list[Piece]] = []
     for piece in pieces:
-        if not groups or content(int(piece.pos)):
+        if not groups or piece.literal or groups[-1][-1].literal or content(int(piece.pos)):
             groups.append([])
         groups[-1].append(piece)
     return [Segment(offset + g[0].start, offset + g[-1].end,
                     Candidate("".join(p.surface for p in g), "".join(p.reading for p in g),
-                              0, int(g[0].pos), g[-1].rid)) for g in groups]
+                              0, int(g[0].pos), g[-1].rid,
+                              "literal" if g[0].literal else "dictionary")) for g in groups]
 
 
 def _paths(tokens: list[dict], lex: MozcLex, left: int, right: int,
@@ -78,29 +81,41 @@ def _paths(tokens: list[dict], lex: MozcLex, left: int, right: int,
     # Suffix costs for every reachable previous RID; compute iteratively so a
     # long unknown segment cannot exceed Python's recursion limit.
     rids = [set() for _ in range(n + 1)]
-    rids[0].add(left)
+    initial = BOUNDARY_RID if left == BOS_ID else left
+    rids[0].add(initial)
     for i in range(n):
         if rids[i]:
             for w in arcs[i]:
-                rids[w.end].add(w.entry.rid)
+                rids[w.end].add(w.rid)
     suffix = [{} for _ in range(n + 1)]
-    suffix[n] = {rid: lex.transition(rid, right) for rid in rids[n]}
+    suffix[n] = {rid: _end_cost(lex, rid, right) for rid in rids[n]}
     inf = float("inf")
+    # The dictionary score band must be anchored to a path with a real word.
+    # A zero-cost literal alone must not displace the kana side's dictionary
+    # candidates. This second potential requires at least one nonliteral arc.
+    word_suffix = [{} for _ in range(n + 1)]
+    word_suffix[n] = {rid: inf for rid in rids[n]}
     for i in range(n - 1, -1, -1):
         for rid in rids[i]:
-            suffix[i][rid] = min((lex.transition(rid, w.entry.lid) + w.entry.cost
-                                 + suffix[w.end][w.entry.rid] for w in arcs[i]), default=inf)
-    best = suffix[0].get(left, inf)
+            suffix[i][rid] = min((_word_cost(lex, rid, w)
+                                 + suffix[w.end][w.rid] for w in arcs[i]), default=inf)
+            if not kana:
+                word_suffix[i][rid] = min((
+                    _word_cost(lex, rid, w)
+                    + (word_suffix if w.literal else suffix)[w.end][w.rid]
+                    for w in arcs[i]), default=inf)
+    best = suffix[0].get(initial, inf)
     if best == inf:
         return
-    limit = inf if kana else best + COST_WINDOW
+    limit = inf if kana else word_suffix[0].get(initial, inf) + COST_WINDOW
     serial = count()
-    # priority, tie break, cost-so-far, position, RID, first LID, surface, reading
-    heap = [(best, next(serial), 0, 0, left, BOS_ID, "", "")]
+    # priority, tie break, cost-so-far, position, RID, first LID, surface, reading,
+    # whether every arc so far is literal
+    heap = [(best, next(serial), 0, 0, initial, BOS_ID, "", "", True)]
     seen = set()
     prefixes = {}
     while heap:
-        bound, _, cost, pos, rid, lid, surface, reading = heappop(heap)
+        bound, _, cost, pos, rid, lid, surface, reading, all_literal = heappop(heap)
         if bound > limit:
             break
         if kana and cost != prefixes.get((pos, rid, reading), cost):
@@ -109,29 +124,40 @@ def _paths(tokens: list[dict], lex: MozcLex, left: int, right: int,
             key = reading if kana else surface
             if key not in seen:
                 seen.add(key)
-                yield Candidate(surface, reading, int(bound), lid, rid)
+                yield Candidate(surface, reading, int(bound), lid,
+                                BOS_ID if rid == BOUNDARY_RID else rid,
+                                "literal" if all_literal else "dictionary")
             continue
         for w in arcs[pos]:
             e = w.entry
-            nc = cost + lex.transition(rid, e.lid) + e.cost
-            bound = nc + suffix[w.end][e.rid]
+            nc = cost + _word_cost(lex, rid, w)
+            bound = nc + suffix[w.end][w.rid]
             if bound > limit:
                 continue
             nr = reading + e.reading
             if kana:
-                key = (w.end, e.rid, nr)
+                key = (w.end, w.rid, nr)
                 if nc >= prefixes.get(key, inf):
                     continue
                 prefixes[key] = nc
-            heappush(heap, (bound, next(serial), nc, w.end, e.rid,
-                            e.lid if pos == 0 else lid, surface + e.surface, nr))
+            heappush(heap, (bound, next(serial), nc, w.end, w.rid,
+                            e.lid if pos == 0 else lid, surface + e.surface, nr,
+                            all_literal and w.literal))
 
 
 def candidates(tokens: list[dict], lex: MozcLex, left: int, right: int) -> Iterator[Candidate]:
-    yield from _paths(tokens, lex, left, right, kana=False)
+    literals = set()
+    for c in _paths(tokens, lex, left, right, kana=False):
+        if c.kind == "literal":
+            literals.add(c.surface)
+        yield c
     # Even a reading absent from every dictionary prefix remains reachable.
     for c in _paths(tokens, lex, left, right, kana=True):
-        hira = "".join(chr(ord(ch) - 0x60) if "ァ" <= ch <= "ヶ" else ch for ch in c.reading)
+        if c.kind == "literal":
+            if c.surface not in literals:
+                yield c  # Literal faces also remain reachable outside the cost window.
+            continue  # A literal has no kana variants.
+        hira = c.reading
         kata = "".join(chr(ord(ch) + 0x60) if "ぁ" <= ch <= "ゖ" else ch for ch in hira)
         yield Candidate(hira, hira, c.score, c.lid, c.rid, "kana")
         yield Candidate(kata, hira, c.score, c.lid, c.rid, "kana")
@@ -161,7 +187,8 @@ class CandidateStream:
         i = 0
         while self.ensure(i):
             if self.cache[i].surface == selected.surface and (
-                    selected.kind != "kana" or self.cache[i].kind == "kana"):
+                    selected.kind not in ("kana", "literal")
+                    or self.cache[i].kind == selected.kind):
                 return i
             i += 1
         # A fixed spelling can fall outside the band after a neighbor changes.
