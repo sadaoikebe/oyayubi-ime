@@ -8,6 +8,7 @@ import math
 import os
 from pathlib import Path
 import time
+from uuid import uuid4
 
 from tools.wp0.expand import is_literal_face, token_branches
 from tools.wp0.mozc_dict import DEFAULT_NOUN_ID, Entry, MozcLex
@@ -31,13 +32,31 @@ class Confirmation:
     rid: int
     user_word: bool = False
     version: int = 1
+    record_id: str = ""  # Legacy confirmations have no undo target.
+
+
+@dataclass(frozen=True)
+class Suppression:
+    reading: str
+    surface: str
+    timestamp: float
+    version: int = 1
+    type: str = "suppress"
+
+
+@dataclass(frozen=True)
+class Tombstone:
+    record_ids: list[str]
+    timestamp: float
+    version: int = 1
+    type: str = "tombstone"
 
 
 class LearningStore:
     """Missing files disable reads AND writes; deletion cannot recreate history.
 
-    Append one JSON object per confirmed bunsetsu, retain the latest occurrence
-    of each triple in memory, and take maxima rather than accumulating counts.
+    Append confirmations, pair suppressions and targeted tombstones. Replay in
+    file order and retain the latest surviving occurrence of each triple.
     A conversion uses a fixed clock snapshot, including its lazy candidates.
     """
 
@@ -65,8 +84,7 @@ class LearningStore:
         for row in self._records.values():
             self._pairs.setdefault((row.reading, row.surface), []).append(row)
         for (reading, _), rows in self._pairs.items():
-            # Equal timestamps use the last confirmation in file order.
-            row = max(reversed(rows), key=lambda r: r.timestamp)
+            row = rows[-1]  # File order determines state; time only controls decay.
             self._entries.setdefault(reading, []).append(row)
             self._prefixes.update(reading[:i] for i in range(1, len(reading) + 1))
 
@@ -87,26 +105,54 @@ class LearningStore:
             signature, lines = None, []
         self.active = signature is not None
         self._signature = signature
-        self._records = {}
+        events = []
+        tombstoned = set()
         for line in lines:
             try:
-                row = Confirmation(**json.loads(line))
-                if (row.version != 1 or not isinstance(row.reading, str)
-                        or not row.reading or is_literal_face(row.reading)
-                        or not isinstance(row.surface, str) or not row.surface
-                        or not isinstance(row.left, str)
+                data = json.loads(line)
+                event_type = data.pop("type", "confirm")
+                if event_type == "confirm":
+                    row = Confirmation(**data)
+                elif event_type == "suppress":
+                    row = Suppression(**data)
+                elif event_type == "tombstone":
+                    row = Tombstone(**data)
+                else:
+                    continue
+                if (row.version != 1
                         or not isinstance(row.timestamp, (int, float))
-                        or not math.isfinite(row.timestamp)
+                        or not math.isfinite(row.timestamp)):
+                    continue
+                if isinstance(row, Tombstone):
+                    if (not isinstance(row.record_ids, list)
+                            or any(not isinstance(v, str) or not v for v in row.record_ids)):
+                        continue
+                    tombstoned.update(row.record_ids)
+                    continue
+                if (not isinstance(row.reading, str)
+                        or not row.reading or is_literal_face(row.reading)
+                        or not isinstance(row.surface, str) or not row.surface):
+                    continue
+                if isinstance(row, Confirmation) and (
+                        not isinstance(row.left, str) or not isinstance(row.record_id, str)
                         or any(type(v) is not int for v in (row.cost, row.lid, row.rid))
                         or row.lid < 0 or row.rid < 0):
                     continue
-            except (ValueError, TypeError):
+            except (ValueError, TypeError, AttributeError):
                 continue  # An incomplete last write must not prevent conversion.
+            events.append(row)
+        self._records = {}
+        for row in events:
+            if isinstance(row, Suppression):
+                self._records = {key: value for key, value in self._records.items()
+                                 if key[:2] != (row.reading, row.surface)}
+                continue
+            if row.record_id and row.record_id in tombstoned:
+                continue
             key = (row.reading, row.surface, row.left)
-            if key not in self._records or self._records[key].timestamp <= row.timestamp:
-                # Replacing a triple must also update its order among pairs.
-                self._records.pop(key, None)
-                self._records[key] = row
+            # Replacing a triple also updates its order among pairs.
+            self._records.pop(key, None)
+            self._records[key] = row
         self._index()
         self.revision += 1
 
@@ -120,7 +166,7 @@ class LearningStore:
         for row in rows:
             age = max(0, self.now - row.timestamp)
             weight = 2 ** (-age / HALF_LIFE_SECONDS)
-            pair = max(pair, weight)
+            pair = weight
             if row.left == left:
                 contextual = max(contextual, weight)
         return round(PAIR_BONUS * pair + CONTEXT_BONUS * contextual)
@@ -152,10 +198,10 @@ class LearningStore:
             return e.surface
         return previous + e.surface
 
-    def confirm(self, selections: list[tuple[Candidate, str]], lex: MozcLex) -> None:
+    def confirm(self, selections: list[tuple[Candidate, str]], lex: MozcLex) -> list[str]:
         self.sync()
         if not self.active:
-            return
+            return []
         rows = []
         for c, left in selections:
             if c.kind == "literal" or not c.reading or is_literal_face(c.reading):
@@ -173,9 +219,20 @@ class LearningStore:
                     cost, lid, rid = USER_WORD_COST, DEFAULT_NOUN_ID, DEFAULT_NOUN_ID
             if cost is not None:
                 rows.append(Confirmation(c.reading, c.surface, left, self.now,
-                                         cost, lid, rid, user_word))
-        if not rows:
-            return
+                                         cost, lid, rid, user_word, record_id=uuid4().hex))
+        return [r.record_id for r in rows] if self._append(rows) else []
+
+    def suppress(self, reading: str, surface: str) -> bool:
+        self.sync()
+        return self._append([Suppression(reading, surface, self.now)])
+
+    def undo(self, record_ids: list[str]) -> bool:
+        self.sync()
+        return self._append([Tombstone(record_ids, self.now)])
+
+    def _append(self, rows: list[Confirmation | Suppression | Tombstone]) -> bool:
+        if not self.active or not rows:
+            return False
         payload = ("\n" if self._needs_newline else "") + "".join(
             json.dumps(asdict(r), ensure_ascii=False) + "\n" for r in rows)
         try:
@@ -185,8 +242,9 @@ class LearningStore:
                 stream.write(payload)
         except FileNotFoundError:
             self.sync()
-            return
+            return False
         except OSError as exc:
             self.error = type(exc).__name__
-            return  # Persistence failure must not discard the user's commit.
+            return False  # Persistence failure must not discard the user's commit.
         self.sync()
+        return True

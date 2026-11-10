@@ -33,6 +33,8 @@ VK_PRIOR = 0x21
 VK_NEXT = 0x22
 VK_UP = 0x26
 VK_DOWN = 0x28
+VK_F6 = 0x75
+VK_F7 = 0x76
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,6 +88,7 @@ class ImeSession:
     has_next_page: bool = False
     learning_path: Path | None = DEFAULT_LEARNING_PATH
     _learning: LearningStore | None = None
+    _learning_undo: list[list[str]] = field(default_factory=list)
     # Stage 5b, off unless a rescorer is given (server --lm-rescore).
     lm: LmRescorer | None = None
     _left_surface: str = ""
@@ -160,6 +163,15 @@ class ImeSession:
             if down and not self.tokens:
                 self._lm_context = ""  # Ctrl/Alt/Win may move the caret or edit text.
             return None
+        if down and not shift and (vk == VK_F7 or (
+                vk == VK_F6 and self.converted and self.candidates)):
+            pending = self._finish_pending()
+            if vk == VK_F6:
+                self.forget_candidate()
+            else:
+                self.undo_learning()
+            self._literal_down.add(vk)
+            return pending
         if kind == "EDIT":
             if not down:
                 return None
@@ -232,6 +244,36 @@ class ImeSession:
         self.converted = False
         self._clear_cands()
         self._refresh()
+
+    def forget_candidate(self) -> bool:
+        """Suppress the highlighted pair, then choose the newly ranked first row."""
+        if (self._learning is None or not self.converted or self.focus < 0
+                or not self.candidates or self.cand_index < 0):
+            return False
+        segment = self.segments[self.focus]
+        c = segment.selected
+        if c.kind == "literal" or not c.reading or is_literal_face(c.reading):
+            return False
+        if not self._learning.suppress(c.reading, c.surface):
+            return False
+        segment.fixed = False
+        self._prepare_cands(self.focus, reselect=True)
+        self.composition = "".join(s.selected.surface for s in self.segments)
+        self._open_cands()
+        return True
+
+    def undo_learning(self) -> bool:
+        """Undo this session's last persisted confirmation group; keep the text."""
+        if self._learning is None or not self._learning_undo:
+            return False
+        if not self._learning.undo(self._learning_undo[-1]):
+            return False
+        self._learning_undo.pop()
+        if self.converted:
+            self._open_cands()  # Preserve selections and manually resized intervals.
+        elif self.tokens:
+            self._refresh()
+        return True
 
     def _edit(self, vk: int) -> str | None:
         if vk == VK_BACK:
@@ -491,7 +533,9 @@ class ImeSession:
             selections.append((segment.selected, left_surface))
             left_surface = segment.selected.surface
         if self._learning is not None and self._lex is not None:
-            self._learning.confirm(selections, self._lex)
+            record_ids = self._learning.confirm(selections, self._lex)
+            if record_ids:
+                self._learning_undo.append(record_ids)
         if reset_input:
             context = self._lm_context
             self.reset()

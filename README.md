@@ -6,7 +6,7 @@
 
 - [docs/STATUS.md](docs/STATUS.md) — いまできていること、やめたこと
 - [docs/STAGE1.md](docs/STAGE1.md) — ノート PC での実打鍵記録・Linux での再生評価
-- [docs/STAGE4.md](docs/STAGE4.md) — 確定学習の有効化・保存形式・全消去
+- [docs/STAGE4.md](docs/STAGE4.md) — 確定学習の有効化・保存形式・候補の忘却／学習取消・全消去
 - [docs/PLAN.md](docs/PLAN.md) — 調査・設計・WBS・PR 計画（Draft r3、2026-08-16）
 - [docs/WP0-investigation.md](docs/WP0-investigation.md) — トークン列→漢字かな交じりのオフライン実証
 

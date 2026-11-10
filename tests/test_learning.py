@@ -307,6 +307,222 @@ class LearningTest(unittest.TestCase):
             self.assertEqual(decode_tokens(tokens("こうせい"), self.lex)[0].surface, "構成")
             self.assertEqual(nbest_tokens(tokens("こうせい"), self.lex)[0][0].surface, "構成")
 
+    def test_forget_restores_ranking_and_confirmation_relearns(self):
+        s = self.session()
+        self.type_reading(s, "こうせい")
+        self.choose(s, "構成")
+        baseline = list(s.candidates)
+        self.choose(s, "校正")
+        dispatch(s, {"op": "down", "vk": 13})
+        learned = self.path.read_bytes()
+
+        s = self.session()
+        self.type_reading(s, "こうせい")
+        self.choose(s, "校正")
+        self.assertEqual(s.candidates[0], "校正")
+        reply = dispatch(s, {"op": "down", "vk": 0x75})  # F6
+        self.assertEqual((reply["composition"], reply["commit"]), ("構成", ""))
+        self.assertEqual(reply["candidates"], baseline)
+        dispatch(s, {"op": "down", "vk": 0x75})  # repeat must not suppress 構成 too
+        dispatch(s, {"op": "up", "vk": 0x75})
+        self.assertEqual(len(self.rows()), 2)
+        self.assertEqual(self.rows()[-1]["type"], "suppress")
+        self.assertTrue(self.path.read_bytes().startswith(learned))
+        self.assertEqual(self.store().bonus("こうせい", "校正", ""), 0)
+        other = self.session()
+        self.type_reading(other, "こうせい")
+        self.choose(other, "構成")
+        self.assertEqual(other.candidates, baseline)
+
+        self.choose(s, "校正")
+        self.assertEqual(dispatch(s, {"op": "down", "vk": 13})["commit"], "校正")
+        other = self.session()
+        self.type_reading(other, "こうせい")
+        self.assertEqual(other.composition, "校正")
+        self.choose(other, "校正")
+        self.assertEqual(other.candidates[0], "校正")
+
+    def test_suppression_covers_all_contexts_and_legacy_rows_in_file_order(self):
+        c = Candidate("校正", "こうせい", 0, 1851, 1851, word_cost=5000)
+        # The old on-disk format remains readable; clock rollback never beats
+        # later lines, whether positive or suppressing.
+        legacy = asdict(Confirmation(c.reading, c.surface, "左", self.now, 7000, 1, 1))
+        legacy.pop("record_id")
+        self.path.write_text(json.dumps(legacy) + "\n", encoding="utf-8")
+        store, observer = self.store(), self.store()
+        self.now -= 100
+        store.confirm([(c, "右")], self.lex)
+        self.assertEqual([(e.lid, e.cost) for _, e in store.spans(tokens(c.reading), 0, self.lex)],
+                         [(1851, 5000)])
+        frozen = store.snapshot()
+        store.suppress(c.reading, c.surface)
+        observer.sync()
+        for left in ("左", "右", ""):
+            self.assertEqual(observer.bonus(c.reading, c.surface, left), 0)
+        self.assertIsNone(observer.snapshot())
+        self.assertEqual(frozen.bonus(c.reading, c.surface, "右"), 6000)
+        self.now -= 100
+        store.confirm([(c, "新")], self.lex)
+        self.assertEqual(self.store().bonus(c.reading, c.surface, "新"), 6000)
+        self.assertEqual(self.store().bonus(c.reading, c.surface, "左"), 2400)
+        # Undoing the new confirmation cannot cross the suppression barrier.
+        store.undo([self.rows()[-1]["record_id"]])
+        self.assertIsNone(self.store().snapshot())
+
+    def test_undo_last_confirmation_removes_all_bunsetsu_bonuses(self):
+        s = self.session()
+        self.type_reading(s, "きかんのこうせいをした")
+        self.choose(s, "校正を", reading="こうせいを")
+        dispatch(s, {"op": "down", "vk": 13})
+        confirmations = self.rows()
+        self.assertEqual(len(confirmations), 3)
+        self.assertEqual(len({r["record_id"] for r in confirmations}), 3)
+        before = self.path.read_bytes()
+        reply = dispatch(s, {"op": "undo_learning"})
+        self.assertEqual((reply["composition"], reply["commit"]), ("", ""))
+        self.assertTrue(self.path.read_bytes().startswith(before))
+        tombstone = self.rows()[-1]
+        self.assertEqual(tombstone["type"], "tombstone")
+        self.assertEqual(tombstone["record_ids"], [r["record_id"] for r in confirmations])
+        restored = self.store()
+        for r in confirmations:
+            self.assertEqual(restored.bonus(r["reading"], r["surface"], r["left"]), 0)
+        self.assertIsNone(restored.snapshot())
+        other = self.session()
+        self.type_reading(other, "きかんのこうせいをした")
+        self.assertEqual(other.composition, "機関の構成をした")
+
+    def test_repeated_undo_restores_previous_record_then_removes_it(self):
+        s = self.session()
+        for _ in range(2):
+            dispatch(s, {"op": "reset"})  # reset does not discard session undo history
+            self.type_reading(s, "こうせい")
+            self.choose(s, "校正")
+            dispatch(s, {"op": "down", "vk": 13})
+            self.now += HALF_LIFE_SECONDS
+        self.assertEqual(self.store().bonus("こうせい", "校正", ""), 3000)
+        dispatch(s, {"op": "down", "vk": 0x76})  # F7 after commit, no candidates
+        self.assertEqual(self.store().bonus("こうせい", "校正", ""), 1500)
+        dispatch(s, {"op": "down", "vk": 0x76})  # repeat must not undo the next group
+        dispatch(s, {"op": "up", "vk": 0x76})
+        self.assertEqual(len(self.rows()), 3)
+        dispatch(s, {"op": "undo_learning"})
+        self.assertEqual(self.store().bonus("こうせい", "校正", ""), 0)
+        before = self.path.read_bytes()
+        dispatch(s, {"op": "undo_learning"})
+        self.assertEqual(self.path.read_bytes(), before)
+
+    def test_undo_targets_own_records_without_removing_other_session_learning(self):
+        s, other = self.session(), self.session()
+        for session in (s, other):
+            self.type_reading(session, "こうせい")
+            self.choose(session, "校正")
+            dispatch(session, {"op": "down", "vk": 13})
+        dispatch(s, {"op": "undo_learning"})
+        self.assertEqual(self.store().bonus("こうせい", "校正", ""), 6000)
+        dispatch(other, {"op": "undo_learning"})
+        self.assertEqual(self.store().bonus("こうせい", "校正", ""), 0)
+
+    def test_autocommit_is_undoable_but_literals_and_cancellations_add_no_group(self):
+        s = self.session()
+        self.type_reading(s, "こうせい")
+        self.choose(s, "校正")
+        self.assertEqual(dispatch(s, {"op": "down", "vk": 48})["commit"], "校正")
+        dispatch(s, {"op": "down", "vk": 13})  # literal-only confirmation
+        self.type_reading(s, "こうせい")
+        dispatch(s, {"op": "down", "vk": 27})
+        dispatch(s, {"op": "undo_learning"})
+        self.assertEqual(self.rows()[-1]["record_ids"], [self.rows()[0]["record_id"]])
+        before = self.path.read_bytes()
+        dispatch(s, {"op": "undo_learning"})
+        self.assertEqual(self.path.read_bytes(), before)
+
+    def test_undo_and_forget_preserve_other_selections_and_resized_intervals(self):
+        s = self.session()
+        self.type_reading(s, "きかんのこうせいをした")
+        self.choose(s, "校正を", reading="こうせいを")
+        dispatch(s, {"op": "down", "vk": 13})
+        dispatch(s, {"op": "reset"})
+        self.type_reading(s, "きかんのこうせいをした")
+        self.choose(s, "校正を", reading="こうせいを")
+        dispatch(s, {"op": "down", "vk": 39, "mods": ["shift"]})
+        dispatch(s, {"op": "up", "vk": 39})
+        before, focus = s.segment_snapshot(), s.focus
+        dispatch(s, {"op": "undo_learning"})
+        self.assertEqual((s.segment_snapshot(), s.focus), (before, focus))
+        dispatch(s, {"op": "forget_candidate"})
+        self.assertEqual([(r["start"], r["end"]) for r in s.segment_snapshot()],
+                         [(r["start"], r["end"]) for r in before])
+        for i, row in enumerate(s.segment_snapshot()):
+            if i != focus:
+                self.assertEqual(row["surface"], before[i]["surface"])
+                self.assertEqual(row["fixed"], before[i]["fixed"])
+
+    def test_learning_operations_disabled_and_failed_writes_can_retry(self):
+        s = self.session()
+        self.type_reading(s, "こうせい")
+        self.choose(s, "校正")
+        dispatch(s, {"op": "down", "vk": 13})
+        dispatch(s, {"op": "reset"})
+        self.type_reading(s, "こうせい")
+        self.choose(s, "校正")
+        before, composition = self.path.read_bytes(), s.composition
+        with patch("oyayubi.ime.learning.os.open", side_effect=PermissionError):
+            self.assertFalse(s.forget_candidate())
+            self.assertFalse(s.undo_learning())
+        self.assertEqual((self.path.read_bytes(), s.composition), (before, composition))
+        self.assertTrue(s.undo_learning())  # failed write did not pop the undo group
+        self.path.unlink()
+        self.assertFalse(s.forget_candidate())
+        self.assertFalse(self.path.exists())
+        disabled = ImeSession(learning_path=None)
+        for op in ("forget_candidate", "undo_learning"):
+            self.assertEqual(dispatch(disabled, {"op": op})["commit"], "")
+
+    def test_learning_keys_require_unmodified_input_and_forget_requires_candidates(self):
+        s = self.session()
+        self.type_reading(s, "こうせい")
+        self.choose(s, "校正")
+        dispatch(s, {"op": "down", "vk": 13})
+        dispatch(s, {"op": "reset"})
+        self.type_reading(s, "こうせい")
+        before = self.path.read_bytes()
+        dispatch(s, {"op": "forget_candidate"})  # no candidate window
+        dispatch(s, {"op": "down", "vk": 0x75})
+        self.choose(s, "校正")
+        for mods in (["shift"], ["ctrl"], ["alt"], ["win"]):
+            for vk in (0x75, 0x76):
+                dispatch(s, {"op": "down", "vk": vk, "mods": mods})
+                dispatch(s, {"op": "up", "vk": vk, "mods": mods})
+        self.assertEqual(self.path.read_bytes(), before)
+        dispatch(s, {"op": "down", "vk": 16})  # physical Shift tracking too
+        dispatch(s, {"op": "down", "vk": 0x76})
+        dispatch(s, {"op": "up", "vk": 0x76})
+        dispatch(s, {"op": "up", "vk": 16})
+        dispatch(s, {"op": "set_direct", "direct": True})
+        for vk in (0x75, 0x76):
+            self.assertTrue(dispatch(s, {"op": "down", "vk": vk})["pass_through"])
+        self.assertEqual(self.path.read_bytes(), before)
+
+    def test_corrupt_control_records_do_not_hide_valid_confirmations(self):
+        store = self.store()
+        c = Candidate("校正", "こうせい", 0, 1851, 1851, word_cost=5000)
+        ids = store.confirm([(c, "")], self.lex)
+        invalid = [
+            {"type": "suppress", "reading": c.reading, "surface": c.surface,
+             "timestamp": self.now, "version": 999},
+            {"type": "tombstone", "record_ids": ids, "timestamp": "bad"},
+            {"type": "tombstone", "record_ids": [42], "timestamp": self.now},
+            {"type": "future", "timestamp": self.now},
+        ]
+        with self.path.open("a", encoding="utf-8") as stream:
+            for row in invalid:
+                stream.write(json.dumps(row) + "\n")
+            stream.write('{"type":"suppress",')
+        self.assertEqual(self.store().bonus(c.reading, c.surface, ""), 6000)
+        store.suppress(c.reading, c.surface)  # repairs the missing newline on append
+        self.assertEqual(self.store().bonus(c.reading, c.surface, ""), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

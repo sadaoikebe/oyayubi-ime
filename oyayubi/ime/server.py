@@ -10,6 +10,8 @@ One JSON object per line:
   {"op":"reset"}  # focus loss or application-terminated composition; no commit
   {"op":"set_direct","direct":true}
   {"op":"toggle_direct"}
+  {"op":"forget_candidate"}  # also unmodified F6 while candidates are visible
+  {"op":"undo_learning"}  # also unmodified F7; undo this session's last learning
   {"op":"context","text":"確定済み"}
 Reply: {"composition":"...","commit":"...","converted":false,"fsm":"S1"}
 """
@@ -47,6 +49,10 @@ def dispatch(sess: ImeSession, msg: dict) -> dict:
         sess.set_direct(msg["direct"])
     elif op == "toggle_direct":
         sess.set_direct(not sess.direct)
+    elif op == "forget_candidate":
+        sess.forget_candidate()
+    elif op == "undo_learning":
+        sess.undo_learning()
     return {
         "direct": sess.direct,
         "pass_through": sess.direct and op in ("down", "up"),

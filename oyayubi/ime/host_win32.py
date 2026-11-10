@@ -206,6 +206,7 @@ def paint(hwnd) -> None:
     text = (
         "oyayubi-ime 試験窓  （Notepad 用ではない。TSF TIP は src/tip）\n"
         "Space+文字 = 親指シフト（左右不明）。Space 単独 = 変換。Enter = 確定。Esc = 取消。\n"
+        "F6 = 注目候補の学習を忘却。F7 = 直前の学習を戻す（確定文字は保持）。\n"
         f"[{status}] tokens={len(session.tokens)} fsm={session.fsm.state}\n\n"
         f"{body}"
         f"[{comp}]" if comp else f"{body}"
@@ -214,6 +215,7 @@ def paint(hwnd) -> None:
         text = (
             "oyayubi-ime 試験窓  （Notepad 用ではない。TSF TIP は src/tip）\n"
             "Space+文字 = 親指シフト（左右不明）。Space 単独 = 変換。Enter = 確定。Esc = 取消。\n"
+            "F6 = 注目候補の学習を忘却。F7 = 直前の学習を戻す（確定文字は保持）。\n"
             f"[{status}] tokens={len(session.tokens)} fsm={session.fsm.state}\n\n"
             f"{body}|"
         )
@@ -228,6 +230,7 @@ def paint(hwnd) -> None:
         text = (
             "oyayubi-ime 試験窓  （Notepad 用ではない。TSF TIP は src/tip）\n"
             "Space+文字 = 親指シフト（左右不明）。Space 単独 = 変換。Enter = 確定。Esc = 取消。\n"
+            "F6 = 注目候補の学習を忘却。F7 = 直前の学習を戻す（確定文字は保持）。\n"
             f"[{status}] tokens={len(session.tokens)} fsm={session.fsm.state}\n\n"
             f"{body}〖{comp}〗"
             f"{cands}"
