@@ -58,3 +58,10 @@
 {"reading": "でんきじどうしゃ", "surface": "電気自動車", "cost": 2800}
 {"reading": "なんびゃくまんえん", "surface": "何百万円", "cost": 2200}
 {"reading": "なんじゅうまんどる", "surface": "何十万ドル", "cost": 2200}
+{"reading": "よろしくおねがいします", "surface": "よろしくお願いします", "cost": 5000, "lid": 12, "rid": 240}
+{"reading": "たな", "surface": "棚", "cost": 2900}
+{"reading": "ねんのため", "surface": "念のため", "cost": 5500}
+{"reading": "みにおぼえ", "surface": "身に覚え", "cost": 5000}
+{"reading": "みもふたもない", "surface": "身も蓋もない", "cost": 6000, "lid": 2425, "rid": 2425}
+{"reading": "ぼうせんいっぽう", "surface": "防戦一方", "cost": 6000}
+{"reading": "そうさいせん", "surface": "総裁選", "cost": 5800}
