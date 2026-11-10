@@ -12,7 +12,7 @@
     {"event": {"op": "down", "t": 490, "vk": 191}, "expect": {"composition": "。、．", "commit": "", "converted": false, "fsm": "S2", "n_tokens": 3, "timer": 570, "candidates": [], "cand_index": 0, "committed": ""}},
     {"event": {"op": "up", "t": 520, "vk": 191}, "expect": {"composition": "。、．・", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 4, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
     {"event": {"op": "down", "t": 620, "vk": 32}, "expect": {"composition": "。、．・", "commit": "", "converted": false, "fsm": "S3", "n_tokens": 4, "timer": 700, "candidates": [], "cand_index": 0, "committed": ""}},
-    {"event": {"op": "up", "t": 650, "vk": 32}, "expect": {"composition": "。、．・", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 4, "timer": null, "candidates": ["。、．・"], "cand_index": 0, "committed": ""}},
+    {"event": {"op": "up", "t": 650, "vk": 32}, "expect": {"composition": "。、．・", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 4, "timer": null, "candidates": [], "cand_index": 0, "committed": ""}},
     {"event": {"op": "down", "t": 750, "vk": 13}, "expect": {"composition": "", "commit": "。、．・", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "committed": "。、．・"}},
     {"event": {"op": "up", "t": 780, "vk": 13}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "committed": "。、．・"}}
   ],

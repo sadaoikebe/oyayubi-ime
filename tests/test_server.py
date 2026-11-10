@@ -25,6 +25,8 @@ class ServerTest(unittest.TestCase):
             on_key=lambda *args: "確定秘密",
             composition="編集中の秘密", converted=False, tokens=[], candidates=[], cand_index=0,
             fsm=SimpleNamespace(timer_deadline=None, state="S0"),
+            segment_snapshot=lambda: [], focus=-1, candidate_page=0,
+            candidate_kinds=[], has_next_page=False,
         )
         stdout, stderr = Stream(), Stream()
         stdin = Stream('{"op":"down","vk":74}\n{"op":"quit"}\n')
@@ -77,6 +79,8 @@ class ServerTest(unittest.TestCase):
             self.assertEqual(reply, {
                 "composition": "", "commit": "", "converted": False, "fsm": "S1",
                 "n_tokens": 0, "timer": None, "candidates": [], "cand_index": 0,
+                "segments": [], "focus": -1, "candidate_page": 0,
+                "candidate_kinds": [], "has_next_page": False,
             })
         self.assertEqual(replies[-1]["commit"], "う")
         self.assertEqual(stderr.getvalue(), "")

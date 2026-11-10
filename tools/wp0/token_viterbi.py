@@ -20,6 +20,7 @@ class _Word:
     start: int
     end: int
     entry: Entry
+    unknown: bool = False
 
 
 @dataclass(slots=True)
@@ -48,7 +49,7 @@ def _spans_from(tokens: list[dict], i: int, lex: MozcLex) -> list[_Word]:
     have_one = {w.entry.reading for w in out if w.end == i + 1}
     for kana in token_branches(tokens[i]):
         if kana not in have_one:
-            out.append(_Word(i, i + 1, Entry(kana, kana, UNK_LID, UNK_LID, UNK_COST)))
+            out.append(_Word(i, i + 1, Entry(kana, kana, UNK_LID, UNK_LID, UNK_COST), True))
     return out
 
 
@@ -119,7 +120,8 @@ def decode_tokens(tokens: list[dict], lex: MozcLex) -> tuple[DecodeResult, dict]
     reading = "".join(w.entry.reading for w in path)
     surface = "".join(w.entry.surface for w in path)
     pieces = [
-        Piece(w.entry.surface, w.entry.reading, str(w.entry.lid), w.entry.cost)
+        Piece(w.entry.surface, w.entry.reading, str(w.entry.lid), w.entry.cost,
+              w.start, w.end, w.entry.rid)
         for w in path
     ]
     ms = (time.perf_counter() - t0) * 1000
@@ -148,7 +150,8 @@ def _rebuild(words: list[_Word], states: list[list[_St]], idx: int, n: int) -> D
     reading = "".join(w.entry.reading for w in path)
     surface = "".join(w.entry.surface for w in path)
     pieces = [
-        Piece(w.entry.surface, w.entry.reading, str(w.entry.lid), w.entry.cost)
+        Piece(w.entry.surface, w.entry.reading, str(w.entry.lid), w.entry.cost,
+              w.start, w.end, w.entry.rid)
         for w in path
     ]
     score = states[n][0].score  # overwritten by caller

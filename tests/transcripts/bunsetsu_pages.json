@@ -1,0 +1,213 @@
+{
+  "version": 2,
+  "description": "9件ページ、Space/上下の境界越えと巡回、PgUp/Down、数字とリピート。6000を含め6001は除外。",
+  "lexicon": [
+    {
+      "reading": "か",
+      "surface": "候補00",
+      "cost": 0
+    },
+    {
+      "reading": "か",
+      "surface": "候補01",
+      "cost": 1
+    },
+    {
+      "reading": "か",
+      "surface": "候補02",
+      "cost": 2
+    },
+    {
+      "reading": "か",
+      "surface": "候補03",
+      "cost": 3
+    },
+    {
+      "reading": "か",
+      "surface": "候補04",
+      "cost": 4
+    },
+    {
+      "reading": "か",
+      "surface": "候補05",
+      "cost": 5
+    },
+    {
+      "reading": "か",
+      "surface": "候補06",
+      "cost": 6
+    },
+    {
+      "reading": "か",
+      "surface": "候補07",
+      "cost": 7
+    },
+    {
+      "reading": "か",
+      "surface": "候補08",
+      "cost": 8
+    },
+    {
+      "reading": "か",
+      "surface": "候補09",
+      "cost": 9
+    },
+    {
+      "reading": "か",
+      "surface": "候補10",
+      "cost": 10
+    },
+    {
+      "reading": "か",
+      "surface": "候補11",
+      "cost": 11
+    },
+    {
+      "reading": "か",
+      "surface": "候補12",
+      "cost": 12
+    },
+    {
+      "reading": "か",
+      "surface": "候補13",
+      "cost": 13
+    },
+    {
+      "reading": "か",
+      "surface": "候補14",
+      "cost": 14
+    },
+    {
+      "reading": "か",
+      "surface": "候補15",
+      "cost": 15
+    },
+    {
+      "reading": "か",
+      "surface": "候補16",
+      "cost": 16
+    },
+    {
+      "reading": "か",
+      "surface": "候補17",
+      "cost": 17
+    },
+    {
+      "reading": "か",
+      "surface": "候補18",
+      "cost": 18
+    },
+    {
+      "reading": "か",
+      "surface": "候補19",
+      "cost": 19
+    },
+    {
+      "reading": "か",
+      "surface": "候補20",
+      "cost": 20
+    },
+    {
+      "reading": "か",
+      "surface": "候補21",
+      "cost": 21
+    },
+    {
+      "reading": "か",
+      "surface": "候補22",
+      "cost": 22
+    },
+    {
+      "reading": "か",
+      "surface": "候補23",
+      "cost": 23
+    },
+    {
+      "reading": "か",
+      "surface": "候補24",
+      "cost": 24
+    },
+    {
+      "reading": "か",
+      "surface": "候補25",
+      "cost": 25
+    },
+    {
+      "reading": "か",
+      "surface": "候補26",
+      "cost": 26
+    },
+    {
+      "reading": "か",
+      "surface": "候補27",
+      "cost": 27
+    },
+    {
+      "reading": "か",
+      "surface": "境界",
+      "cost": 6000
+    },
+    {
+      "reading": "か",
+      "surface": "圏外",
+      "cost": 6001
+    }
+  ],
+  "steps": [
+    {"event": {"op": "down", "t": 100, "vk": 87}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S2", "n_tokens": 0, "timer": 180, "candidates": [], "cand_index": 0, "segments": [], "focus": -1, "candidate_page": 0, "candidate_kinds": [], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "up", "t": 130, "vk": 87}, "expect": {"composition": "候補00", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": [], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "候補00", "reading": "か", "literal": false, "fixed": false, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 0, "candidate_kinds": [], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "down", "t": 230, "vk": 32}, "expect": {"composition": "候補00", "commit": "", "converted": false, "fsm": "S3", "n_tokens": 1, "timer": 310, "candidates": [], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "候補00", "reading": "か", "literal": false, "fixed": false, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 0, "candidate_kinds": [], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "up", "t": 260, "vk": 32}, "expect": {"composition": "候補00", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補00", "候補01", "候補02", "候補03", "候補04", "候補05", "候補06", "候補07", "候補08"], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "候補00", "reading": "か", "literal": false, "fixed": false, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "down", "t": 360, "vk": 40}, "expect": {"composition": "候補01", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補00", "候補01", "候補02", "候補03", "候補04", "候補05", "候補06", "候補07", "候補08"], "cand_index": 1, "segments": [{"start": 0, "end": 1, "surface": "候補01", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "up", "t": 390, "vk": 40}, "expect": {"composition": "候補01", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補00", "候補01", "候補02", "候補03", "候補04", "候補05", "候補06", "候補07", "候補08"], "cand_index": 1, "segments": [{"start": 0, "end": 1, "surface": "候補01", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "down", "t": 490, "vk": 40}, "expect": {"composition": "候補02", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補00", "候補01", "候補02", "候補03", "候補04", "候補05", "候補06", "候補07", "候補08"], "cand_index": 2, "segments": [{"start": 0, "end": 1, "surface": "候補02", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "up", "t": 520, "vk": 40}, "expect": {"composition": "候補02", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補00", "候補01", "候補02", "候補03", "候補04", "候補05", "候補06", "候補07", "候補08"], "cand_index": 2, "segments": [{"start": 0, "end": 1, "surface": "候補02", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "down", "t": 620, "vk": 40}, "expect": {"composition": "候補03", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補00", "候補01", "候補02", "候補03", "候補04", "候補05", "候補06", "候補07", "候補08"], "cand_index": 3, "segments": [{"start": 0, "end": 1, "surface": "候補03", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "up", "t": 650, "vk": 40}, "expect": {"composition": "候補03", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補00", "候補01", "候補02", "候補03", "候補04", "候補05", "候補06", "候補07", "候補08"], "cand_index": 3, "segments": [{"start": 0, "end": 1, "surface": "候補03", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "down", "t": 750, "vk": 40}, "expect": {"composition": "候補04", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補00", "候補01", "候補02", "候補03", "候補04", "候補05", "候補06", "候補07", "候補08"], "cand_index": 4, "segments": [{"start": 0, "end": 1, "surface": "候補04", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "up", "t": 780, "vk": 40}, "expect": {"composition": "候補04", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補00", "候補01", "候補02", "候補03", "候補04", "候補05", "候補06", "候補07", "候補08"], "cand_index": 4, "segments": [{"start": 0, "end": 1, "surface": "候補04", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "down", "t": 880, "vk": 40}, "expect": {"composition": "候補05", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補00", "候補01", "候補02", "候補03", "候補04", "候補05", "候補06", "候補07", "候補08"], "cand_index": 5, "segments": [{"start": 0, "end": 1, "surface": "候補05", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "up", "t": 910, "vk": 40}, "expect": {"composition": "候補05", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補00", "候補01", "候補02", "候補03", "候補04", "候補05", "候補06", "候補07", "候補08"], "cand_index": 5, "segments": [{"start": 0, "end": 1, "surface": "候補05", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "down", "t": 1010, "vk": 40}, "expect": {"composition": "候補06", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補00", "候補01", "候補02", "候補03", "候補04", "候補05", "候補06", "候補07", "候補08"], "cand_index": 6, "segments": [{"start": 0, "end": 1, "surface": "候補06", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "up", "t": 1040, "vk": 40}, "expect": {"composition": "候補06", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補00", "候補01", "候補02", "候補03", "候補04", "候補05", "候補06", "候補07", "候補08"], "cand_index": 6, "segments": [{"start": 0, "end": 1, "surface": "候補06", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "down", "t": 1140, "vk": 40}, "expect": {"composition": "候補07", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補00", "候補01", "候補02", "候補03", "候補04", "候補05", "候補06", "候補07", "候補08"], "cand_index": 7, "segments": [{"start": 0, "end": 1, "surface": "候補07", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "up", "t": 1170, "vk": 40}, "expect": {"composition": "候補07", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補00", "候補01", "候補02", "候補03", "候補04", "候補05", "候補06", "候補07", "候補08"], "cand_index": 7, "segments": [{"start": 0, "end": 1, "surface": "候補07", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "down", "t": 1270, "vk": 40}, "expect": {"composition": "候補08", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補00", "候補01", "候補02", "候補03", "候補04", "候補05", "候補06", "候補07", "候補08"], "cand_index": 8, "segments": [{"start": 0, "end": 1, "surface": "候補08", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "up", "t": 1300, "vk": 40}, "expect": {"composition": "候補08", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補00", "候補01", "候補02", "候補03", "候補04", "候補05", "候補06", "候補07", "候補08"], "cand_index": 8, "segments": [{"start": 0, "end": 1, "surface": "候補08", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "down", "t": 1400, "vk": 33}, "expect": {"composition": "候補08", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補00", "候補01", "候補02", "候補03", "候補04", "候補05", "候補06", "候補07", "候補08"], "cand_index": 8, "segments": [{"start": 0, "end": 1, "surface": "候補08", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "up", "t": 1430, "vk": 33}, "expect": {"composition": "候補08", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補00", "候補01", "候補02", "候補03", "候補04", "候補05", "候補06", "候補07", "候補08"], "cand_index": 8, "segments": [{"start": 0, "end": 1, "surface": "候補08", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "down", "t": 1530, "vk": 32}, "expect": {"composition": "候補08", "commit": "", "converted": true, "fsm": "S3", "n_tokens": 1, "timer": 1610, "candidates": ["候補00", "候補01", "候補02", "候補03", "候補04", "候補05", "候補06", "候補07", "候補08"], "cand_index": 8, "segments": [{"start": 0, "end": 1, "surface": "候補08", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "up", "t": 1560, "vk": 32}, "expect": {"composition": "候補09", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補09", "候補10", "候補11", "候補12", "候補13", "候補14", "候補15", "候補16", "候補17"], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "候補09", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 1, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "down", "t": 1660, "vk": 38}, "expect": {"composition": "候補08", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補00", "候補01", "候補02", "候補03", "候補04", "候補05", "候補06", "候補07", "候補08"], "cand_index": 8, "segments": [{"start": 0, "end": 1, "surface": "候補08", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "up", "t": 1690, "vk": 38}, "expect": {"composition": "候補08", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補00", "候補01", "候補02", "候補03", "候補04", "候補05", "候補06", "候補07", "候補08"], "cand_index": 8, "segments": [{"start": 0, "end": 1, "surface": "候補08", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "down", "t": 1790, "vk": 34}, "expect": {"composition": "候補09", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補09", "候補10", "候補11", "候補12", "候補13", "候補14", "候補15", "候補16", "候補17"], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "候補09", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 1, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "up", "t": 1820, "vk": 34}, "expect": {"composition": "候補09", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補09", "候補10", "候補11", "候補12", "候補13", "候補14", "候補15", "候補16", "候補17"], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "候補09", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 1, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "down", "t": 1920, "vk": 34}, "expect": {"composition": "候補18", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補18", "候補19", "候補20", "候補21", "候補22", "候補23", "候補24", "候補25", "候補26"], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "候補18", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 2, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "up", "t": 1950, "vk": 34}, "expect": {"composition": "候補18", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補18", "候補19", "候補20", "候補21", "候補22", "候補23", "候補24", "候補25", "候補26"], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "候補18", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 2, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "down", "t": 2050, "vk": 34}, "expect": {"composition": "候補27", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補27", "境界", "か", "カ"], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "候補27", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 3, "candidate_kinds": ["dictionary", "dictionary", "kana", "kana"], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "up", "t": 2080, "vk": 34}, "expect": {"composition": "候補27", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補27", "境界", "か", "カ"], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "候補27", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 3, "candidate_kinds": ["dictionary", "dictionary", "kana", "kana"], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "down", "t": 2180, "vk": 57}, "expect": {"composition": "候補27", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補27", "境界", "か", "カ"], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "候補27", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 3, "candidate_kinds": ["dictionary", "dictionary", "kana", "kana"], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "up", "t": 2210, "vk": 57}, "expect": {"composition": "候補27", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補27", "境界", "か", "カ"], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "候補27", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 3, "candidate_kinds": ["dictionary", "dictionary", "kana", "kana"], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "down", "t": 2310, "vk": 34}, "expect": {"composition": "候補27", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補27", "境界", "か", "カ"], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "候補27", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 3, "candidate_kinds": ["dictionary", "dictionary", "kana", "kana"], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "up", "t": 2340, "vk": 34}, "expect": {"composition": "候補27", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補27", "境界", "か", "カ"], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "候補27", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 3, "candidate_kinds": ["dictionary", "dictionary", "kana", "kana"], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "down", "t": 2440, "vk": 33}, "expect": {"composition": "候補18", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補18", "候補19", "候補20", "候補21", "候補22", "候補23", "候補24", "候補25", "候補26"], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "候補18", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 2, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "up", "t": 2470, "vk": 33}, "expect": {"composition": "候補18", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補18", "候補19", "候補20", "候補21", "候補22", "候補23", "候補24", "候補25", "候補26"], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "候補18", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 2, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "down", "t": 2570, "vk": 33}, "expect": {"composition": "候補09", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補09", "候補10", "候補11", "候補12", "候補13", "候補14", "候補15", "候補16", "候補17"], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "候補09", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 1, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "up", "t": 2600, "vk": 33}, "expect": {"composition": "候補09", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補09", "候補10", "候補11", "候補12", "候補13", "候補14", "候補15", "候補16", "候補17"], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "候補09", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 1, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "down", "t": 2700, "vk": 33}, "expect": {"composition": "候補00", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補00", "候補01", "候補02", "候補03", "候補04", "候補05", "候補06", "候補07", "候補08"], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "候補00", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "up", "t": 2730, "vk": 33}, "expect": {"composition": "候補00", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補00", "候補01", "候補02", "候補03", "候補04", "候補05", "候補06", "候補07", "候補08"], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "候補00", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "down", "t": 2830, "vk": 49}, "expect": {"composition": "候補00", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補00", "候補01", "候補02", "候補03", "候補04", "候補05", "候補06", "候補07", "候補08"], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "候補00", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}, "note": "数字で候補00を選択"},
+    {"event": {"op": "up", "t": 2860, "vk": 49}, "expect": {"composition": "候補00", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補00", "候補01", "候補02", "候補03", "候補04", "候補05", "候補06", "候補07", "候補08"], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "候補00", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "down", "t": 2960, "vk": 38}, "expect": {"composition": "カ", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補27", "境界", "か", "カ"], "cand_index": 3, "segments": [{"start": 0, "end": 1, "surface": "カ", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 1}], "focus": 0, "candidate_page": 3, "candidate_kinds": ["dictionary", "dictionary", "kana", "kana"], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "up", "t": 2990, "vk": 38}, "expect": {"composition": "カ", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補27", "境界", "か", "カ"], "cand_index": 3, "segments": [{"start": 0, "end": 1, "surface": "カ", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 1}], "focus": 0, "candidate_page": 3, "candidate_kinds": ["dictionary", "dictionary", "kana", "kana"], "has_next_page": false, "committed": ""}},
+    {"event": {"op": "down", "t": 3090, "vk": 40}, "expect": {"composition": "候補00", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補00", "候補01", "候補02", "候補03", "候補04", "候補05", "候補06", "候補07", "候補08"], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "候補00", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "up", "t": 3120, "vk": 40}, "expect": {"composition": "候補00", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補00", "候補01", "候補02", "候補03", "候補04", "候補05", "候補06", "候補07", "候補08"], "cand_index": 0, "segments": [{"start": 0, "end": 1, "surface": "候補00", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "down", "t": 3220, "vk": 50}, "expect": {"composition": "候補01", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補00", "候補01", "候補02", "候補03", "候補04", "候補05", "候補06", "候補07", "候補08"], "cand_index": 1, "segments": [{"start": 0, "end": 1, "surface": "候補01", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "down", "t": 3320, "vk": 50}, "expect": {"composition": "候補01", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補00", "候補01", "候補02", "候補03", "候補04", "候補05", "候補06", "候補07", "候補08"], "cand_index": 1, "segments": [{"start": 0, "end": 1, "surface": "候補01", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "up", "t": 3350, "vk": 50}, "expect": {"composition": "候補01", "commit": "", "converted": true, "fsm": "S1", "n_tokens": 1, "timer": null, "candidates": ["候補00", "候補01", "候補02", "候補03", "候補04", "候補05", "候補06", "候補07", "候補08"], "cand_index": 1, "segments": [{"start": 0, "end": 1, "surface": "候補01", "reading": "か", "literal": false, "fixed": true, "display_start": 0, "display_end": 4}], "focus": 0, "candidate_page": 0, "candidate_kinds": ["dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary", "dictionary"], "has_next_page": true, "committed": ""}},
+    {"event": {"op": "down", "t": 3450, "vk": 13}, "expect": {"composition": "", "commit": "候補01", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "segments": [], "focus": -1, "candidate_page": 0, "candidate_kinds": [], "has_next_page": false, "committed": "候補01"}},
+    {"event": {"op": "up", "t": 3480, "vk": 13}, "expect": {"composition": "", "commit": "", "converted": false, "fsm": "S1", "n_tokens": 0, "timer": null, "candidates": [], "cand_index": 0, "segments": [], "focus": -1, "candidate_page": 0, "candidate_kinds": [], "has_next_page": false, "committed": "候補01"}}
+  ],
+  "committed": "候補01",
+  "composition": ""
+}

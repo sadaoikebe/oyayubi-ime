@@ -57,6 +57,10 @@ class Piece:
     reading: str
     pos: str
     cost: int
+    # Token DAG metadata (linear-reading callers retain the defaults).
+    start: int = 0
+    end: int = 0
+    rid: int = 0
 
 
 @dataclass

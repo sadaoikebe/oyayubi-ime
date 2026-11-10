@@ -20,8 +20,14 @@ from oyayubi.chord.keys import (
 )
 from tools.wp0.mozc_dict import MozcLex, load_lex
 from tools.wp0.table import load_table
-from tools.wp0.token_viterbi import decode_tokens, nbest_tokens
+from tools.wp0.token_viterbi import decode_tokens
+from .bunsetsu import (BOS_ID, PAGE_SIZE, Candidate, CandidateStream, Segment,
+                       candidates, segments_from)
 
+VK_LEFT = 0x25
+VK_RIGHT = 0x27
+VK_PRIOR = 0x21
+VK_NEXT = 0x22
 VK_UP = 0x26
 VK_DOWN = 0x28
 
@@ -69,6 +75,11 @@ class ImeSession:
     converted: bool = False
     candidates: list[str] = field(default_factory=list)
     cand_index: int = 0
+    segments: list[Segment] = field(default_factory=list)
+    focus: int = -1
+    candidate_page: int = 0
+    candidate_kinds: list[str] = field(default_factory=list)
+    has_next_page: bool = False
     _table: dict = field(default_factory=dict)
     _lex: MozcLex | None = None
     _modifiers: set[int] = field(default_factory=set)
@@ -92,6 +103,8 @@ class ImeSession:
         self._modifiers.clear()
         self._literal_down.clear()
         self.composition = ""
+        self.segments.clear()
+        self.focus = -1
         self.converted = False
         self._clear_cands()
 
@@ -126,12 +139,18 @@ class ImeSession:
                 return None
             pending = self._finish_pending()
             return (pending or "") + (self._edit(vk) or "") or None
-        # Existing whole-composition arrow controls remain available. Digits
-        # are character input; numbered segment candidate selection is Stage 2B.
-        if down and not shift and self.converted and self.candidates:
+        # Candidate shortcuts precede native literal digits. Consume their up
+        # and HID repeat too; Shift+digits still enter native symbols.
+        if down and not shift and self.converted:
+            if vk in (VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN, VK_PRIOR, VK_NEXT) or (
+                    self.candidates and ord("1") <= vk <= ord("9")):
+                pending = self._finish_pending()
+            else:
+                pending = None
             picked = self._on_cand_key(vk)
             if picked is not None:
-                return picked
+                self._literal_down.add(vk)
+                return (pending or "") + picked
         literal = literal_character(vk, shift)
         if literal is not None:
             if not down:
@@ -199,57 +218,117 @@ class ImeSession:
         return None
 
     def _on_cand_key(self, vk: int) -> str | None:
-        if vk == VK_DOWN:
-            self._cycle(1)
+        if vk in (VK_LEFT, VK_RIGHT):
+            eligible = [i for i, s in enumerate(self.segments) if not s.literal]
+            if self.focus in eligible:
+                at = eligible.index(self.focus) + (1 if vk == VK_RIGHT else -1)
+                self.focus = eligible[max(0, min(at, len(eligible) - 1))]
+                self._open_cands()
             return ""
-        if vk == VK_UP:
-            self._cycle(-1)
+        if vk in (VK_DOWN, VK_UP):
+            self._cycle(1 if vk == VK_DOWN else -1)
+            return ""
+        if vk in (VK_NEXT, VK_PRIOR):
+            self._page(1 if vk == VK_NEXT else -1)
+            return ""
+        if self.candidates and ord("1") <= vk <= ord("9"):
+            row = vk - ord("1")
+            if self.focus >= 0 and row < len(self.candidates):
+                self._select(self.candidate_page * PAGE_SIZE + row)
             return ""
         return None
 
     def _open_cands(self) -> None:
-        # Enumerate each kana run independently, then take the cheapest whole
-        # strings. No POS connection or dictionary span crosses a literal.
-        ranked = [("", 0)]
-        for part in self._parts():
-            if isinstance(part, str):
-                choices = [(part, 0)]
-            elif self._lex is not None:
-                results, _ = nbest_tokens(part, self._lex, k=8)
-                choices = [(dec.surface, dec.score) for dec in results]
-                if not choices:
-                    dec, _ = decode_tokens(part, self._lex)
-                    choices = [(dec.surface, dec.score)]
-            else:
-                choices = [("", 0)]
-            combined = sorted(((a + b, ca + cb) for a, ca in ranked for b, cb in choices),
-                              key=lambda item: item[1])
-            distinct = {}
-            for text, cost in combined:
-                distinct.setdefault(text, cost)
-            ranked = list(distinct.items())[:8]
-        out = [self.composition] if self.composition else []
-        out.extend(text for text, _ in ranked if text and text not in out)
-        self.candidates = out[:8]
-        self.cand_index = 0
-        if self.candidates:
-            self.composition = self.candidates[0]
+        self._clear_cands()
+        if self.focus < 0:
+            return
+        segment = self.segments[self.focus]
+        left = (self.segments[self.focus - 1].selected.rid
+                if self.focus > 0 and not self.segments[self.focus - 1].literal else BOS_ID)
+        right = (self.segments[self.focus + 1].selected.lid
+                 if self.focus + 1 < len(self.segments)
+                 and not self.segments[self.focus + 1].literal else BOS_ID)
+        context = (left, right)
+        if segment.choices is None or segment.context != context:
+            assert self._lex is not None
+            segment.choices = CandidateStream(candidates(
+                self._lattice()[segment.start:segment.end], self._lex, left, right))
+            segment.context = context
+            segment.index = segment.choices.find(segment.selected)
+        self._show_page()
 
     def _clear_cands(self) -> None:
         self.candidates = []
+        self.candidate_kinds = []
+        self.candidate_page = 0
+        self.has_next_page = False
         self.cand_index = 0
 
+    def _show_page(self) -> None:
+        segment = self.segments[self.focus]
+        stream = segment.choices
+        assert stream is not None
+        self.candidate_page = max(0, segment.index) // PAGE_SIZE
+        start = self.candidate_page * PAGE_SIZE
+        self.has_next_page = stream.ensure(start + PAGE_SIZE)
+        page = stream.cache[start:start + PAGE_SIZE]
+        self.candidates = [c.surface for c in page]
+        self.candidate_kinds = [c.kind for c in page]
+        self.cand_index = segment.index - start
+
+    def _select(self, index: int) -> None:
+        segment = self.segments[self.focus]
+        stream = segment.choices
+        if stream is not None and stream.ensure(index):
+            segment.index = index
+            segment.selected = stream.cache[index]
+            segment.fixed = True
+            self.composition = "".join(s.selected.surface for s in self.segments)
+            self._show_page()
+
     def _cycle(self, delta: int) -> None:
-        if self.candidates:
-            self.cand_index = (self.cand_index + delta) % len(self.candidates)
-            self.composition = self.candidates[self.cand_index]
+        if self.focus < 0:
+            return
+        segment = self.segments[self.focus]
+        stream = segment.choices
+        if stream is None:
+            return
+        index = segment.index + delta
+        if index < 0:
+            index = stream.last()
+        elif not stream.ensure(index):
+            index = 0
+        self._select(index)
+
+    def _page(self, delta: int) -> None:
+        if self.focus < 0:
+            return
+        segment = self.segments[self.focus]
+        page = self.candidate_page + delta
+        if page < 0:
+            return
+        start = page * PAGE_SIZE
+        if segment.choices is not None and segment.choices.ensure(start):
+            self._select(start)
+
+    def segment_snapshot(self) -> list[dict]:
+        offset = 0
+        out = []
+        for segment in self.segments:
+            text = segment.selected.surface
+            out.append({"start": segment.start, "end": segment.end, "surface": text,
+                        "reading": segment.selected.reading, "literal": segment.literal,
+                        "fixed": segment.fixed, "display_start": offset,
+                        "display_end": offset + len(text)})
+            offset += len(text)
+        return out
 
     def _ingest(self, raw: list[Token | Literal]) -> str | None:
         insert = ""
         for tok in raw:
             if isinstance(tok, ThumbTap):
                 if self.tokens:
-                    if self.converted and self.candidates:
+                    if self.converted:
                         self._cycle(1)
                     else:
                         self.converted = True
@@ -287,14 +366,19 @@ class ImeSession:
         return parts
 
     def _refresh(self) -> None:
-        out = []
+        self.segments = []
+        offset = 0
         for part in self._parts():
             if isinstance(part, str):
-                out.append(part)
+                self.segments.append(Segment(offset, offset + 1,
+                    Candidate(part, part, 0, BOS_ID, BOS_ID, "literal"), literal=True))
+                offset += 1
             elif self._lex is not None:
                 dec, _ = decode_tokens(part, self._lex)
-                out.append(dec.surface)
-        self.composition = "".join(out)
+                self.segments.extend(segments_from(dec.pieces, offset))
+                offset += len(part)
+        self.focus = next((i for i, s in enumerate(self.segments) if not s.literal), -1)
+        self.composition = "".join(s.selected.surface for s in self.segments)
 
     def _commit(self, *, reset_input: bool = True) -> str:
         text = self.composition
@@ -302,6 +386,8 @@ class ImeSession:
             self.reset()
         else:
             self.tokens.clear()
+            self.segments.clear()
+            self.focus = -1
             self.composition = ""
             self.converted = False
             self._clear_cands()

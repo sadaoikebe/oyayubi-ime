@@ -47,6 +47,11 @@ def dispatch(sess: ImeSession, msg: dict) -> dict:
         "timer": sess.fsm.timer_deadline,
         "candidates": sess.candidates,
         "cand_index": sess.cand_index,
+        "segments": sess.segment_snapshot(),
+        "focus": sess.focus,
+        "candidate_page": sess.candidate_page,
+        "candidate_kinds": sess.candidate_kinds,
+        "has_next_page": sess.has_next_page,
     }
 
 

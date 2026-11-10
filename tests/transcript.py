@@ -15,6 +15,7 @@ from tools.wp0.mozc_dict import Entry, MozcLex
 from tools.wp0.table import load_table
 
 VISIBLE = {"composition", "candidates", "cand_index", "converted", "commit", "committed"}
+SEGMENT_VISIBLE = {"segments", "focus", "candidate_page", "candidate_kinds", "has_next_page"}
 
 
 def make_session(case: dict, real_lex: MozcLex | None = None) -> ImeSession:
@@ -32,13 +33,21 @@ def make_session(case: dict, real_lex: MozcLex | None = None) -> ImeSession:
             by_reading.setdefault(reading, []).append(entry)
             prefixes.update(reading[:i] for i in range(1, len(reading) + 1))
         matrix = case.get("connection", [[0, 0], [0, 0]])
-        lex = MozcLex(by_reading, prefixes, [cost for row in matrix for cost in row], len(matrix))
+        if isinstance(matrix, dict):
+            size = matrix["size"]
+            costs = [matrix.get("default", 0)] * (size * size)
+            for rid, lid, cost in matrix.get("overrides", []):
+                costs[rid * size + lid] = cost
+        else:
+            size = len(matrix)
+            costs = [cost for row in matrix for cost in row]
+        lex = MozcLex(by_reading, prefixes, costs, size)
     return ImeSession(_table=load_table(), _lex=lex)
 
 
 def run_transcript(test, path: Path, real_lex: MozcLex | None = None) -> None:
     case = json.loads(path.read_text(encoding="utf-8"))
-    test.assertEqual(case["version"], 1)
+    test.assertIn(case["version"], (1, 2))
     session = make_session(case, real_lex)
     committed = ""
     previous_time = -1
@@ -48,6 +57,8 @@ def run_transcript(test, path: Path, real_lex: MozcLex | None = None) -> None:
             test.assertGreaterEqual(event["t"], previous_time)
             previous_time = event["t"]
             test.assertTrue(VISIBLE <= expected.keys(), "all visible fields must be explicit")
+            if case["version"] == 2:
+                test.assertTrue(SEGMENT_VISIBLE <= expected.keys(), "segment state must be explicit")
             reply = dispatch(session, event)
             # A real transport serializes immediately; capture candidate lists now.
             committed += reply["commit"]

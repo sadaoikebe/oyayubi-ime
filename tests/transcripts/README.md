@@ -42,7 +42,7 @@ cost/lid/rid（既定100/1/1）。`connection` に BOS=0 の連接行列も指�
 本番と同じ。`lexicon` を省略すると実 Mozc 辞書＋ユーザー辞書を使う。
 
 - `acceptance_sentence`: 固定辞書で「今日は、機関の校正をした。」。候補選択なし。
-- `acceptance_real_dictionary`: 同じ文を実辞書で確定。既存の全文候補の↓で校正を選択。
+- `acceptance_real_dictionary`: 同じ文を実辞書で確定。文節候補の↓で校正を選択。
   実辞書の1-bestは「構成」であり、校正を優遇する辞書変更はしていない。
 - `punctuation_faces`, `native_literals`, `converted_literals`: 句読点、数字、US ANSI 記号、Shift英字、修飾・リピート。
 - `literal_boundaries`: 連結語と連接コストを意図的に仕込み、リテラルの両側の BOS/EOS を検査。候補も検査。
@@ -54,3 +54,32 @@ cost/lid/rid（既定100/1/1）。`connection` に BOS=0 の連接行列も指�
 
 新ケースは既存ファイルを参考にイベント列と期待値を書く。文節や直接入力を実装する際も
 この形式を拡張し、実際の表示・確定をステップごとに固定する。
+
+## Stage 2B / version 2
+
+`bunsetsu_*.json` 8ケースを追加。前段の全文候補は今回の文節候補に置き換わった。
+既存ケースの候補表示期待値を更新し、`converted_literals` の数字は1から0へ変更した
+（変換中の1–9はページ内の文節候補選択、0は通常文字）。既存の他の表示・確定結果は維持。
+
+version 2は従来の必須項目に加えて、各イベントの `expect` に次を全て記す:
+
+- `segments`: 各区間の `start/end`（トークン位置）、`surface/reading`、`literal/fixed`、
+  `display_start/display_end`（表示のUnicodeコードポイント位置）。区間は半開。
+- `focus`: 注目文節のindex、なしは-1。リテラルは移動対象外。
+- `candidate_page`: 0始まりの9件ページ。`candidates` と `cand_index` はページ内。
+  隣の変更で固定候補が閾値外になった場合、表示を保持し `cand_index=-1`（選択行なし）。
+- `candidate_kinds`: 各行の `dictionary` / `kana`。
+- `has_next_page`: 次ページの有無。
+
+Space/上下で候補を巡回し、自動的にページも切り替える。PgUp/Downはページ先頭へ。
+数字選択は文節の固定だけでcommitせず、次の文字またはEnterで選択済みの全文を確定する。
+文節移動だけでは他文節の表示を変えない。候補は辞書経路の末尾に全読みのかな候補を付ける。
+
+固定辞書の疎なPOS連接指定も使える（従来の二次元配列も引き続き有効）:
+
+```json
+"connection": {"size": 15, "default": 0, "overrides": [[12, 14, 200], [13, 14, -200]]}
+```
+
+`overrides` は `[RID, LID, cost]`。品詞判定は本番の `id.def` を使い、たとえば12–14は副詞。
+全8ケースの意図・結果と設計根拠は [docs/STAGE2.md](../../docs/STAGE2.md) の「Stage 2B」節。
