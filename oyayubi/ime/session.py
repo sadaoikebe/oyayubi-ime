@@ -24,6 +24,7 @@ from tools.wp0.table import load_table
 from tools.wp0.token_viterbi import decode_tokens
 from .bunsetsu import (BOS_ID, PAGE_SIZE, Candidate, CandidateStream, Segment,
                        candidates, segments_from)
+from .learning import DEFAULT_LEARNING_PATH, LearningStore
 
 VK_LEFT = 0x25
 VK_RIGHT = 0x27
@@ -81,6 +82,9 @@ class ImeSession:
     candidate_page: int = 0
     candidate_kinds: list[str] = field(default_factory=list)
     has_next_page: bool = False
+    learning_path: Path | None = DEFAULT_LEARNING_PATH
+    _learning: LearningStore | None = None
+    _left_surface: str = ""
     _table: dict = field(default_factory=dict)
     _lex: MozcLex | None = None
     _modifiers: set[int] = field(default_factory=set)
@@ -91,6 +95,8 @@ class ImeSession:
             self._table = load_table()
         if self._lex is None:
             self._lex = load_lex()
+        if self._learning is None and self.learning_path is not None:
+            self._learning = LearningStore(self.learning_path)
 
     def reset(self) -> None:
         """Discard composition and all input state after focus loss/termination.
@@ -103,6 +109,7 @@ class ImeSession:
         self.fsm.down_keys.clear()
         self._modifiers.clear()
         self._literal_down.clear()
+        self._left_surface = ""
         self.composition = ""
         self.segments.clear()
         self.focus = -1
@@ -249,11 +256,16 @@ class ImeSession:
         right = (self.segments[self.focus + 1].selected.lid
                  if self.focus + 1 < len(self.segments)
                  and not self.segments[self.focus + 1].literal else BOS_ID)
-        context = (left, right)
+        left_surface = (self.segments[self.focus - 1].selected.surface
+                        if self.focus > 0 else self._left_surface)
+        learning = self._learning.snapshot() if self._learning is not None else None
+        context = (left, right, left_surface,
+                   (learning.revision, learning.now) if learning is not None else None)
         if segment.choices is None or segment.context != context:
             assert self._lex is not None
             segment.choices = CandidateStream(candidates(
-                self._lattice()[segment.start:segment.end], self._lex, left, right))
+                self._lattice()[segment.start:segment.end], self._lex, left, right,
+                learning=learning, left_surface=left_surface))
             segment.context = context
             segment.index = segment.choices.find(segment.selected)
         self._show_page()
@@ -369,20 +381,33 @@ class ImeSession:
     def _refresh(self) -> None:
         self.segments = []
         offset = 0
+        learning = self._learning.snapshot() if self._learning is not None else None
+        left_surface = self._left_surface
         for part in self._parts():
             if isinstance(part, str):
                 self.segments.append(Segment(offset, offset + 1,
                     Candidate(part, part, 0, BOS_ID, BOS_ID, "literal"), literal=True))
                 offset += 1
+                left_surface = part
             elif self._lex is not None:
-                dec, _ = decode_tokens(part, self._lex)
-                self.segments.extend(segments_from(dec.pieces, offset))
+                dec, _ = decode_tokens(part, self._lex, learning=learning,
+                                       left_surface=left_surface)
+                self.segments.extend(segments_from(dec.pieces, offset, self._lex))
                 offset += len(part)
+                if self.segments:
+                    left_surface = self.segments[-1].selected.surface
         self.focus = next((i for i, s in enumerate(self.segments) if not s.literal), -1)
         self.composition = "".join(s.selected.surface for s in self.segments)
 
     def _commit(self, *, reset_input: bool = True) -> str:
         text = self.composition
+        left_surface = self._left_surface
+        selections = []
+        for segment in self.segments:
+            selections.append((segment.selected, left_surface))
+            left_surface = segment.selected.surface
+        if self._learning is not None and self._lex is not None:
+            self._learning.confirm(selections, self._lex)
         if reset_input:
             self.reset()
         else:
@@ -392,4 +417,5 @@ class ImeSession:
             self.composition = ""
             self.converted = False
             self._clear_cands()
+        self._left_surface = left_surface
         return text

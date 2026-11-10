@@ -1,4 +1,5 @@
 data/cache/
+data/learning.jsonl
 third_party/mozc_oss_dict/dictionary*.txt
 third_party/mozc_oss_dict/connection_single_column.txt
 __pycache__/

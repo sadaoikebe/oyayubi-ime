@@ -38,6 +38,7 @@ class Candidate:
     lid: int
     rid: int
     kind: str = "dictionary"
+    word_cost: int | None = None  # raw internal cost, without neighbor transitions/learning
 
 
 @dataclass
@@ -48,26 +49,30 @@ class Segment:
     literal: bool = False
     fixed: bool = False
     choices: CandidateStream | None = None
-    context: tuple[int, int] | None = None
+    context: tuple | None = None
     index: int = 0
 
 
-def segments_from(pieces: list[Piece], offset: int) -> list[Segment]:
+def segments_from(pieces: list[Piece], offset: int, lex: MozcLex | None = None) -> list[Segment]:
     # Literal pieces from ambiguous faces get their own selectable interval.
     # Stage 2A's fixed literals are instead created by ImeSession._refresh().
     groups: list[list[Piece]] = []
     for piece in pieces:
-        if not groups or piece.literal or groups[-1][-1].literal or content(int(piece.pos)):
+        if (not groups or piece.literal or piece.learned or groups[-1][-1].literal
+                or content(int(piece.pos))):
             groups.append([])
         groups[-1].append(piece)
     return [Segment(offset + g[0].start, offset + g[-1].end,
                     Candidate("".join(p.surface for p in g), "".join(p.reading for p in g),
                               0, int(g[0].pos), g[-1].rid,
-                              "literal" if g[0].literal else "dictionary")) for g in groups]
+                              "literal" if g[0].literal else "dictionary",
+                              sum(p.cost for p in g) + (sum(
+                                  lex.transition(a.rid, int(b.pos)) for a, b in zip(g, g[1:]))
+                                  if lex is not None else 0))) for g in groups]
 
 
 def _paths(tokens: list[dict], lex: MozcLex, left: int, right: int,
-           *, kana: bool) -> Iterator[Candidate]:
+           *, kana: bool, learning=None, left_surface: str = "") -> Iterator[Candidate]:
     """A* on the full word DAG with an exact reverse-DP potential.
 
     Dictionary mode keeps all paths within the score band, then deduplicates
@@ -76,7 +81,7 @@ def _paths(tokens: list[dict], lex: MozcLex, left: int, right: int,
     the same reading. Both permit negative word/connection costs.
     """
     n = len(tokens)
-    arcs = [[w for w in _spans_from(tokens, i, lex) if kana or not w.unknown]
+    arcs = [[w for w in _spans_from(tokens, i, lex, learning) if kana or not w.unknown]
             for i in range(n)]
     # Suffix costs for every reachable previous RID; compute iteratively so a
     # long unknown segment cannot exceed Python's recursion limit.
@@ -107,11 +112,14 @@ def _paths(tokens: list[dict], lex: MozcLex, left: int, right: int,
     best = suffix[0].get(initial, inf)
     if best == inf:
         return
-    limit = inf if kana else word_suffix[0].get(initial, inf) + COST_WINDOW
+    # Whole-bunsetsu bonuses apply at the terminal. Subtract their upper bound
+    # from unfinished paths to keep A* admissible even with negative bonuses.
+    discount = learning.max_bonus if learning is not None and not kana else 0
+    limit = inf if discount or kana else word_suffix[0].get(initial, inf) + COST_WINDOW
     serial = count()
     # priority, tie break, cost-so-far, position, RID, first LID, surface, reading,
     # whether every arc so far is literal
-    heap = [(best, next(serial), 0, 0, initial, BOS_ID, "", "", True)]
+    heap = [(best - discount, next(serial), 0, 0, initial, BOS_ID, "", "", True)]
     seen = set()
     prefixes = {}
     while heap:
@@ -121,38 +129,47 @@ def _paths(tokens: list[dict], lex: MozcLex, left: int, right: int,
         if kana and cost != prefixes.get((pos, rid, reading), cost):
             continue
         if pos == n:
+            if not kana and not all_literal and limit == inf:
+                limit = bound + COST_WINDOW
             key = reading if kana else surface
             if key not in seen:
                 seen.add(key)
                 yield Candidate(surface, reading, int(bound), lid,
                                 BOS_ID if rid == BOUNDARY_RID else rid,
-                                "literal" if all_literal else "dictionary")
+                                "literal" if all_literal else "dictionary",
+                                cost - lex.transition(BOS_ID if initial == BOUNDARY_RID
+                                                      else initial, lid))
             continue
         for w in arcs[pos]:
             e = w.entry
             nc = cost + _word_cost(lex, rid, w)
-            bound = nc + suffix[w.end][w.rid]
+            nr = reading + e.reading
+            ns = surface + e.surface
+            bonus = (learning.bonus(nr, ns, left_surface)
+                     if discount and w.end == n else discount)
+            bound = nc + suffix[w.end][w.rid] - bonus
             if bound > limit:
                 continue
-            nr = reading + e.reading
             if kana:
                 key = (w.end, w.rid, nr)
                 if nc >= prefixes.get(key, inf):
                     continue
                 prefixes[key] = nc
             heappush(heap, (bound, next(serial), nc, w.end, w.rid,
-                            e.lid if pos == 0 else lid, surface + e.surface, nr,
+                            e.lid if pos == 0 else lid, ns, nr,
                             all_literal and w.literal))
 
 
-def candidates(tokens: list[dict], lex: MozcLex, left: int, right: int) -> Iterator[Candidate]:
+def candidates(tokens: list[dict], lex: MozcLex, left: int, right: int,
+               *, learning=None, left_surface: str = "") -> Iterator[Candidate]:
     literals = set()
-    for c in _paths(tokens, lex, left, right, kana=False):
+    for c in _paths(tokens, lex, left, right, kana=False,
+                    learning=learning, left_surface=left_surface):
         if c.kind == "literal":
             literals.add(c.surface)
         yield c
     # Even a reading absent from every dictionary prefix remains reachable.
-    for c in _paths(tokens, lex, left, right, kana=True):
+    for c in _paths(tokens, lex, left, right, kana=True, learning=learning):
         if c.kind == "literal":
             if c.surface not in literals:
                 yield c  # Literal faces also remain reachable outside the cost window.

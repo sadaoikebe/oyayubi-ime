@@ -26,6 +26,7 @@ class _Word:
     entry: Entry
     unknown: bool = False
     literal: bool = False
+    learned: bool = False
 
     @property
     def rid(self) -> int:
@@ -51,9 +52,10 @@ class _St:
     word_i: int
     prev: int  # index in states[word.start]
     reading: str
+    context: str = ""  # current bunsetsu spelling, used only by the learning layer
 
 
-def _spans_from(tokens: list[dict], i: int, lex: MozcLex) -> list[_Word]:
+def _spans_from(tokens: list[dict], i: int, lex: MozcLex, learning=None) -> list[_Word]:
     out: list[_Word] = []
     stack = [(i, "")]
     while stack:
@@ -77,6 +79,9 @@ def _spans_from(tokens: list[dict], i: int, lex: MozcLex) -> list[_Word]:
             out.append(_Word(i, i + 1, Entry(text, text, BOS_ID, BOS_ID, 0), literal=True))
         elif kana not in have_one:
             out.append(_Word(i, i + 1, Entry(kana, kana, UNK_LID, UNK_LID, UNK_COST), True))
+    if learning is not None:
+        out.extend(_Word(i, end, e, learned=True)
+                   for end, e in learning.spans(tokens, i, lex))
     return out
 
 
@@ -98,12 +103,13 @@ def _prune(sts: list[_St], *, mode: Literal["rid", "reading"]) -> list[_St]:
     return list(best.values())
 
 
-def decode_tokens(tokens: list[dict], lex: MozcLex) -> tuple[DecodeResult, dict]:
+def decode_tokens(tokens: list[dict], lex: MozcLex, *, learning=None,
+                  left_surface: str = "") -> tuple[DecodeResult, dict]:
     """Decode 1-best using RID pruning for accuracy without rescoring (WP0 §10/13)."""
     n = len(tokens)
     t0 = time.perf_counter()
     states: list[list[_St]] = [[] for _ in range(n + 1)]
-    states[0] = [_St(0, BOUNDARY_RID, -1, -1, "")]
+    states[0] = [_St(0, BOUNDARY_RID, -1, -1, "", left_surface)]
     words: list[_Word] = []
     n_spans = 0
 
@@ -112,15 +118,21 @@ def decode_tokens(tokens: list[dict], lex: MozcLex) -> tuple[DecodeResult, dict]
             continue
         if len(states[i]) > POS_KEEP:
             states[i] = _prune(states[i], mode="rid")
-        spans = _spans_from(tokens, i, lex)
+        spans = _spans_from(tokens, i, lex, learning)
         n_spans += len(spans)
         for w in spans:
             wi = len(words)
             words.append(w)
             for si, st in enumerate(states[i]):
                 nsc = st.score + _word_cost(lex, st.rid, w)
+                context = ""
+                if learning is not None:
+                    if w.learned:
+                        nsc -= learning.bonus(w.entry.reading, w.entry.surface, st.context)
+                    context = learning.next_context(st.context, w,
+                                                    boundary=st.rid == BOUNDARY_RID)
                 states[w.end].append(
-                    _St(nsc, w.rid, wi, si, st.reading + w.entry.reading)
+                    _St(nsc, w.rid, wi, si, st.reading + w.entry.reading, context)
                 )
 
     if not states[n]:
@@ -148,7 +160,7 @@ def decode_tokens(tokens: list[dict], lex: MozcLex) -> tuple[DecodeResult, dict]
     surface = "".join(w.entry.surface for w in path)
     pieces = [
         Piece(w.entry.surface, w.entry.reading, str(w.entry.lid), w.entry.cost,
-              w.start, w.end, w.entry.rid, w.literal)
+              w.start, w.end, w.entry.rid, w.literal, w.learned)
         for w in path
     ]
     ms = (time.perf_counter() - t0) * 1000

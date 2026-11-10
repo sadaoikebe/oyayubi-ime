@@ -5,6 +5,7 @@
 方針の正本:
 
 - [docs/STATUS.md](docs/STATUS.md) — いまできていること、やめたこと
+- [docs/STAGE4.md](docs/STAGE4.md) — 確定学習の有効化・保存形式・全消去
 - [docs/PLAN.md](docs/PLAN.md) — 調査・設計・WBS・PR 計画（Draft r3、2026-08-16）
 - [docs/WP0-investigation.md](docs/WP0-investigation.md) — トークン列→漢字かな交じりのオフライン実証
 

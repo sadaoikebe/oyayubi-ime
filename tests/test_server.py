@@ -53,7 +53,8 @@ class ServerTest(unittest.TestCase):
         self.assertIn("確定秘密", log)
 
     def test_reset_and_modifier_snapshot_on_stdio(self):
-        session = ImeSession(_table=load_table(), _lex=MozcLex({}, set(), [0] * 4, 2))
+        session = ImeSession(_table=load_table(), _lex=MozcLex({}, set(), [0] * 4, 2),
+                             learning_path=None)
         requests = [
             {"op": "down", "vk": 65, "t": 0, "mods": ["shift"]},
             {"op": "reset", "t": 10},

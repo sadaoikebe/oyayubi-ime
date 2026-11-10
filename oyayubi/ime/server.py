@@ -23,6 +23,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from oyayubi.ime.session import ImeSession
+from oyayubi.ime.learning import DEFAULT_LEARNING_PATH
 
 
 def dispatch(sess: ImeSession, msg: dict) -> dict:
@@ -60,11 +61,14 @@ def main() -> None:
     parser.add_argument(
         "--log-text", action="store_true", help="log composition/commit text to stderr (private input)"
     )
+    parser.add_argument("--learning-file", type=Path, default=DEFAULT_LEARNING_PATH,
+                        help="local UTF-8 JSONL history; missing file disables learning")
+    parser.add_argument("--no-learning", action="store_true", help="disable confirmation learning")
     args = parser.parse_args()
     # Pipes from the TIP default to cp1252; Japanese composition must be UTF-8.
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
-    sess = ImeSession()
+    sess = ImeSession(learning_path=None if args.no_learning else args.learning_file)
     sess.load()
     # The long-lived dictionary must not be traversed by full GC during typing.
     gc.freeze()

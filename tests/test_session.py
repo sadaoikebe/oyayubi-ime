@@ -9,7 +9,7 @@ from oyayubi.ime.session import ImeSession
 class SessionTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.s = ImeSession()
+        cls.s = ImeSession(learning_path=None)
         cls.s.load()
 
     def test_ohayou_tokens(self):

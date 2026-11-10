@@ -42,7 +42,7 @@ def make_session(case: dict, real_lex: MozcLex | None = None) -> ImeSession:
             size = len(matrix)
             costs = [cost for row in matrix for cost in row]
         lex = MozcLex(by_reading, prefixes, costs, size)
-    return ImeSession(_table=load_table(), _lex=lex)
+    return ImeSession(_table=load_table(), _lex=lex, learning_path=None)
 
 
 def run_transcript(test, path: Path, real_lex: MozcLex | None = None) -> None:

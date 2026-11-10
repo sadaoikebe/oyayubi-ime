@@ -62,6 +62,7 @@ class Piece:
     end: int = 0
     rid: int = 0
     literal: bool = False
+    learned: bool = False
 
 
 @dataclass
