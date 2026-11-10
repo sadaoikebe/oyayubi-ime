@@ -72,12 +72,33 @@ def main() -> None:
     parser.add_argument("--learning-file", type=Path, default=DEFAULT_LEARNING_PATH,
                         help="local UTF-8 JSONL history; missing file disables learning")
     parser.add_argument("--no-learning", action="store_true", help="disable confirmation learning")
+    lm = parser.add_argument_group("Stage 5b LM rescoring (experimental, off by default)")
+    lm.add_argument("--lm-rescore", action="store_true",
+                    help="rescore the k-best with a causal LM on Space (needs torch+transformers)")
+    lm.add_argument("--lm-model", default=None,
+                    help="HF model id or local directory (default rinna/japanese-gpt2-small)")
+    lm.add_argument("--lm-alpha", type=float, default=None, help="LM weight (default 1.0)")
+    lm.add_argument("--lm-k", type=int, default=None, help="candidates per kana run (default 8)")
+    lm.add_argument("--lm-threads", type=int, default=None, help="torch CPU threads")
+    lm.add_argument("--lm-timing", action="store_true",
+                    help="log rescoring time per conversion to stderr (no text)")
     args = parser.parse_args()
     # Pipes from the TIP default to cp1252; Japanese composition must be UTF-8.
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
     sess = ImeSession(learning_path=None if args.no_learning else args.learning_file)
     sess.load()
+    rescorer = None
+    if args.lm_rescore:
+        # Imported only behind the flag: the default server has no LM dependency.
+        from oyayubi.ime.lm_rescore import (DEFAULT_ALPHA, DEFAULT_K, DEFAULT_MODEL,
+                                            CausalLmScorer, LmRescorer)
+        sess.lm = LmRescorer(
+            CausalLmScorer(args.lm_model or DEFAULT_MODEL, threads=args.lm_threads),
+            alpha=DEFAULT_ALPHA if args.lm_alpha is None else args.lm_alpha,
+            k=DEFAULT_K if args.lm_k is None else args.lm_k)
+        rescorer = sess.lm
+        rescorer.scorer.nll("", ["あ", "い"])  # warm up before "ready"
     # The long-lived dictionary must not be traversed by full GC during typing.
     gc.freeze()
     print(json.dumps({"ok": True, "msg": "ready"}, ensure_ascii=True), flush=True)
@@ -88,7 +109,13 @@ def main() -> None:
         msg = json.loads(line)
         if msg.get("op") == "quit":
             break
+        if rescorer is not None:
+            rescorer.last = {}
         reply = dispatch(sess, msg)
+        if args.lm_timing and rescorer is not None and rescorer.last:
+            print(json.dumps({"lm": {k: round(v, 3) if isinstance(v, float) else v
+                                     for k, v in rescorer.last.items()}}),
+                  file=sys.stderr, flush=True)
         if args.log_text:
             print(json.dumps({"composition": reply["composition"], "commit": reply["commit"]},
                              ensure_ascii=False), file=sys.stderr, flush=True)

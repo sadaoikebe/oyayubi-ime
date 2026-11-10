@@ -25,6 +25,7 @@ from tools.wp0.token_viterbi import decode_tokens
 from .bunsetsu import (BOS_ID, PAGE_SIZE, Candidate, CandidateStream, Segment,
                        candidates, segments_from)
 from .learning import DEFAULT_LEARNING_PATH, LearningStore
+from .lm_rescore import CONTEXT_CHARS, LmRescorer
 
 VK_LEFT = 0x25
 VK_RIGHT = 0x27
@@ -85,7 +86,10 @@ class ImeSession:
     has_next_page: bool = False
     learning_path: Path | None = DEFAULT_LEARNING_PATH
     _learning: LearningStore | None = None
+    # Stage 5b, off unless a rescorer is given (server --lm-rescore).
+    lm: LmRescorer | None = None
     _left_surface: str = ""
+    _lm_context: str = ""  # text committed on this connection since the last reset
     _table: dict = field(default_factory=dict)
     _lex: MozcLex | None = None
     _modifiers: set[int] = field(default_factory=set)
@@ -111,6 +115,7 @@ class ImeSession:
         self._modifiers.clear()
         self._literal_down.clear()
         self._left_surface = ""
+        self._lm_context = ""
         self.composition = ""
         self.segments.clear()
         self.focus = -1
@@ -152,6 +157,8 @@ class ImeSession:
         shortcut = (bool(set(mods) & {"ctrl", "alt", "win"}) if mods is not None
                     else bool(self._modifiers & SHORTCUT_VKS))
         if shortcut:
+            if down and not self.tokens:
+                self._lm_context = ""  # Ctrl/Alt/Win may move the caret or edit text.
             return None
         if kind == "EDIT":
             if not down:
@@ -179,6 +186,8 @@ class ImeSession:
             insert = self._ingest([Literal(literal)])
             return (pending or "") + (insert or "") or None
         if kind not in ("M", "O"):
+            if down and not self.tokens:
+                self._lm_context = ""  # Arrows/Home/Tab etc.: the caret may have moved.
             return None
         assert key is not None
         due = self.flush_timeout(now_ms) or ""
@@ -225,8 +234,10 @@ class ImeSession:
             elif self.tokens:
                 self.tokens.pop()
                 self._refresh()
-            elif self.committed:
-                self.committed = self.committed[:-1]
+            else:
+                self._lm_context = self._lm_context[:-1]
+                if self.committed:
+                    self.committed = self.committed[:-1]
             return None
         if vk == VK_ESCAPE:
             if self.converted:
@@ -358,9 +369,12 @@ class ImeSession:
                         self._cycle(1)
                     else:
                         self.converted = True
+                        if self.lm is not None:
+                            self._refresh(rescore=True)
                         self._open_cands()
                 else:
                     insert += " "
+                    self._note_commit(" ")
                 continue
             mapped = to_lattice_token(tok, self._table)
             if mapped is None:
@@ -391,11 +405,14 @@ class ImeSession:
             parts.append(run)
         return parts
 
-    def _refresh(self) -> None:
+    def _refresh(self, *, rescore: bool = False) -> None:
+        """Rebuild segments from the 1-best; with rescore, from the LM's pick."""
         self.segments = []
         offset = 0
         learning = self._learning.snapshot() if self._learning is not None else None
         left_surface = self._left_surface
+        if rescore and self.lm is not None:
+            self.lm.last = {}
         for part in self._parts():
             if isinstance(part, str):
                 self.segments.append(Segment(offset, offset + 1,
@@ -405,6 +422,10 @@ class ImeSession:
             elif self._lex is not None:
                 dec, _ = decode_tokens(part, self._lex, learning=learning,
                                        left_surface=left_surface)
+                if rescore and self.lm is not None:
+                    context = self._lm_context + "".join(
+                        s.selected.surface for s in self.segments)
+                    dec = self.lm.rescore(context, dec, part, self._lex)
                 self.segments.extend(segments_from(dec.pieces, offset, self._lex))
                 offset += len(part)
                 if self.segments:
@@ -422,7 +443,9 @@ class ImeSession:
         if self._learning is not None and self._lex is not None:
             self._learning.confirm(selections, self._lex)
         if reset_input:
+            context = self._lm_context
             self.reset()
+            self._lm_context = context  # an Enter commit keeps the document context
         else:
             self.tokens.clear()
             self.segments.clear()
@@ -431,4 +454,11 @@ class ImeSession:
             self.converted = False
             self._clear_cands()
         self._left_surface = left_surface
+        self._note_commit(text)
         return text
+
+    def _note_commit(self, text: str) -> None:
+        """Remember committed text as LM left context (app-independent)."""
+        self._lm_context += text
+        if len(self._lm_context) > 4 * CONTEXT_CHARS:
+            self._lm_context = self._lm_context[-CONTEXT_CHARS:]
