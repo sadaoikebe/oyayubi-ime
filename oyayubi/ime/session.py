@@ -165,6 +165,12 @@ class ImeSession:
                 return None
             pending = self._finish_pending()
             return (pending or "") + (self._edit(vk) or "") or None
+        if (down and shift and self.converted and self.focus >= 0
+                and vk in (VK_LEFT, VK_RIGHT)):
+            pending = self._finish_pending()
+            self._resize(1 if vk == VK_RIGHT else -1)
+            self._literal_down.add(vk)
+            return pending
         # Candidate shortcuts precede native literal digits. Consume their up
         # and HID repeat too; Shift+digits still enter native symbols.
         if down and not shift and self.converted:
@@ -274,14 +280,18 @@ class ImeSession:
         self._clear_cands()
         if self.focus < 0:
             return
-        segment = self.segments[self.focus]
-        left = (self.segments[self.focus - 1].selected.rid
-                if self.focus > 0 and not self.segments[self.focus - 1].literal else BOS_ID)
-        right = (self.segments[self.focus + 1].selected.lid
-                 if self.focus + 1 < len(self.segments)
-                 and not self.segments[self.focus + 1].literal else BOS_ID)
-        left_surface = (self.segments[self.focus - 1].selected.surface
-                        if self.focus > 0 else self._left_surface)
+        self._prepare_cands(self.focus)
+        self._show_page()
+
+    def _prepare_cands(self, index: int, *, reselect: bool = False) -> None:
+        segment = self.segments[index]
+        left = (self.segments[index - 1].selected.rid
+                if index > 0 and not self.segments[index - 1].literal else BOS_ID)
+        right = (self.segments[index + 1].selected.lid
+                 if index + 1 < len(self.segments)
+                 and not self.segments[index + 1].literal else BOS_ID)
+        left_surface = (self.segments[index - 1].selected.surface
+                        if index > 0 else self._left_surface)
         learning = self._learning.snapshot() if self._learning is not None else None
         context = (left, right, left_surface,
                    (learning.revision, learning.now) if learning is not None else None)
@@ -291,8 +301,48 @@ class ImeSession:
                 self._lattice()[segment.start:segment.end], self._lex, left, right,
                 learning=learning, left_surface=left_surface))
             segment.context = context
-            segment.index = segment.choices.find(segment.selected)
-        self._show_page()
+            if not reselect:
+                segment.index = segment.choices.find(segment.selected)
+        if reselect:
+            # Every nonempty token interval has at least a kana/literal path.
+            segment.choices.ensure(0)
+            segment.selected = segment.choices.cache[0]
+            segment.index = 0
+
+    def _resize(self, delta: int) -> None:
+        """Override one automatic boundary, keeping all other intervals intact."""
+        segment = self.segments[self.focus]
+        following = self.focus + 1
+        if delta > 0:
+            if following == len(self.segments) or self.segments[following].literal:
+                return
+            neighbor = self.segments[following]
+            segment.end += 1
+            neighbor.start += 1
+            if neighbor.start == neighbor.end:
+                del self.segments[following]
+                changed = [self.focus]
+            else:
+                changed = [self.focus, following]
+        else:
+            if segment.end - segment.start == 1:
+                return
+            segment.end -= 1
+            if following == len(self.segments) or self.segments[following].literal:
+                self.segments.insert(following, Segment(
+                    segment.end, segment.end + 1, segment.selected))
+            else:
+                self.segments[following].start -= 1
+            changed = [self.focus, following]
+        # Rebuild only the intervals whose tokens changed. Seed the right
+        # interval with the previous left POS, then score the focus against it.
+        for index in reversed(changed):
+            resized = self.segments[index]
+            resized.choices = None
+            resized.fixed = False
+            self._prepare_cands(index, reselect=True)
+        self.composition = "".join(s.selected.surface for s in self.segments)
+        self._open_cands()
 
     def _clear_cands(self) -> None:
         self.candidates = []

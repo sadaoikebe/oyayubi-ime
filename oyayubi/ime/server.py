@@ -5,6 +5,8 @@ One JSON object per line:
   {"op":"up","vk":74,"t":150}
   {"op":"timeout","t":200}
   {"op":"down","vk":65,"t":220,"mods":["shift"]}
+  {"op":"down","vk":39,"t":250,"mods":["shift"]}  # extend focused bunsetsu
+  {"op":"down","vk":37,"t":280,"mods":["shift"]}  # shrink focused bunsetsu
   {"op":"reset"}  # focus loss or application-terminated composition; no commit
   {"op":"set_direct","direct":true}
   {"op":"toggle_direct"}
