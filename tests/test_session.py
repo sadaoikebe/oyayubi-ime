@@ -28,7 +28,11 @@ class SessionTest(unittest.TestCase):
         self.s.on_key(False, 0x20, 180)
         self.s.on_key(False, 0x57, 200)
         self.assertEqual(self.s.tokens, [Plain("w"), AmbShift("w")])
-        self.assertIn("か", self.s.composition)
+        # The uncapped dictionary can convert かえ to 変え, as in test_kaeru_keeps_ka.
+        self.assertTrue(
+            "か" in self.s.composition or self.s.composition.startswith("変"),
+            self.s.composition,
+        )
 
     def test_kaeru_keeps_ka(self):
         self.s.tokens.clear()

@@ -9,7 +9,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DICT_DIR = ROOT / "third_party" / "mozc_oss_dict"
-CACHE = ROOT / "data" / "cache" / "mozc_lex.pkl"
+# v1 caches discarded homonyms after the eighth entry; rebuild them once.
+CACHE = ROOT / "data" / "cache" / "mozc_lex_v2.pkl"
 USER_LEX = ROOT / "data" / "user_lexicon.jsonl"
 DEFAULT_NOUN_ID = 1851  # 名詞,一般 in Mozc id.def
 
@@ -68,11 +69,9 @@ def _parse_dict_files() -> tuple[dict[str, list[Entry]], set[str]]:
                 bucket.append(e)
                 for i in range(1, len(reading) + 1):
                     prefixes.add(reading[:i])
-    # keep cheapest few surfaces per reading to cap homonyms
-    for reading, bucket in by_reading.items():
+    # Candidate enumeration needs every homonym, including POS variants.
+    for bucket in by_reading.values():
         bucket.sort(key=lambda e: e.cost)
-        if len(bucket) > 8:
-            del bucket[8:]
     return by_reading, prefixes
 
 
@@ -115,15 +114,13 @@ def apply_user_lex(lex: MozcLex, path: Path | None = None) -> int:
         if not replaced:
             bucket.append(Entry(surface, reading, lid, rid, cost))
         bucket.sort(key=lambda e: e.cost)
-        if len(bucket) > 8:
-            del bucket[8:]
         for i in range(1, len(reading) + 1):
             lex.prefixes.add(reading[:i])
         n += 1
     return n
 
 
-def load_lex(force: bool = False) -> MozcLex:
+def load_lex(force: bool = False, *, user_lexicon: bool = True) -> MozcLex:
     if CACHE.exists() and not force:
         lex = pickle.loads(CACHE.read_bytes())
     else:
@@ -142,7 +139,7 @@ def load_lex(force: bool = False) -> MozcLex:
             f"pos={pos_size} cache={CACHE}",
             file=sys.stderr,
         )
-    n = apply_user_lex(lex)
+    n = apply_user_lex(lex) if user_lexicon else 0
     if n:
         print(f"  user lexicon: {n} entries from {USER_LEX.name}", file=sys.stderr)
     return lex

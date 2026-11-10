@@ -10,6 +10,8 @@ Reply: {"composition":"...","commit":"...","converted":false,"fsm":"S1"}
 
 from __future__ import annotations
 
+import argparse
+import gc
 import json
 import sys
 from pathlib import Path
@@ -22,11 +24,18 @@ from oyayubi.ime.session import ImeSession
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--log-text", action="store_true", help="log composition/commit text to stderr (private input)"
+    )
+    args = parser.parse_args()
     # Pipes from the TIP default to cp1252; Japanese composition must be UTF-8.
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
     sess = ImeSession()
     sess.load()
+    # The long-lived dictionary must not be traversed by full GC during typing.
+    gc.freeze()
     print(json.dumps({"ok": True, "msg": "ready"}, ensure_ascii=True), flush=True)
     for line in sys.stdin:
         line = line.strip()
@@ -45,6 +54,9 @@ def main() -> None:
         elif op == "quit":
             break
         deadline = sess.fsm.timer_deadline
+        if args.log_text:
+            print(json.dumps({"composition": sess.composition, "commit": commit},
+                             ensure_ascii=False), file=sys.stderr, flush=True)
         print(
             json.dumps(
                 {
@@ -64,4 +76,9 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as exc:
+        # Exception messages (e.g. invalid int input) may contain request text.
+        print(f"server error: {type(exc).__name__}", file=sys.stderr)
+        raise SystemExit(1)
