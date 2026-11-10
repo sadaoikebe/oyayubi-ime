@@ -24,6 +24,7 @@ class ServerTest(unittest.TestCase):
             load=lambda: events.append("load"),
             on_key=lambda *args: "確定秘密",
             composition="編集中の秘密", converted=False, tokens=[], candidates=[], cand_index=0,
+            direct=False,
             fsm=SimpleNamespace(timer_deadline=None, state="S0"),
             segment_snapshot=lambda: [], focus=-1, candidate_page=0,
             candidate_kinds=[], has_next_page=False,
@@ -82,9 +83,48 @@ class ServerTest(unittest.TestCase):
                 "n_tokens": 0, "timer": None, "candidates": [], "cand_index": 0,
                 "segments": [], "focus": -1, "candidate_page": 0,
                 "candidate_kinds": [], "has_next_page": False,
+                "direct": False, "pass_through": False,
             })
         self.assertEqual(replies[-1]["commit"], "う")
         self.assertEqual(stderr.getvalue(), "")
+
+    def test_direct_dispatch_and_reset(self):
+        session = ImeSession(_table=load_table(), _lex=MozcLex({}, set(), [0] * 4, 2),
+                             learning_path=None)
+        def send(op, **kwargs):
+            return server.dispatch(session, {"op": op, **kwargs})
+
+        send("down", vk=65, t=0, mods=["shift"])
+        self.assertEqual(session.composition, "A")
+        reply = send("set_direct", direct=False)
+        self.assertEqual(reply["composition"], "A")
+        reply = send("set_direct", direct=True)
+        self.assertEqual((reply["direct"], reply["composition"], reply["commit"]),
+                         (True, "", ""))
+        for op in ("down", "up"):
+            reply = send(op, vk=65, t=20)
+            self.assertTrue(reply["pass_through"])
+            self.assertEqual((reply["composition"], reply["commit"], reply["timer"]),
+                             ("", "", None))
+        self.assertTrue(send("reset")["direct"])
+        self.assertEqual(send("timeout", t=100)["composition"], "")
+        self.assertFalse(send("toggle_direct")["direct"])
+        self.assertFalse(send("down", vk=65, t=200)["pass_through"])
+        send("up", vk=65, t=230)
+        self.assertEqual(send("down", vk=13, t=300)["commit"], "う")
+        with self.assertRaises(ValueError):
+            send("set_direct", direct="false")
+
+    def test_direct_transition_discards_pending_chord(self):
+        session = ImeSession(_table=load_table(), _lex=MozcLex({}, set(), [0] * 4, 2),
+                             learning_path=None)
+        send = lambda msg: server.dispatch(session, msg)
+        self.assertIsNotNone(send({"op": "down", "vk": 65, "t": 0})["timer"])
+        reply = send({"op": "toggle_direct"})
+        self.assertEqual((reply["direct"], reply["timer"], reply["commit"]), (True, None, ""))
+        send({"op": "toggle_direct"})
+        self.assertEqual(send({"op": "up", "vk": 65, "t": 10})["composition"], "")
+        self.assertEqual(send({"op": "timeout", "t": 200})["composition"], "")
 
 
 if __name__ == "__main__":

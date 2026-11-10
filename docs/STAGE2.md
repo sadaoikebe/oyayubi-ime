@@ -355,3 +355,16 @@ python3 -m tools.wp0.run_mozc_eval --details /tmp/oyayubi-slash-mozc.jsonl
 
 FSMのタイミング定数・同時打鍵判定、枝刈りの分離、辞書・ユーザー辞書コストは変更していない。
 コミットは作成していない。
+# 直接入力のセッション切替
+
+初期状態は `direct=false`。`{"op":"set_direct","direct":true}` または
+`false` で設定し、`{"op":"toggle_direct"}` で反転する。値は JSON boolean に限る。
+全応答の `direct` は現在の状態、`pass_through` は直接入力中の down/up で true
+となり、そのイベントをアプリに渡すことを示す。false は既存の通常入力のキー消費判定を
+変更しない。直接入力中は down/up と timeout を FSM や composition に渡さない。
+
+状態が変わるときは未確定 composition、候補、保留中の打鍵と修飾キー状態を破棄し、
+commit は返さない。これはフォーカス喪失時の reset と、未変換状態の Esc が破棄する
+既存の作法に合わせたもの。切替で意図しない確定や学習を生じさせない。同じ状態を
+再設定した場合は破棄しない。reset は入力状態だけを破棄し、direct の設定は維持する。
+物理キーの割当てと TIP による応答の使用は Stage 3 の範囲。

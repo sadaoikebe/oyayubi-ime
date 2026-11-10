@@ -71,6 +71,7 @@ def to_lattice_token(tok: Token | Literal, table: dict) -> dict | None:
 @dataclass
 class ImeSession:
     fsm: ChordFsm = field(default_factory=ChordFsm)
+    direct: bool = False
     tokens: list[Token | Literal] = field(default_factory=list)
     committed: str = ""  # test host's document; commit return values are appended by the host
     composition: str = ""
@@ -116,6 +117,14 @@ class ImeSession:
         self.converted = False
         self._clear_cands()
 
+    def set_direct(self, direct: bool) -> None:
+        """Change input mode, discarding unfinished input on a transition."""
+        if not isinstance(direct, bool):
+            raise ValueError("direct must be a boolean")
+        if direct != self.direct:
+            self.reset()
+            self.direct = direct
+
     def on_key(
         self, down: bool, vk: int, now_ms: int, mods: list[str] | None = None,
     ) -> str | None:
@@ -124,6 +133,8 @@ class ImeSession:
         mods is an optional snapshot: ["shift", "ctrl", "alt", "win"]. Without
         it, modifier down/up events provide the state (also used by the host).
         """
+        if self.direct:
+            return None
         kind, key = classify(vk)
         if kind == "MOD":
             if down:
@@ -181,6 +192,8 @@ class ImeSession:
         return due + (self._ingest(raw) or "") or None
 
     def on_timeout(self, now_ms: int) -> str | None:
+        if self.direct:
+            return None
         return self._ingest(self.fsm.on_timeout(now_ms))
 
     def flush_timeout(self, now_ms: int) -> str | None:

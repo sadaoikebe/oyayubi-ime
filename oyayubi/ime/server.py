@@ -6,6 +6,8 @@ One JSON object per line:
   {"op":"timeout","t":200}
   {"op":"down","vk":65,"t":220,"mods":["shift"]}
   {"op":"reset"}  # focus loss or application-terminated composition; no commit
+  {"op":"set_direct","direct":true}
+  {"op":"toggle_direct"}
   {"op":"context","text":"確定済み"}
 Reply: {"composition":"...","commit":"...","converted":false,"fsm":"S1"}
 """
@@ -39,7 +41,13 @@ def dispatch(sess: ImeSession, msg: dict) -> dict:
         commit = sess.on_timeout(t) or ""
     elif op == "reset":
         sess.reset()
+    elif op == "set_direct":
+        sess.set_direct(msg["direct"])
+    elif op == "toggle_direct":
+        sess.set_direct(not sess.direct)
     return {
+        "direct": sess.direct,
+        "pass_through": sess.direct and op in ("down", "up"),
         "composition": sess.composition,
         "commit": commit,
         "converted": sess.converted,
