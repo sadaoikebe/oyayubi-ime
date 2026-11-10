@@ -65,3 +65,9 @@
 {"reading": "みもふたもない", "surface": "身も蓋もない", "cost": 6000, "lid": 2425, "rid": 2425}
 {"reading": "ぼうせんいっぽう", "surface": "防戦一方", "cost": 6000}
 {"reading": "そうさいせん", "surface": "総裁選", "cost": 5800}
+{"reading": "らんよう", "surface": "濫用", "cost": 5000, "lid": 1841, "rid": 1841}
+{"reading": "みいだす", "surface": "見いだす", "cost": 3500, "lid": 837, "rid": 837}
+{"reading": "ひとり", "surface": "1人", "cost": 3000}
+{"reading": "としをとる", "surface": "歳をとる", "cost": 4500, "lid": 1851, "rid": 837}
+{"reading": "きかんせっけい", "surface": "機関設計", "cost": 5000}
+{"reading": "ひとりまえ", "surface": "一人前", "cost": 2500}
