@@ -105,7 +105,8 @@ def main() -> None:
                 candidates = [decoded.surface]
                 if kind == "Expected" and topn > 1:
                     results, _ = nbest_tokens(tokens, lex, k=topn)
-                    # The two paths deliberately use different pruning keys.
+                    # Keep the RID-pruned 1-best first; nbest enumerates the
+                    # exact lattice and can have a different first result.
                     candidates = list(dict.fromkeys(candidates + [d.surface for d in results]))[:topn]
                 passed = criterion_passes(criterion, row[4], decoded.surface, candidates)
                 mozc_passed = row[0].startswith("OK")

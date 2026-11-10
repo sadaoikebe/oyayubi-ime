@@ -1,6 +1,6 @@
 # いまどこまでできているか
 
-日付: 2026-11-10。設計の正本は [PLAN.md](PLAN.md)。Stage 2の実装・プロトコル・確認事項は [STAGE2.md](STAGE2.md)。確定学習の使い方・設計は [STAGE4.md](STAGE4.md)。変換のオフライン数字は [EVALUATION.md](EVALUATION.md) と [WP0-investigation.md](WP0-investigation.md)。
+日付: 2026-11-11。設計の正本は [PLAN.md](PLAN.md)。Stage 2の実装・プロトコル・確認事項は [STAGE2.md](STAGE2.md)。確定学習の使い方・設計は [STAGE4.md](STAGE4.md)。真の k-best と到達率の前後比較は [STAGE5A.md](STAGE5A.md)。変換のオフライン数字は [EVALUATION.md](EVALUATION.md) と [WP0-investigation.md](WP0-investigation.md)。
 
 ## 本線（残しているもの）
 
@@ -23,6 +23,7 @@
 | 層 | 状態 |
 | --- | --- |
 | 格子変換 | トークン列から漢字かな交じりへ直行できる。読みを 1 本に潰して既存 IME に渡していない |
+| n-best | 厳密 Viterbi＋後ろ向き A* で表記をコスト順に列挙。AJIMEE amb 200文の区間oracle到達率 @3 66.5% / @8 81.0% / @30 85.5%。学習なし |
 | オフライン品質 | Mozc 評価読み約 92%。日常 66 件はユーザ辞書後に読み約 89%。残りは既読／記憶のような、両方正しい語 |
 | FSM | TIMEOUT 80 ms / OVERLAP 20 ms。Space@0 のあと 80 ms 超えて J は空白＋「と」。テスト 11 件 |
 | セッション | 句読点・数字・記号・Shift英字のリテラル、変換後の打ち続けで確定、Enter/Esc/BS、reset通知。時刻つきトランスクリプト19ケースで検証。TIPへの新機能接続はStage 3 |

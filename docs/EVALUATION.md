@@ -1,4 +1,4 @@
-# Stage 0 の評価と診断
+# 変換の評価と診断
 
 リポジトリ直下で実行する。標準ライブラリのみ使用する。
 
@@ -8,6 +8,7 @@ python3 -m tools.wp0.run_mozc_eval --unambiguous
 python3 -m tools.wp0.run_mozc_eval --no-user-lexicon
 python3 -m tools.wp0.fetch_ajimee
 python3 -m tools.wp0.run_ajimee_eval --details /tmp/ajimee-results.jsonl
+python3 -m tools.wp0.run_ajimee_nbest_eval --summary /tmp/ajimee-nbest-summary.json
 python3 -m unittest tests.test_fsm tests.test_session tests.test_evaluation tests.test_server
 python3 -m unittest tests.test_transcripts -v
 python3 -m tools.wp0.run_regression
@@ -27,16 +28,17 @@ status 列の集計であり、Mozc を新たに実行した値ではない。
 - `--details` は入力可能な各行の `PASS` / `FAIL` / `SKIP` を JSONL に出す。
 
 Expected N は文全体の候補による**近似**。Mozc 本来の文節候補の順位和とは異なり、
-現行 nbest は真の k-best でもない。Fable の E2 スクリプトにあった50件制限と
+Fable の E2 スクリプトにあった50件制限と
 1-best 重複による N+1 件の扱いは引き継がず、表記を重複除去した N 件を判定する。
 実装の参照元:
 [Mozc quality_regression_util.cc](https://github.com/google/mozc/blob/master/src/converter/quality_regression_util.cc)。
 
 辞書は全エントリを読み込み、ユーザー辞書適用時も切り捨てない。
 旧キャッシュは8件以降を復元できないため、`data/cache/mozc_lex_v2.pkl` に再構築する。
-候補列挙へ全エントリを渡すが、セッションの8候補表示と nbest の読み prefix 枝刈りは維持する。
+候補列挙へ全エントリを渡す。Stage 5a の `nbest_tokens` は厳密 Viterbi＋後ろ向き A* で
+異なる表記を最小コスト順に列挙する。1-best の RID 枝刈りは維持する。
 単語の全候補を検査するときは `nbest_tokens(..., k=十分大きな値)` を使う。
-文節候補の操作・真の k-best は後続 Stage の範囲。
+文節候補の操作は [STAGE2.md](STAGE2.md)、真の k-best は [STAGE5A.md](STAGE5A.md) を参照。
 
 ## AJIMEE の出典・ライセンス
 
@@ -61,6 +63,30 @@ Fable E3 と同じく、入力のカタカナをひらがなにし、NICOLA 表�
 `context_text` 有無ごとの集計を出すが、文脈は変換へ渡さない。
 実打鍵、FSM の誤り、句読点入力の可否を評価するものではない。
 `--details` の出力はデータ由来の本文を含む。
+
+## AJIMEE の上位 k 到達率（Stage 5a）
+
+```sh
+python3 -m tools.wp0.run_ajimee_nbest_eval --k 1 3 8 30 \
+  --summary /tmp/ajimee-nbest-summary.json --details /tmp/ajimee-nbest-details.jsonl
+```
+
+`run_ajimee_eval` と同じデータ・逆引き・記号分割を使い、amb 条件で採点する。
+学習・上文・LMは使わない。`--data`、`--no-user-lexicon` も指定できる。
+`decode_1best` は従来の1-bestの一致率。n-bestを使う指標は以下の3種類を分ける。
+
+- `chunk_oracle@k`: 各かな区間の上位k候補から1つずつ選び、連結すると複数正解の
+  いずれかになる率。**Fable E5 と同じ定義**。複数区間ではk件以上の文を検査する。
+- `sentence@k`: 区間候補をコスト和の順に組み合わせ、異なる文全体の上位kに
+  正解が入る率。単一区間では上の指標と一致する。
+- `with_1best_chunk_oracle@k`: 各区間に `decode_tokens` の1-bestを先頭追加してから
+  表記の重複を除き、上位kで区間oracleを測る。**Fable E4 の旧52%に対応する定義**。
+  この先頭追加は評価用であり、`nbest_tokens` 自体はコスト順を保つ。
+
+`--summary` はデータのSHA-256・条件・各指標の件数・列挙時間をJSONで保存する。
+`--details` は区間候補・コスト・文全体の候補・正解等をJSONLで保存する（本文を含む）。
+同じ文数・データ・辞書・候補の先頭追加条件で前後比較すること。
+2026-11-11の200文での比較とFableとの差は [STAGE5A.md](STAGE5A.md) に記録した。
 
 ## サーバ
 

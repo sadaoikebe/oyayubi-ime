@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
+from heapq import heappop, heappush
+from itertools import count
 from typing import Literal
 
 from .decode import DecodeResult, Piece
@@ -177,80 +179,100 @@ def decode_tokens(tokens: list[dict], lex: MozcLex, *, learning=None,
     )
 
 
-def _rebuild(words: list[_Word], states: list[list[_St]], idx: int, n: int) -> DecodeResult:
-    path: list[_Word] = []
-    pos = n
-    while pos > 0:
-        st = states[pos][idx]
-        w = words[st.word_i]
-        path.append(w)
-        pos, idx = w.start, st.prev
-    path.reverse()
-    reading = "".join(w.entry.reading for w in path)
-    surface = "".join(w.entry.surface for w in path)
-    pieces = [
-        Piece(w.entry.surface, w.entry.reading, str(w.entry.lid), w.entry.cost,
-              w.start, w.end, w.entry.rid, w.literal)
-        for w in path
-    ]
-    score = states[n][0].score  # overwritten by caller
-    return DecodeResult(reading=reading, surface=surface, score=score, pieces=pieces)
-
-
 def nbest_tokens(
     tokens: list[dict],
     lex: MozcLex,
     k: int = 8,
 ) -> tuple[list[DecodeResult], dict]:
-    """Return distinct surfaces using reading-prefix pruning (WP0 §13).
+    """Return the cheapest k distinct surfaces, in nondecreasing cost order.
 
-    Preserve L/R alternatives for future context rescoring, accepting the
-    1-best accuracy tradeoff documented in WP0 §10/13.
+    Exact forward Viterbi supplies the potential for backward A*. All eligible
+    word arcs and RID states survive that pass; there is no beam, score window
+    or pop cap.
+    As before, unknown/high-cost (>= UNK_COST) pieces are ineligible and
+    learning is not consulted. Literal arcs reset both sides to BOS/EOS.
+    Each surface retains its cheapest path's reading and pieces; ties are
+    deterministic but have no linguistic preference.
     """
     n = len(tokens)
     t0 = time.perf_counter()
-    states: list[list[_St]] = [[] for _ in range(n + 1)]
-    states[0] = [_St(0, BOUNDARY_RID, -1, -1, "")]
-    words: list[_Word] = []
-
-    for i in range(n):
-        if not states[i]:
-            continue
-        if len(states[i]) > POS_KEEP:
-            states[i] = _prune(states[i], mode="reading")
-        for w in _spans_from(tokens, i, lex):
-            wi = len(words)
-            words.append(w)
-            for si, st in enumerate(states[i]):
-                nsc = st.score + _word_cost(lex, st.rid, w)
-                states[w.end].append(
-                    _St(nsc, w.rid, wi, si, st.reading + w.entry.reading)
-                )
-
-    if not states[n]:
-        raise RuntimeError("no path")
-    ranked: list[tuple[int, int, str]] = []
-    for i, st in enumerate(states[n]):
-        sc = st.score + _end_cost(lex, st.rid)
-        ranked.append((sc, i, st.reading))
-    ranked.sort(key=lambda t: t[0])
-
-    seen: set[str] = set()
     out: list[DecodeResult] = []
-    for sc, i, _reading in ranked:
-        dec = _rebuild(words, states, i, n)
-        dec.score = sc
-        if dec.surface in seen:
+    pops = 0
+
+    def stats() -> dict:
+        return {"ms": round((time.perf_counter() - t0) * 1000, 3),
+                "n_tokens": n, "nbest": len(out), "n_pops": pops}
+
+    if k <= 0:
+        return out, stats()
+
+    def connection(rid: int, lid: int) -> int:
+        # A right-hand literal (or EOS) closes the current kana run. Using
+        # BOUNDARY_RID, rather than LID=0, preserves real dictionary POS=0.
+        if lid == BOUNDARY_RID:
+            return _end_cost(lex, rid)
+        return lex.transition(BOS_ID if rid == BOUNDARY_RID else rid, lid)
+
+    incoming: list[list[_Word]] = [[] for _ in range(n + 1)]
+    forward: list[dict[int, int]] = [{} for _ in range(n + 1)]
+    forward[0][BOUNDARY_RID] = 0
+    # prefix[i][lid] includes the connection into the next word, but not its
+    # word cost. It is an exact completion cost for a backward suffix.
+    prefix: list[dict[int, int]] = [{} for _ in range(n + 1)]
+    for i in range(n):
+        if not forward[i]:
             continue
-        if any(p.cost >= UNK_COST for p in dec.pieces):
+        for w in _spans_from(tokens, i, lex):
+            if w.unknown or w.entry.cost >= UNK_COST:
+                continue  # Apply the existing output policy before searching.
+            lid = BOUNDARY_RID if w.literal else w.entry.lid
+            if lid not in prefix[i]:
+                prefix[i][lid] = min(cost + connection(rid, lid)
+                                     for rid, cost in forward[i].items())
+            score = prefix[i][lid] + w.entry.cost
+            target = forward[w.end]
+            if w.rid not in target or score < target[w.rid]:
+                target[w.rid] = score
+            incoming[w.end].append(w)
+    if not forward[n]:
+        return out, stats()  # No dictionary/literal-only covering path.
+
+    best = min(cost + _end_cost(lex, rid) for rid, cost in forward[n].items())
+    serial = count()
+    # bound, tie-breaker, suffix cost, start, first LID, surface, linked path
+    heap = [(best, next(serial), 0, n, BOUNDARY_RID, "", None)]
+    # Equal (start, first LID, surface) suffixes admit exactly the same
+    # prefixes. Only their cheapest path matters for distinct-surface k-best.
+    suffix_cost = {(n, BOUNDARY_RID, ""): 0}
+    seen = set()
+    while heap and len(out) < k:
+        bound, _, cost, pos, next_lid, surface, path = heappop(heap)
+        pops += 1
+        if cost != suffix_cost[(pos, next_lid, surface)]:
             continue
-        seen.add(dec.surface)
-        out.append(dec)
-        if len(out) >= k:
-            break
-    stats = {
-        "ms": round((time.perf_counter() - t0) * 1000, 3),
-        "n_tokens": n,
-        "nbest": len(out),
-    }
-    return out, stats
+        if pos == 0:
+            if surface in seen:
+                continue
+            seen.add(surface)
+            pieces = []
+            reading = []
+            while path is not None:
+                w, path = path
+                e = w.entry
+                reading.append(e.reading)
+                pieces.append(Piece(e.surface, e.reading, str(e.lid), e.cost,
+                                    w.start, w.end, e.rid, w.literal, w.learned))
+            out.append(DecodeResult("".join(reading), surface, bound, pieces))
+            continue
+        for w in incoming[pos]:
+            e = w.entry
+            lid = BOUNDARY_RID if w.literal else e.lid
+            nc = cost + connection(w.rid, next_lid) + e.cost
+            ns = e.surface + surface
+            key = (w.start, lid, ns)
+            if key in suffix_cost and nc >= suffix_cost[key]:
+                continue
+            suffix_cost[key] = nc
+            heappush(heap, (nc + prefix[w.start][lid], next(serial), nc,
+                            w.start, lid, ns, (w, path)))
+    return out, stats()
