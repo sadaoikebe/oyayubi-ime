@@ -25,7 +25,10 @@ import multiprocessing as mp
 from pathlib import Path
 import pickle
 import platform
-import resource
+try:
+    import resource
+except ImportError:  # Windows has no resource module / RLIMIT_AS
+    resource = None
 import subprocess
 import sys
 import time
@@ -374,7 +377,8 @@ def diagnose_condition(row: dict, mode: str, reverse: dict, lex: MozcLex,
 
 
 def _worker(connection, lex, overlay, names, reverse, memory_mb):
-    resource.setrlimit(resource.RLIMIT_AS, (memory_mb * 1024 * 1024,) * 2)
+    if resource is not None:  # memory cap is unavailable on Windows
+        resource.setrlimit(resource.RLIMIT_AS, (memory_mb * 1024 * 1024,) * 2)
     try:
         while True:
             row = connection.recv()
