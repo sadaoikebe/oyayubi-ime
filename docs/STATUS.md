@@ -77,3 +77,18 @@ SampleIME / CorvusSKK / Mozc tip を読んで移したもの。PIME は使って
 - IPC 1 回の失敗はそのキーだけ素通し。サーバは殺さない
 - キー処理を SEH で囲む
 - `RequestEditSession` は SYNC、拒否されたら ASYNC
+
+## 既知の問題（対処しないと決めたもの）
+
+- FSM の例外経路で、1回の Space 押下から AmbShift が2個出る場合がある
+  （2026-11-11 Fable 独立検証で発見・再現済み）。経路: S5 の短い重なりで
+  ThumbTap を出してタイマー張り直し（m_time は古いまま）→ 80ms 以内に
+  Space を押し直して S4（t1 が80ms以上）→ S4 タイムアウトが AmbShift を
+  出して状態を残す → 次の文字が消費済みの Space と再び組になる。
+  必要条件が狭い（Space の二度押し、先の文字を約165ms以上保持、次の文字が
+  2回目の Space の80〜99ms後）ため対処しない。Stage 1 の実測後に左右
+  シフト重なりの扱いを見直すときに再検討する。詳細は
+  `~/workspace/nicola-projects/doctrine-verification-fable-2026-11-11.md`
+  §1.2。あわせて fsm.py 冒頭 docstring と docs/PLAN.md のタイムアウト後の
+  状態の記述がコード（S2/S3 は S1 に戻し、S4/S5 は状態を残す）と
+  食い違っている点も、そのときに直す。
