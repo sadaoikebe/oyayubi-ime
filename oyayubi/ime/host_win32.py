@@ -133,6 +133,7 @@ _qpc_freq = int(_freq.value)
 session = ImeSession()
 _last_view = None
 recorder: Recorder | None = None
+_record_event_count = 0  # display snapshot; raw events still arrive on every key
 _record_origin = 0
 _callback_failed = False
 
@@ -149,6 +150,8 @@ def now_ms() -> int:
 
 
 def view_key() -> tuple:
+    if recorder is not None:
+        return (recorder.index, recorder.focused, recorder.closed, _record_event_count)
     return (
         session.committed,
         session.composition,
@@ -162,10 +165,14 @@ def view_key() -> tuple:
 
 
 def redraw_if_changed(hwnd) -> None:
-    global _last_view
+    global _last_view, _record_event_count
     now = view_key()
     if now == _last_view:
         return
+    if recorder is not None:
+        # Prompt/focus changes refresh the count immediately as well.
+        _record_event_count = len(recorder.events)
+        now = view_key()
     _last_view = now
     user32.InvalidateRect(hwnd, None, False)
 
@@ -193,7 +200,7 @@ def paint(hwnd) -> None:
         elif prompt is not None:
             text += (f"お題 {recorder.index + 1}/{len(recorder.prompts)}\n\n"
                      f"{prompt.text}\n\n入力する読み: {prompt.reading}\n\n"
-                     f"記録イベント数: {len(recorder.events)}\n"
+                     f"記録イベント数: {_record_event_count}\n"
                      "漢字の変換結果ではなく、上の読み・句読点・数字を入力。\n"
                      "入力結果は表示しません。打ち間違いがあっても F9 で次へ。")
         user32.DrawTextW(hdc, text, -1, ctypes.byref(rc), DT_WORDBREAK | DT_NOPREFIX)
@@ -242,7 +249,7 @@ def paint(hwnd) -> None:
 def handle_key(hwnd, down: bool, vk: int) -> None:
     if recorder is not None:
         recorder.on_key(vk, down, now_ms())
-        user32.InvalidateRect(hwnd, None, False)
+        redraw_if_changed(hwnd)
         return
     extra = session.on_key(down, vk, now_ms())
     if extra:
@@ -270,6 +277,7 @@ def wndproc(hwnd, msg, wparam, lparam):
 
 
 def dispatch(hwnd, msg, wparam, lparam):
+    global _record_event_count
     if msg == WM_DESTROY:
         if recorder is not None:
             recorder.close(now_ms())
@@ -281,7 +289,10 @@ def dispatch(hwnd, msg, wparam, lparam):
     if msg == WM_ERASEBKGND:
         return 1
     if msg == WM_TIMER:
-        if recorder is None and session.fsm.timer_deadline is not None:
+        if recorder is not None:
+            _record_event_count = len(recorder.events)
+            redraw_if_changed(hwnd)
+        elif session.fsm.timer_deadline is not None:
             extra = session.on_timeout(now_ms())
             if extra:
                 session.committed += extra
@@ -289,7 +300,7 @@ def dispatch(hwnd, msg, wparam, lparam):
         return 0
     if msg in (WM_SETFOCUS, WM_KILLFOCUS) and recorder is not None:
         recorder.on_focus(msg == WM_SETFOCUS, now_ms())
-        user32.InvalidateRect(hwnd, None, False)
+        redraw_if_changed(hwnd)
         return 0
     if msg in (WM_KEYDOWN, WM_SYSKEYDOWN):
         handle_key(hwnd, True, int(wparam) & 0xFF)
@@ -375,8 +386,7 @@ def run_window() -> None:
         imm32.ImmAssociateContext.restype = HANDLE
         imm32.ImmAssociateContext(hwnd, None)
     user32.ShowWindow(hwnd, 1)
-    if recorder is None:
-        user32.SetTimer(hwnd, TIMER_ID, 16, None)
+    user32.SetTimer(hwnd, TIMER_ID, 500 if recorder is not None else 16, None)
     msg = w.MSG()
     while True:
         result = user32.GetMessageW(ctypes.byref(msg), None, 0, 0)
