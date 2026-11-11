@@ -25,6 +25,7 @@ class ServerTest(unittest.TestCase):
             on_key=lambda *args: "確定秘密",
             composition="編集中の秘密", converted=False, tokens=[], candidates=[], cand_index=0,
             direct=False,
+            lm=None,
             fsm=SimpleNamespace(timer_deadline=None, state="S0"),
             segment_snapshot=lambda: [], focus=-1, candidate_page=0,
             candidate_kinds=[], has_next_page=False,
@@ -125,6 +126,13 @@ class ServerTest(unittest.TestCase):
         send({"op": "toggle_direct"})
         self.assertEqual(send({"op": "up", "vk": 65, "t": 10})["composition"], "")
         self.assertEqual(send({"op": "timeout", "t": 200})["composition"], "")
+
+    def test_context_dispatch_on_stdio_path(self):
+        session = ImeSession(learning_path=None)
+        server.dispatch(session, {"op": "context", "text": "前" * 300})
+        self.assertEqual(session._lm_context, "前" * 200)
+        server.dispatch(session, {"op": "reset"})
+        self.assertEqual(session._lm_context, "")
 
 
 if __name__ == "__main__":
