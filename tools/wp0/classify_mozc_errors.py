@@ -467,7 +467,10 @@ def classify(row: dict) -> dict:
 
 
 def run_rows(rows, lex, overlay, names, reverse, timeout=10.0, memory_mb=2048):
-    ctx = mp.get_context("fork")
+    # fork lets the worker inherit the caller's lexicon (and, in tests, a
+    # patched diagnose_condition); elsewhere fall back to the platform
+    # default context, where the worker re-imports and receives pickled args.
+    ctx = mp.get_context("fork") if "fork" in mp.get_all_start_methods() else mp.get_context()
     process = connection = None
 
     def stop():

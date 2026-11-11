@@ -252,6 +252,8 @@ class ExecutionAndReportTest(unittest.TestCase):
         self.assertEqual(items[0]["row_ids"], ["digest:2", "digest:3"])
         self.assertIn("inferred_span:か|蚊=>科", items[0]["pattern"])
 
+    @unittest.skipUnless("fork" in diagnostic.mp.get_all_start_methods(),
+                         "the worker must inherit the patched diagnose_condition (fork only)")
     def test_deadline_preserves_partial_evidence_and_restarts_worker(self):
         lex = lexicon([("か", "蚊", 0), ("く", "区", 0)])
         reverse = {ch: diagnostic.plain_tokens(ch)[0] for ch in "かく"}
