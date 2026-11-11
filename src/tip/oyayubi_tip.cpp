@@ -39,6 +39,9 @@ static const CLSID CLSID_OyayubiTip = {
 // {A7C4E202-0B3A-4F11-9E61-0C1A0B7E0A01}
 static const GUID GUID_OyayubiProfile = {
     0xa7c4e202, 0x0b3a, 0x4f11, {0x9e, 0x61, 0x0c, 0x1a, 0x0b, 0x7e, 0x0a, 0x01}};
+// {A7C4E206-0B3A-4F11-9E61-0C1A0B7E0A01}
+static const GUID GUID_OyayubiToggle = {
+    0xa7c4e206, 0x0b3a, 0x4f11, {0x9e, 0x61, 0x0c, 0x1a, 0x0b, 0x7e, 0x0a, 0x01}};
 
 static const GUID kCats[] = {
     GUID_TFCAT_TIP_KEYBOARD,
@@ -373,14 +376,16 @@ struct Server {
     CRITICAL_SECTION lock;
     HANDLE stop_event = nullptr, worker = nullptr;
     SOCKET connection = INVALID_SOCKET;
-    volatile LONG ready = 0, generation = 0, direct = 0;
+    volatile LONG ready = 0, generation = 0, direct = 0, settings_loaded = 0;
     bool wsa = false, busy = false;
-    // Loaded once by the worker before publishing ready. Immutable thereafter.
+    // Loaded once by the worker before publishing settings_loaded/ready.
+    // Immutable thereafter.
     TipConfig settings;
     std::wstring runtime_dir;
     Server() { InitializeCriticalSection(&lock); }
     ~Server() { Stop(); DeleteCriticalSection(&lock); }
     bool Alive() { return InterlockedCompareExchange(&ready, 0, 0) != 0; }
+    bool SettingsLoaded() { return InterlockedCompareExchange(&settings_loaded, 0, 0) != 0; }
     LONG Generation() { return InterlockedCompareExchange(&generation, 0, 0); }
     void RememberDirect(bool value) { InterlockedExchange(&direct, value ? 1 : 0); }
     bool Stopping() { return WaitForSingleObject(stop_event, 0) == WAIT_OBJECT_0; }
@@ -517,6 +522,7 @@ struct Server {
     void Run() {
         settings.Load();
         runtime_dir = settings.runtime_dir;
+        InterlockedExchange(&settings_loaded, 1);
         if (runtime_dir.empty()) return;
         while (!Stopping()) {
             if (Alive()) {
@@ -559,6 +565,7 @@ struct Server {
     }
     static unsigned __stdcall Worker(void* self) { ((Server*)self)->Run(); return 0; }
     bool Start() {
+        InterlockedExchange(&settings_loaded, 0);
         settings = TipConfig();
         WSADATA data{};
         if (WSAStartup(MAKEWORD(2, 2), &data)) return false;
@@ -988,6 +995,10 @@ public:
     bool direct_ = false;
     bool scope_allowed_ = false;
     bool toggle_down_ = false, toggle_eaten_ = false;
+    TF_PRESERVEDKEY preserved_toggle_{};
+    unsigned preserved_mods_ = 0;
+    bool preserve_attempted_ = false, toggle_preserved_ = false;
+    bool test_alt_logged_ = false, down_alt_logged_ = false;
     int n_tokens_ = 0, focus_ = -1, page_ = 0;
     bool has_next_page_ = false;
     Tip() { InterlockedIncrement(&g_locks); }
@@ -1150,7 +1161,58 @@ public:
         scope_allowed_ = tm_ && !KeyboardDisabled(tm_, client_) && !KeyboardClosed(tm_);
     }
 
+    void UnpreserveToggle(ITfKeystrokeMgr* km) {
+        if (!toggle_preserved_) return;
+        HRESULT hr = km->UnpreserveKey(GUID_OyayubiToggle, &preserved_toggle_);
+        Log(L"UnpreserveKey toggle vk=%u modifiers=0x%x hr=%08lx",
+            preserved_toggle_.uVKey, preserved_toggle_.uModifiers, hr);
+        toggle_preserved_ = false;
+    }
+
+    void UpdatePreservedKey() {
+        // Activate must not wait for settings/IPC. Its timer completes the
+        // registration on the TSF thread once settings are published, even
+        // before the server connects. Never register a temporary default key.
+        if (!server_.SettingsLoaded()) return;
+        const auto& settings = server_.settings;
+        if (preserve_attempted_ && preserved_toggle_.uVKey == settings.toggle_vk &&
+            preserved_mods_ == settings.toggle_mods) return;
+        ITfKeystrokeMgr* km = nullptr;
+        HRESULT hr = tm_->QueryInterface(IID_ITfKeystrokeMgr, (void**)&km);
+        if (FAILED(hr)) {
+            Log(L"PreserveKey toggle QueryInterface hr=%08lx", hr);
+            return;
+        }
+        UnpreserveToggle(km);
+        preserved_toggle_ = {settings.toggle_vk, 0};
+        preserved_mods_ = settings.toggle_mods;
+        // tip.json uses shift=1/ctrl=2/alt=4, unlike TSF's modifier flags.
+        if (preserved_mods_ & 1) preserved_toggle_.uModifiers |= TF_MOD_SHIFT;
+        if (preserved_mods_ & 2) preserved_toggle_.uModifiers |= TF_MOD_CONTROL;
+        if (preserved_mods_ & 4) preserved_toggle_.uModifiers |= TF_MOD_ALT;
+        // TSF has no Win modifier flag; OnPreservedKey checks the full mask.
+        preserve_attempted_ = true;
+        hr = km->PreserveKey(client_, GUID_OyayubiToggle, &preserved_toggle_, nullptr, 0);
+        toggle_preserved_ = SUCCEEDED(hr);
+        Log(L"PreserveKey toggle vk=%u mods=0x%x modifiers=0x%x hr=%08lx",
+            preserved_toggle_.uVKey, preserved_mods_, preserved_toggle_.uModifiers, hr);
+        km->Release();
+        test_alt_logged_ = down_alt_logged_ = false;
+    }
+
+    void TraceAltToggle(const wchar_t* source, UINT vk, bool& logged) {
+        if (logged) return;
+        TipConfig defaults;
+        const auto& settings = server_.SettingsLoaded() ? server_.settings : defaults;
+        unsigned mods = HeldMods();
+        if (vk != settings.toggle_vk || !(mods & 4)) return;
+        logged = true;
+        Log(L"%s observed Alt+toggle_vk vk=%u mods=0x%x ready=%u direct=%u",
+            source, vk, mods, (unsigned)server_.Alive(), (unsigned)direct_);
+    }
+
     void SyncConnection() {
+        UpdatePreservedKey();
         bool alive = server_.Alive();
         LONG generation = server_.Generation();
         if (!alive || generation != connection_generation_) {
@@ -1198,6 +1260,12 @@ public:
 
     void OnTimerImpl() {
         SyncConnection();
+        // A preserved system key's release need not reach OnKeyUp. Use the
+        // thread's queued key state so the repeat latch also clears in that case.
+        if (toggle_down_ && !(GetKeyState(server_.settings.toggle_vk) & 0x8000)) {
+            down_eaten_[server_.settings.toggle_vk] = false;
+            toggle_down_ = toggle_eaten_ = false;
+        }
         if (!server_.Alive()) return;
         // A timer cannot depend on a synchronous input-scope edit lock.
         // Scope was checked on the key that armed it; queued edits check again.
@@ -1301,11 +1369,14 @@ public:
     }
     bool Toggle() {
         bool eaten = false;
+        bool before = direct_;
         __try { eaten = ToggleImpl(); }
         __except (EXCEPTION_EXECUTE_HANDLER) {
             Log(L"SEH in toggle");
             server_.Die(L"toggle exception");
         }
+        Log(L"Toggle result=%u direct_before=%u direct=%u",
+            (unsigned)eaten, (unsigned)before, (unsigned)direct_);
         return eaten;
     }
 
@@ -1368,6 +1439,7 @@ public:
         if (tm_) {
             ITfKeystrokeMgr* km = nullptr;
             if (SUCCEEDED(tm_->QueryInterface(IID_ITfKeystrokeMgr, (void**)&km))) {
+                UnpreserveToggle(km);
                 km->UnadviseKeyEventSink(client_);
                 km->Release();
             }
@@ -1382,6 +1454,8 @@ public:
         }
         client_ = TF_CLIENTID_NULL;
         cookie_tm_ = TF_INVALID_COOKIE;
+        preserve_attempted_ = false;
+        test_alt_logged_ = down_alt_logged_ = false;
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE ActivateEx(ITfThreadMgr* ptim, TfClientId tid, DWORD) override {
@@ -1408,6 +1482,7 @@ public:
         SetKeyboardOpen(tm_, client_, TRUE);
         Log(L"ActivateEx client=%u (connector worker, no wait)", (unsigned)tid);
         if (!server_.Start()) Log(L"connector start failed — keys pass through");
+        UpdatePreservedKey();
         return S_OK;
     }
 
@@ -1422,6 +1497,7 @@ public:
 
     HRESULT STDMETHODCALLTYPE OnTestKeyDown(ITfContext*, WPARAM w, LPARAM, BOOL* e) override {
         if (!e) return E_INVALIDARG;
+        TraceAltToggle(L"OnTestKeyDown", VkOf(w), test_alt_logged_);
         *e = CanEat(VkOf(w)) ? TRUE : FALSE;
         return S_OK;
     }
@@ -1438,6 +1514,7 @@ public:
         if (!e) return E_INVALIDARG;
         *e = FALSE;
         UINT vk = VkOf(w);
+        TraceAltToggle(L"OnKeyDown", vk, down_alt_logged_);
         SyncConnection();
         if (!Eligible()) { ResetFocus(); return S_OK; }
         scope_allowed_ = true;
@@ -1453,6 +1530,8 @@ public:
         // Toggle precedes the ordinary Alt/Ctrl/Win exclusion. The repeat bit
         // also prevents a failed initial exchange from turning into a toggle.
         if (ToggleKey(vk)) {
+            Log(L"OnKeyDown ToggleKey=true vk=%u repeat=%u", vk,
+                (unsigned)((l & (LPARAM(1) << 30)) != 0));
             if (l & (LPARAM(1) << 30)) return S_OK;
             bool eaten = Toggle();
             toggle_down_ = true; toggle_eaten_ = eaten;
@@ -1494,8 +1573,35 @@ public:
         *e = handled ? TRUE : FALSE;
         return S_OK;
     }
-    HRESULT STDMETHODCALLTYPE OnPreservedKey(ITfContext*, REFGUID, BOOL* e) override {
-        if (e) *e = FALSE;
+    HRESULT STDMETHODCALLTYPE OnPreservedKey(ITfContext*, REFGUID guid, BOOL* e) override {
+        if (!e) return E_INVALIDARG;
+        *e = FALSE;
+        if (guid != GUID_OyayubiToggle) return S_OK;
+        SyncConnection();
+        bool eligible = Eligible();
+        Log(L"OnPreservedKey toggle ready=%u eligible=%u direct=%u",
+            (unsigned)server_.Alive(), (unsigned)eligible, (unsigned)direct_);
+        if (!eligible) { ResetFocus(); return S_OK; }
+        scope_allowed_ = true;
+        if (!server_.Alive()) return S_OK;
+        ITfContext* ctx = FocusContext();
+        bool changed = state_ && (!ctx || state_->ctx != ctx);
+        if (ctx) ctx->Release();
+        if (changed) { ResetFocus(); return S_OK; }
+        UINT vk = server_.settings.toggle_vk;
+        if (!ToggleKey(vk)) {
+            Log(L"OnPreservedKey toggle modifiers mismatch mods=0x%x expected=0x%x",
+                HeldMods(), server_.settings.toggle_mods);
+            return S_OK;
+        }
+        // Share the latch with the fallback so repeats (or both callbacks for
+        // one press) cannot toggle twice. Key-up or the timer releases it.
+        if (!toggle_down_) {
+            bool eaten = Toggle();
+            toggle_down_ = true; toggle_eaten_ = eaten;
+            down_eaten_[vk] = eaten;
+        }
+        *e = toggle_eaten_ ? TRUE : FALSE;
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE OnCompositionTerminated(TfEditCookie, ITfComposition* c) override {
