@@ -47,6 +47,7 @@ VK_TO_M: dict[int, str] = {
     0x4B: "k",
     0x4C: "l",
     VK_OEM_1: ";",
+    VK_OEM_4: "[",
     0x5A: "z",
     0x58: "x",
     0x43: "c",

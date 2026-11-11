@@ -18,6 +18,23 @@ def mixed(literal="？"):
     return {"kind": "amb", "faces": {"left": literal, "right": "ぉ"}}
 
 
+class BracketToutenTest(unittest.TestCase):
+    def test_bracket_key_is_the_firmware_touten(self):
+        # The author's QMK table sends KC_COMM from both P and LBRC; the
+        # host IME rendered it as 、. Here the IME itself must do that
+        # rendering, so "[" carries the same literal plain face as "p".
+        from oyayubi.chord.fsm import Plain
+        from oyayubi.chord.keys import VK_OEM_4, classify
+        from oyayubi.ime.session import to_lattice_token
+
+        self.assertEqual(classify(VK_OEM_4), ("M", "["))
+        table = load_table()
+        self.assertEqual(to_lattice_token(Plain("["), table),
+                         {"kind": "literal", "text": "、"})
+        self.assertEqual(to_lattice_token(Plain("p"), table),
+                         {"kind": "literal", "text": "、"})
+
+
 class LiteralFacesTest(unittest.TestCase):
     def test_literal_alphabet_matches_stage2a(self):
         for text in "ぁあぉゔゖー":
