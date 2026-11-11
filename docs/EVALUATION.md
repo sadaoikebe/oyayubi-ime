@@ -17,6 +17,12 @@ python3 -m unittest tests.test_transcripts -v
 python3 -m tools.wp0.run_regression
 ```
 
+辞書読み込み時、左品詞の連接行が全0なら EOS 列を含む全列に既定で3000を加算する。
+キャッシュには保存しない。無効化して従来値を測る場合は
+`ZERO_ROW_PENALTY=0 python3 -m tools.wp0.run_mozc_eval` のように指定する。
+同じ環境変数で他の整数ペナルティも指定でき、次の辞書読み込みから反映される。
+実在語の事前確認と適用範囲は [全0行ペナルティの検証](ZERO_ROW_PENALTY.md) を参照。
+
 ## Mozc
 
 従来の読み一致・表記一致を残し、`evaluation.tsv` の4〜5列目による合否を追加した。

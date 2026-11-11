@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import pickle
 import sys
 from dataclasses import dataclass
@@ -142,4 +143,12 @@ def load_lex(force: bool = False, *, user_lexicon: bool = True) -> MozcLex:
     n = apply_user_lex(lex) if user_lexicon else 0
     if n:
         print(f"  user lexicon: {n} entries from {USER_LEX.name}", file=sys.stderr)
+    # Apply only after saving/loading the raw cache. Include column 0 (EOS),
+    # so a zero-row entry pays the same penalty even at the end of input.
+    penalty = int(os.environ.get("ZERO_ROW_PENALTY", "3000"))
+    if penalty:
+        for start in range(0, len(lex.connect), lex.pos_size):
+            end = start + lex.pos_size
+            if not any(lex.connect[start:end]):
+                lex.connect[start:end] = [penalty] * lex.pos_size
     return lex
