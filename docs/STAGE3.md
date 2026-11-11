@@ -2,7 +2,7 @@
 
 2026-11-11。対象は `docs-and-eval-2026-11-10`、開始 HEAD `ed91f93`。
 方針は「薄い TIP・厚いセッション」。辞書ロード約5.4秒・約1.4GBをユーザーごとに
-1プロセスへ集約する。この文書のサーバ部分は今回実装、TIP部分はWindows PCでの実装・検証計画。
+1プロセスへ集約する。サーバ部分はLinuxで検証済み。TIP部分はコードを反映したが、Windowsでのビルド・実機検証は未実施。
 コミットは作成しない。辞書・FSM・探索・Mozc/AJIMEEの評価経路は変更しない。
 
 ## 読んだ現行実装と差分
@@ -87,7 +87,7 @@ scorerのキャッシュはcontextをキーにして共有するが、各変換�
 フォーカス移動・composition外部終了では `reset`、切断ではセッション破棄により上文を消す。
 resetは既存どおりdirectと学習undoを保持する。
 
-## TIPのPC側変更リスト（今回未実装）
+## TIP側変更リスト（コード反映済み、Windows未検証）
 
 対象の中心は `src/tip/oyayubi_tip.cpp`。
 
@@ -137,7 +137,7 @@ resetは既存どおりdirectと学習undoを保持する。
    `python -m oyayubi.ime.client` で常駐起動・認証を確認する。
    2回目で同じPID・endpointを使用し、辞書が増えないことをタスクマネージャーで見る。
    runtime ACLとWindowsのロック・detachもこの段階で確認する。サーバは管理者として起動しない。
-2. 上記TIP差分を実装してから、VS開発者環境でビルドする。
+2. 上記TIP差分をレビューし、VS開発者環境でビルドする。
 
    ```powershell
    cd src\tip
@@ -172,7 +172,7 @@ resetは既存どおりdirectと学習undoを保持する。
 | 常駐の起動主体 | 最初のTIPのワーカー。ログオン自動起動は後日、初日は手動client起動も使用可 |
 | 寿命 | idle終了なし、ユーザーのログオフ／明示終了まで維持 |
 | モードの範囲 | 接続ごと。focus resetでは保持、再接続時にTIPの記憶をset_directで復元 |
-| 設定ファイル | ユーザーディレクトリ内のJSON。toggleキーはAlt+VK_OEM_3、サーバと同じruntime既定を共有。TIP側読込はPCで実装 |
+| 設定ファイル | `%USERPROFILE%\\.oyayubi-ime\\tip.json`の読込を実装済み。toggleキーはAlt+VK_OEM_3、サーバと同じruntime既定を共有。変更後はTIPを再Activate |
 | Windows ACL | ユーザープロファイルの継承ACLを使用。別ユーザーの読取り不可を実機で確認、共有ディレクトリは使わない |
 | LM／周辺本文 | LMオフ。オンでも接続内の確定上文のみ。TSFでの周辺本文取得は当面しない |
 | 遅い変換 | 既存150msをキー応答上限にし、超過時はfail-open。LMオンの予算・非同期UIは別途実測して決める |
@@ -215,3 +215,80 @@ Windowsの実画面での点滅確認はPC当日に行う。
 
 Mozc/AJIMEEの全件評価は再実行していない。評価ローダー・辞書・学習コスト・FSM・探索と
 既存トランスクリプトの期待値は変更せず、評価経路の単体テストと変換回帰ゲートを維持した。
+
+
+### TIPコード反映（2026-11-11、Windows未検証）
+
+開始HEAD `00ece0c`、同じブランチ上の未コミット差分。上の変更リスト1〜9をコードへ反映した。
+Windowsビルド・リンク・TSF実機スモークの完了を意味しない。Pythonの辞書・FSM・セッション・常駐実装は変更していない。
+
+| ファイル | 反映内容 |
+| --- | --- |
+| `src/tip/oyayubi_tip.cpp` | Winsock認証接続、起動ワーカー、detach/NUL、250ms接続・150msキー期限、再接続とdirect復元。トグル／返信状態による消費判定、modsとdown/up対応、focus reset、入力スコープ除外、display attribute provider、文節のUTF-16範囲、キャレットと候補位置、本文ログの明示設定 |
+| `src/tip/tip_json.h` | endpoint・設定・返信の構造化JSONパーサ。quote、改行等のescapeとUnicode／surrogate pairの復元。外部依存なし |
+| `src/tip/CMakeLists.txt` | `ws2_32`等のリンク、新規ヘッダとテストを登録。`TIP_BUILD_JSON_TESTS`は既定ON、Linuxではテストだけビルド。MSVC runtime設定をターゲット生成前へ移し、`/utf-8`とWindows 10/11対象のAPI宣言マクロを指定 |
+| `src/tip/tests/tip_json_test.cpp` | endpoint／返信、偽の入れ子フィールド、escape／サロゲート、壊れたJSON、64-bit整数境界・範囲超過を検査。LinuxのCMake Releaseビルド・CTest成功 |
+| `src/tip/register_admin.py` / `README.md` | 旧SECUREMODE削除がDLL登録で行われる旨、設定場所と既定値、常駐の寿命・ログ・実機検証手順 |
+
+ワーカーは接続の状態・世代だけを公開し、COM／TSFには触れない。タイマーとキーの送受信は
+同じ接続上で一列にする。失敗接続の応答は流用せず、キーを再送しない。
+編集はフォーカスと接続の世代を確認し、旧文脈の編集を無効化する。
+同期編集が非同期の旧composition削除を追い越す場合も、新しい入力の前に同じcontextの旧compositionを削除する。
+SetText直後のGetTextExtが失敗した場合は、後続の読み取り専用編集で位置取得を再試行する。
+GetTextExtが不可視を示す空矩形を返す場合と、active viewを取得できない場合も候補を隠す。
+未確定文の新規挿入は範囲照会→StartComposition受理→SetTextの順とし、
+アプリ側のcomposition拒否（S_OKかつnull）で本文が残ることを防ぐ。
+非同期編集の失敗は状態を無効化し、次のタイマー／実キーでresetする。
+設定の詳細と任意のJSON検査ビルド手順は`src/tip/README.md`参照。
+
+### TIP監査と仕上げ（2026-11-11）
+
+変更リストとの照合結果（いずれもコード上の充足。Windowsの動作合格は未判定）:
+
+| 項目 | 照合箇所・結果 |
+| --- | --- |
+| 1 SECUREMODE | `kCats`から除去済み。`RegisterCategories`の旧カテゴリUnregisterを維持 |
+| 2 常駐接続 | `Server::Start/Run/Connect/SpawnResident/Send/Stop`。ワーカー起動、250ms接続、150msキー、直列化、切断再接続、世代、direct復元、killなし。`ws2_32`リンク済み |
+| 3 JSON／返信 | `tip_json.h`、`ParseReply/NoteReply`。direct・pass_through・文節・focus・page・timerを構造で読取り、escape／Unicodeを復元。今回整数範囲超過も修正 |
+| 4 トグル | `TipConfig/ToggleKey/OnKeyDown/OnKeyUp/ToggleImpl`。既定Altのみ、設定変更、初回downのみ反転、repeat／up対応、未確定破棄 |
+| 5 キー消費 | `WantVk/CanEat/HandleKeyImpl/OnTestKey*/OnKey*`。OnTestは照会のみ、実キーで一度送信、返信状態と送信前の役割で判定。Shiftをmodsへ載せ、消費downのみupを対応。IPC失敗は素通し |
+| 6 編集／表示 | `AttributeInfo/AttributeEnum/EditSession/Utf16Offset/PositionCandidate`。3属性、コードポイント→UTF-16、末尾選択、GetTextExt、commit＋次composition。今回composition拒否・非同期編集失敗・不可視候補を修正 |
+| 7 入力スコープ | `PasswordScopeWithCookie/ScopeSession/KeyboardDisabled/Eligible`。read cookieでGetAppProperty→GetValue→GetInputScopes、password 2種でトグルも除外。CoTaskMemFree、周辺本文取得なし |
+| 8 フォーカス | 両OnSetFocus、push/pop、外部composition終了→`ResetFocus/ClearLocal`。サーバreset、候補・timer・down解除、旧編集無効化と同じcontextの旧composition削除 |
+| 9 ログ／登録説明 | `TipConfig::log_text`は既定false、本文ログは設定時のみ。生JSONログなし、tokenログなし、登録スクリプトとREADMEも更新済み |
+
+今回追加・修正したのは、上記の整数境界検査、composition開始拒否と非同期編集失敗の扱い、
+候補位置がない場合の非表示、`cstdarg/cwchar/process.h`の明示include、CMakeの登録・リンク・runtime・文字コード・対象OS設定、
+既定ONのC++テストとLinux用ビルド経路、設定読込の古い記述と検証記録。
+CRTを使うワーカーを`_beginthreadex`で起動し、`/MT`と両立しない`DisableThreadLibraryCalls`も除去した。
+参照: [CRTのスレッド作成](https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/beginthread-beginthreadex)、
+[DLL thread通知の制約](https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-disablethreadlibrarycalls)。
+JSONテストは変更前にも直接g++で成功を確認し、変更後はCMake経由のReleaseビルド・CTestで1/1 PASS。
+登録スクリプトはAST構文検査、C++は括弧・include・シンボルと公式API宣言を点検し、`git diff --check`も成功。
+Python全158件OK（従来の実LM2件skip）、変換回帰5/5 PASSを再確認した。
+socket制限下の初回実行ではTCPテスト12件がPermissionErrorになったため、全158件の成功は制限外での再実行結果。
+`oyayubi/`配下は変更していない。コミットも作成していない。
+
+Windows DLLのコンパイル・リンクとTSF実機試験はこの環境では実行できず、未検証。
+LinuxのC++実行はJSON部分だけであり、TIP本体のコンパイル成功を示すものではない。
+APIはMicrosoft LearnおよびMicrosoft公開SDKヘッダと照合した。
+参照: [入力スコープのSDK宣言](https://raw.githubusercontent.com/microsoft/win32metadata/main/generation/WinSDK/RecompiledIdlHeaders/um/InputScope.h)、
+[GetAppProperty](https://learn.microsoft.com/en-us/windows/win32/api/msctf/nf-msctf-itfcontext-getappproperty)、
+[RequestEditSession](https://learn.microsoft.com/en-us/windows/win32/api/msctf/nf-msctf-itfcontext-requesteditsession)、
+[StartComposition](https://learn.microsoft.com/en-us/windows/win32/api/msctf/nf-msctf-itfcontextcomposition-startcomposition)、
+[GetTextExt](https://learn.microsoft.com/en-us/windows/win32/api/msctf/nf-msctf-itfcontextview-gettextext)、
+[Winsock select](https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-select)、
+[継承ハンドル指定](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-updateprocthreadattribute)。
+
+PCで特に確認する箇所:
+
+- MSVC＋Windows 10/11 SDK。`inputscope.h`の`IS_NUMERIC_PASSWORD`、`ITfDisplayAttributeProvider`一式とGUID、`ws2_32`のリンク。SEHのラッパーへデストラクタ付きローカル変数を入れない（C2712回避）。
+- `WSAStartup`、非ブロッキング`connect`／`select`／部分送受信、切断時と150ms超過時のfail-open。
+- `STARTUPINFOEXW`、`PROC_THREAD_ATTRIBUTE_HANDLE_LIST`によるNULのみの継承、
+  `DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP`、アプリ終了後の常駐維持。
+- `GetAppProperty(GUID_PROP_INPUTSCOPE)`の読み取りcookie、パスワード／数値パスワード欄、
+  OnTestが副作用を持たず実キーだけを一度送ること。
+- `RegisterGUID`と`GUID_PROP_ATTRIBUTE`、`ShiftStart/ShiftEnd`のUTF-16範囲、サロゲートペア、
+  `SetSelection`と`GetTextExt`、layout更新後の候補位置、文節／ページ移動。
+- SYNC拒否時のASYNC順序と世代無効化、未確定／変換中の欄・アプリ切替、
+  commit＋次composition、トグルrepeat／修飾キー順序、サーバ再起動時のdirect復元。

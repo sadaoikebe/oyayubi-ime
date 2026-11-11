@@ -2,6 +2,7 @@
 
 Do not hand-write CTF\\TIP language profiles. That plus the old
 ITfInputProcessorProfiles::Register pair made Win11 attach the wrong engine.
+DllRegisterServer also removes the legacy SECUREMODE category; no secure desktop support.
 """
 
 from __future__ import annotations
@@ -47,6 +48,8 @@ def main() -> None:
 
     ole32 = ctypes.OleDLL("ole32")
     ole32.CoInitialize(None)
+    # Category cleanup belongs to the DLL, including stale SECUREMODE removal.
+    # Registration must not start the resident server (this process is elevated).
     d = ctypes.WinDLL(dll)
     hr = d.DllRegisterServer() & 0xFFFFFFFF
     print(f"DllRegisterServer 0x{hr:08X}  dll={dll}")

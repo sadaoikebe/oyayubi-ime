@@ -10,17 +10,28 @@
 //   - SEH around key/edit so a crash does not take TextInputHost with it
 // Never block ActivateEx. Win11 TextInputHost is shared.
 
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <windows.h>
 #include <oleauto.h>
 #include <initguid.h>
 #include <msctf.h>
+#include <inputscope.h>
+#include <memory>
+#include <algorithm>
+#include "tip_json.h"
+#include <cstdarg>
 #include <cstdio>
+#include <climits>
+#include <cwchar>
+#include <process.h>
 #include <string>
 #include <vector>
 
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "oleaut32.lib")
 #pragma comment(lib, "uuid.lib")
+#pragma comment(lib, "ws2_32.lib")
 
 // {A7C4E201-0B3A-4F11-9E61-0C1A0B7E0A01}
 static const CLSID CLSID_OyayubiTip = {
@@ -31,7 +42,7 @@ static const GUID GUID_OyayubiProfile = {
 
 static const GUID kCats[] = {
     GUID_TFCAT_TIP_KEYBOARD,
-    GUID_TFCAT_TIPCAP_SECUREMODE,
+    GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER,
     GUID_TFCAT_TIPCAP_COMLESS,
     GUID_TFCAT_TIPCAP_INPUTMODECOMPARTMENT,
     GUID_TFCAT_TIPCAP_UIELEMENTENABLED,
@@ -43,8 +54,6 @@ static LONG g_locks = 0;
 static HINSTANCE g_hinst = nullptr;
 
 static const DWORD kKeyBudgetMs = 150;  // hard cap on the TSF key thread
-static const DWORD kPeekMs = 0;         // timer / ready pump: never sleep
-static const int kMaxSoftFails = 8;     // Mozc keeps the server; only die if wedged
 
 static void Log(const wchar_t* fmt, ...) {
     wchar_t path[MAX_PATH];
@@ -89,28 +98,32 @@ static bool ModHeld() {
     return false;
 }
 
-// NICOLA keys. Edit keys only while composing (SampleIME IsVirtualKeyNeed).
-static bool WantVk(UINT vk, bool composing, bool converted) {
-    if (ModHeld()) return false;
-    if (vk >= 'A' && vk <= 'Z') return true;
-    if (vk == VK_SPACE) return true;
-    if (vk == VK_RETURN || vk == VK_BACK || vk == VK_ESCAPE) return composing;
-    if (converted) {
-        if (vk >= '1' && vk <= '9') return true;
-        if (vk == VK_UP || vk == VK_DOWN) return true;
-    }
+// Match session.py and chord/keys.py; modifiers themselves stay with the app.
+static bool CharacterVk(UINT vk) {
+    if ((vk >= 'A' && vk <= 'Z') || (vk >= '0' && vk <= '9')) return true;
     switch (vk) {
-        case VK_OEM_1:
-        case VK_OEM_COMMA:
-        case VK_OEM_PERIOD:
-        case VK_OEM_2:
-            return true;
-        default:
-            return false;
+        case VK_OEM_1: case VK_OEM_PLUS: case VK_OEM_COMMA: case VK_OEM_MINUS:
+        case VK_OEM_PERIOD: case VK_OEM_2: case VK_OEM_3: case VK_OEM_4:
+        case VK_OEM_5: case VK_OEM_6: case VK_OEM_7: return true;
+        default: return false;
     }
 }
+static bool WantVk(UINT vk, bool composing, bool converted, bool candidates) {
+    if (ModHeld()) return false;
+    bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+    if (CharacterVk(vk) || vk == VK_SPACE) return true;
+    if (vk == VK_RETURN || vk == VK_BACK || vk == VK_ESCAPE) return composing;
+    if (!shift && vk == VK_F7) return true;
+    if (!shift && vk == VK_F6) return converted && candidates;
+    if (converted) {
+        if (vk == VK_LEFT || vk == VK_RIGHT) return true;
+        if (!shift && (vk == VK_UP || vk == VK_DOWN || vk == VK_PRIOR || vk == VK_NEXT)) return true;
+    }
+    return false;
+}
 
-static bool KeyboardDisabled(ITfThreadMgr* tm) {
+static bool PasswordScope(ITfContext* ctx, TfClientId client);
+static bool KeyboardDisabled(ITfThreadMgr* tm, TfClientId client, bool check_scope = true) {
     if (!tm) return true;
     ITfDocumentMgr* dm = nullptr;
     if (FAILED(tm->GetFocus(&dm)) || !dm) return true;
@@ -140,6 +153,7 @@ static bool KeyboardDisabled(ITfThreadMgr* tm) {
         }
         cm->Release();
     }
+    if (!disabled && check_scope) disabled = PasswordScope(ctx, client);
     ctx->Release();
     dm->Release();
     return disabled;
@@ -191,7 +205,7 @@ static std::wstring DllDir() {
 
 static std::wstring RepoDir() {
     std::wstring dir = DllDir();
-    // dist\NicolaIME2.dll → repo root
+    // dist\NicolaIME3.dll → repo root
     size_t slash = dir.find_last_of(L"\\/");
     if (slash != std::wstring::npos) {
         std::wstring parent = dir.substr(0, slash);
@@ -216,368 +230,742 @@ static bool FindPython(wchar_t* out, size_t cap) {
     return false;
 }
 
+struct SegmentReply {
+    int display_start = 0, display_end = 0;
+};
 struct ServerReply {
-    std::wstring composition;
-    std::wstring commit;
-    bool converted = false;
-    int n_tokens = 0;
-    bool has_timer = false;
+    std::wstring composition, commit;
+    bool direct = false, pass_through = false, converted = false;
+    int n_tokens = 0, focus = -1, page = 0;
+    bool has_next_page = false, has_timer = false;
     ULONGLONG timer = 0;
     std::vector<std::wstring> candidates;
+    std::vector<SegmentReply> segments;
     int cand_index = 0;
 };
 
-static std::string GrabJsonString(const std::string& s, const char* key) {
-    std::string k = std::string("\"") + key + "\":";
-    auto p = s.find(k);
-    if (p == std::string::npos) return {};
-    p += k.size();
-    while (p < s.size() && (s[p] == ' ')) p++;
-    if (p < s.size() && s[p] == '"') {
-        p++;
-        std::string o;
-        for (; p < s.size() && s[p] != '"'; ++p) {
-            if (s[p] == '\\' && p + 1 < s.size()) {
-                ++p;
-                o.push_back(s[p]);
-            } else {
-                o.push_back(s[p]);
-            }
-        }
-        return o;
+static bool JsonInt(const tip_json::Value& v, const char* key, int& n) {
+    long long value;
+    if (!v.Get(key).Int(value) || value < INT_MIN || value > INT_MAX) return false;
+    n = (int)value;
+    return true;
+}
+static bool JsonBool(const tip_json::Value& v, const char* key, bool& b) {
+    const auto& x = v.Get(key);
+    if (x.kind != tip_json::Value::Boolean) return false;
+    b = x.boolean;
+    return true;
+}
+static bool ParseReply(const std::string& s, ServerReply& r) {
+    tip_json::Value v;
+    if (!tip_json::Parser(s).Parse(v) || v.kind != tip_json::Value::Object ||
+        v.Get("composition").kind != tip_json::Value::String ||
+        v.Get("commit").kind != tip_json::Value::String ||
+        !JsonBool(v, "direct", r.direct) || !JsonBool(v, "pass_through", r.pass_through) ||
+        !JsonBool(v, "converted", r.converted) || !JsonInt(v, "n_tokens", r.n_tokens) ||
+        !JsonInt(v, "focus", r.focus) || !JsonInt(v, "candidate_page", r.page) ||
+        !JsonInt(v, "cand_index", r.cand_index) ||
+        !JsonBool(v, "has_next_page", r.has_next_page)) return false;
+    r.composition = Utf8ToWide(v.Get("composition").text);
+    r.commit = Utf8ToWide(v.Get("commit").text);
+    const auto& timer = v.Get("timer");
+    if (timer.kind != tip_json::Value::Null) {
+        long long n;
+        if (!timer.Int(n) || n < 0) return false;
+        r.has_timer = true; r.timer = (ULONGLONG)n;
     }
-    return {};
+    const auto& candidates = v.Get("candidates");
+    const auto& segments = v.Get("segments");
+    if (candidates.kind != tip_json::Value::Array || segments.kind != tip_json::Value::Array)
+        return false;
+    for (const auto& c : candidates.array) {
+        if (c.kind != tip_json::Value::String) return false;
+        r.candidates.push_back(Utf8ToWide(c.text));
+    }
+    for (const auto& seg : segments.array) {
+        SegmentReply item;
+        if (!JsonInt(seg, "display_start", item.display_start) ||
+            !JsonInt(seg, "display_end", item.display_end) ||
+            item.display_start < 0 || item.display_end < item.display_start) return false;
+        r.segments.push_back(item);
+    }
+    return true;
 }
 
-static bool GrabJsonInt(const std::string& s, const char* key, long long& out) {
-    std::string k = std::string("\"") + key + "\":";
-    auto p = s.find(k);
-    if (p == std::string::npos) return false;
-    p += k.size();
-    while (p < s.size() && s[p] == ' ') p++;
-    if (p + 3 < s.size() && s.compare(p, 4, "null") == 0) return false;
-    char* end = nullptr;
-    out = _strtoi64(s.c_str() + p, &end, 10);
-    return end != s.c_str() + p;
+static bool ReadJsonFile(const std::wstring& path, tip_json::Value& value) {
+    FILE* f = nullptr;
+    if (_wfopen_s(&f, path.c_str(), L"rb") || !f) return false;
+    std::string bytes;
+    char buf[4096];
+    size_t n;
+    while ((n = fread(buf, 1, sizeof(buf), f)) != 0) {
+        bytes.append(buf, n);
+        if (bytes.size() > 1024 * 1024) { fclose(f); return false; }
+    }
+    bool good = !ferror(f);
+    fclose(f);
+    return good && tip_json::Parser(bytes).Parse(value) && value.kind == tip_json::Value::Object;
 }
 
-static std::vector<std::wstring> GrabJsonStringList(const std::string& s, const char* key) {
-    std::string k = std::string("\"") + key + "\":";
-    auto p = s.find(k);
-    std::vector<std::wstring> out;
-    if (p == std::string::npos) return out;
-    p += k.size();
-    while (p < s.size() && s[p] != '[') p++;
-    if (p >= s.size()) return out;
-    p++;
-    while (p < s.size() && s[p] != ']') {
-        while (p < s.size() && (s[p] == ' ' || s[p] == ',')) p++;
-        if (p >= s.size() || s[p] != '"') break;
-        p++;
-        std::string o;
-        for (; p < s.size() && s[p] != '"'; ++p) {
-            if (s[p] == '\\' && p + 1 < s.size()) {
-                ++p;
-                o.push_back(s[p]);
-            } else {
-                o.push_back(s[p]);
-            }
-        }
-        if (p < s.size()) p++;
-        out.push_back(Utf8ToWide(o));
-    }
-    return out;
+static std::wstring Environment(const wchar_t* name) {
+    DWORD size = GetEnvironmentVariableW(name, nullptr, 0);
+    if (!size) return {};
+    std::wstring value(size, 0);
+    DWORD copied = GetEnvironmentVariableW(name, &value[0], size);
+    if (!copied || copied >= size) return {};
+    value.resize(copied);
+    return value;
 }
 
-static ServerReply ParseReply(const std::string& s) {
-    ServerReply r;
-    r.composition = Utf8ToWide(GrabJsonString(s, "composition"));
-    r.commit = Utf8ToWide(GrabJsonString(s, "commit"));
-    r.converted = s.find("\"converted\": true") != std::string::npos ||
-                  s.find("\"converted\":true") != std::string::npos;
-    long long n = 0;
-    if (GrabJsonInt(s, "n_tokens", n)) r.n_tokens = (int)n;
-    if (GrabJsonInt(s, "timer", n) && n > 0) {
-        r.has_timer = true;
-        r.timer = (ULONGLONG)n;
-    }
-    if (GrabJsonInt(s, "cand_index", n)) r.cand_index = (int)n;
-    r.candidates = GrabJsonStringList(s, "candidates");
-    return r;
-}
-
-// --- Python server via anonymous pipes. Never sleep on the TSF thread. ---
-struct Server {
-    HANDLE in_w = nullptr, out_r = nullptr;
-    PROCESS_INFORMATION pi{};
-    bool spawned = false;
-    bool ok = false;
-    int soft_fails = 0;
-    std::string acc;
-
-    bool Alive() const {
-        if (!spawned || !pi.hProcess) return false;
-        return WaitForSingleObject(pi.hProcess, 0) == WAIT_TIMEOUT;
-    }
-
-    void Die(const wchar_t* why) {
-        Log(L"server die: %s", why);
-        ok = false;
-        spawned = false;
-        if (pi.hProcess) {
-            TerminateProcess(pi.hProcess, 1);
-            CloseHandle(pi.hProcess);
-            CloseHandle(pi.hThread);
-            pi.hProcess = pi.hThread = nullptr;
-        }
-        if (in_w) {
-            CloseHandle(in_w);
-            in_w = nullptr;
-        }
-        if (out_r) {
-            CloseHandle(out_r);
-            out_r = nullptr;
-        }
-        acc.clear();
-        soft_fails = 0;
-    }
-
-    // ActivateEx: spawn only. Do not wait for the dictionary.
-    bool Spawn() {
-        if (spawned && Alive()) return true;
-        Stop();
-        SECURITY_ATTRIBUTES sa{sizeof(sa), nullptr, TRUE};
-        HANDLE in_r = nullptr, out_w = nullptr;
-        if (!CreatePipe(&in_r, &in_w, &sa, 0)) return false;
-        if (!CreatePipe(&out_r, &out_w, &sa, 0)) {
-            CloseHandle(in_r);
-            CloseHandle(in_w);
-            in_w = nullptr;
-            return false;
-        }
-        SetHandleInformation(in_w, HANDLE_FLAG_INHERIT, 0);
-        SetHandleInformation(out_r, HANDLE_FLAG_INHERIT, 0);
-
-        STARTUPINFOW si{};
-        si.cb = sizeof(si);
-        si.dwFlags = STARTF_USESTDHANDLES;
-        si.hStdInput = in_r;
-        si.hStdOutput = out_w;
-        wchar_t errlog[MAX_PATH];
-        GetTempPathW(MAX_PATH, errlog);
-        wcscat_s(errlog, L"oyayubi_server.err.log");
-        SECURITY_ATTRIBUTES sa2{sizeof(sa2), nullptr, TRUE};
-        HANDLE err = CreateFileW(errlog, GENERIC_WRITE, FILE_SHARE_READ, &sa2, CREATE_ALWAYS,
-                                 FILE_ATTRIBUTE_NORMAL, nullptr);
-        si.hStdError = err ? err : GetStdHandle(STD_ERROR_HANDLE);
-
-        wchar_t py[MAX_PATH];
-        if (!FindPython(py, MAX_PATH)) {
-            Log(L"python.exe not found");
-            CloseHandle(in_r);
-            CloseHandle(out_w);
-            if (err) CloseHandle(err);
-            CloseHandle(in_w);
-            CloseHandle(out_r);
-            in_w = out_r = nullptr;
-            return false;
-        }
-        wchar_t cmd[1024];
-        swprintf_s(cmd, L"\"%s\" -u -m oyayubi.ime.server", py);
-        std::wstring cwd = RepoDir();
-        SetEnvironmentVariableW(L"PYTHONIOENCODING", L"utf-8");
-        SetEnvironmentVariableW(L"PYTHONUTF8", L"1");
-
-        BOOL created = CreateProcessW(nullptr, cmd, nullptr, nullptr, TRUE, CREATE_NO_WINDOW,
-                                      nullptr, cwd.c_str(), &si, &pi);
-        CloseHandle(in_r);
-        CloseHandle(out_w);
-        if (err) CloseHandle(err);
-        if (!created) {
-            Log(L"CreateProcess failed %lu", GetLastError());
-            CloseHandle(in_w);
-            CloseHandle(out_r);
-            in_w = out_r = nullptr;
-            return false;
-        }
-        spawned = true;
-        ok = false;
-        soft_fails = 0;
-        acc.clear();
-        Log(L"server spawned pid=%lu cwd=%s", pi.dwProcessId, cwd.c_str());
-        return true;
-    }
-
-    void Stop() {
-        if (in_w) {
-            const char q[] = "{\"op\":\"quit\"}\n";
-            DWORD w = 0;
-            WriteFile(in_w, q, sizeof(q) - 1, &w, nullptr);
-        }
-        if (pi.hProcess) {
-            if (WaitForSingleObject(pi.hProcess, 500) == WAIT_TIMEOUT)
-                TerminateProcess(pi.hProcess, 1);
-            CloseHandle(pi.hProcess);
-            CloseHandle(pi.hThread);
-            pi.hProcess = pi.hThread = nullptr;
-        }
-        if (in_w) CloseHandle(in_w);
-        if (out_r) CloseHandle(out_r);
-        in_w = out_r = nullptr;
-        spawned = false;
-        ok = false;
-        soft_fails = 0;
-        acc.clear();
-    }
-
-    // budget_ms==0: one non-blocking peek. No Sleep.
-    bool ReadLine(std::string& out, DWORD budget_ms) {
-        out.clear();
-        ULONGLONG start = GetTickCount64();
-        for (;;) {
-            auto nl = acc.find('\n');
-            if (nl != std::string::npos) {
-                out = acc.substr(0, nl);
-                if (!out.empty() && out.back() == '\r') out.pop_back();
-                acc.erase(0, nl + 1);
-                return true;
+struct TipConfig {
+    std::wstring runtime_dir;
+    UINT toggle_vk = VK_OEM_3;
+    unsigned toggle_mods = 4;  // shift=1, ctrl=2, alt=4, win=8
+    bool log_text = false;
+    void Load() {
+        // Match pathlib.Path.home()/ntpath.expanduser on Windows.
+        std::wstring profile = Environment(L"USERPROFILE");
+        if (profile.empty()) profile = Environment(L"HOMEDRIVE") + Environment(L"HOMEPATH");
+        if (profile.empty()) return;
+        runtime_dir = profile + L"\\.oyayubi-ime";
+        tip_json::Value v;
+        if (!ReadJsonFile(runtime_dir + L"\\tip.json", v)) return;
+        int vk;
+        if (JsonInt(v, "toggle_vk", vk) && vk > 0 && vk < 256) toggle_vk = (UINT)vk;
+        const auto& mods = v.Get("toggle_mods");
+        if (mods.kind == tip_json::Value::Array) {
+            unsigned mask = 0; bool valid = true;
+            for (const auto& m : mods.array) {
+                if (m.kind != tip_json::Value::String) { valid = false; break; }
+                if (m.text == "shift") mask |= 1;
+                else if (m.text == "ctrl") mask |= 2;
+                else if (m.text == "alt") mask |= 4;
+                else if (m.text == "win") mask |= 8;
+                else { valid = false; break; }
             }
-            if (!out_r) return false;
-            DWORD avail = 0;
-            if (!PeekNamedPipe(out_r, nullptr, 0, nullptr, &avail, nullptr)) return false;
-            if (avail == 0) {
-                if (budget_ms == 0) return false;
-                if (GetTickCount64() - start > budget_ms) return false;
-                Sleep(1);
-                continue;
-            }
-            char buf[512];
-            DWORD n = 0;
-            DWORD chunk = avail > sizeof(buf) ? (DWORD)sizeof(buf) : avail;
-            if (!ReadFile(out_r, buf, chunk, &n, nullptr) || n == 0) return false;
-            acc.append(buf, buf + n);
+            if (valid) toggle_mods = mask;
         }
-    }
-
-    void PumpReady() {
-        if (ok) return;
-        if (!spawned) return;
-        if (!Alive()) {
-            Die(L"exited before ready");
-            return;
-        }
-        std::string line;
-        while (ReadLine(line, kPeekMs)) {
-            Log(L"server stdout: %hs", line.c_str());
-            if (line.find("ready") != std::string::npos ||
-                line.find("\"ok\": true") != std::string::npos ||
-                line.find("\"ok\":true") != std::string::npos) {
-                ok = true;
-                Log(L"server ready");
-                return;
-            }
-        }
-    }
-
-    void DrainStale() {
-        std::string junk;
-        while (ReadLine(junk, kPeekMs)) Log(L"drain stale: %hs", junk.c_str());
-    }
-
-    bool Send(const std::string& json, std::string& reply, DWORD budget_ms) {
-        reply.clear();
-        if (!ok || !Alive() || !in_w) return false;
-        DrainStale();
-        std::string line = json + "\n";
-        DWORD w = 0;
-        if (!WriteFile(in_w, line.data(), (DWORD)line.size(), &w, nullptr)) {
-            Die(L"write failed");
-            return false;
-        }
-        if (!ReadLine(reply, budget_ms)) {
-            if (!Alive()) {
-                Die(L"died mid-send");
-                return false;
-            }
-            ++soft_fails;
-            Log(L"reply timeout (soft %d) — keep server (Mozc)", soft_fails);
-            if (soft_fails >= kMaxSoftFails) Die(L"too many timeouts");
-            return false;
-        }
-        soft_fails = 0;
-        return true;
+        JsonBool(v, "log_text", log_text);
     }
 };
 
-class EditSession : public ITfEditSession {
-public:
-    LONG refs_ = 1;
-    ITfContext* ctx_;
-    ITfComposition** comp_;
-    ITfCompositionSink* sink_;
-    std::wstring text_;
-    bool commit_;
-
-    EditSession(ITfContext* c, ITfComposition** comp, ITfCompositionSink* sink, std::wstring t,
-                bool commit)
-        : ctx_(c), comp_(comp), sink_(sink), text_(std::move(t)), commit_(commit) {
-        ctx_->AddRef();
+static unsigned HeldMods() {
+    unsigned mods = 0;
+    if (GetKeyState(VK_SHIFT) & 0x8000) mods |= 1;
+    if (GetKeyState(VK_CONTROL) & 0x8000) mods |= 2;
+    if (GetKeyState(VK_MENU) & 0x8000) mods |= 4;
+    if ((GetKeyState(VK_LWIN) | GetKeyState(VK_RWIN)) & 0x8000) mods |= 8;
+    return mods;
+}
+static std::string ModsJson(unsigned mask) {
+    std::string out = "[";
+    const char* names[] = {"shift", "ctrl", "alt", "win"};
+    for (unsigned i = 0; i < 4; ++i) if (mask & (1u << i)) {
+        if (out.size() > 1) out += ',';
+        out += tip_json::Quote(names[i]);
     }
-    ~EditSession() { ctx_->Release(); }
+    return out + ']';
+}
 
-    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** pp) override {
-        if (!pp) return E_POINTER;
-        if (riid == IID_IUnknown || riid == IID_ITfEditSession) {
-            *pp = static_cast<ITfEditSession*>(this);
-            AddRef();
-            return S_OK;
+// Only the connector runs on the worker. TSF and timer requests share one
+// serialized stream; a failed/ambiguous exchange always drops the connection.
+struct Server {
+    CRITICAL_SECTION lock;
+    HANDLE stop_event = nullptr, worker = nullptr;
+    SOCKET connection = INVALID_SOCKET;
+    volatile LONG ready = 0, generation = 0, direct = 0;
+    bool wsa = false, busy = false;
+    // Loaded once by the worker before publishing ready. Immutable thereafter.
+    TipConfig settings;
+    std::wstring runtime_dir;
+    Server() { InitializeCriticalSection(&lock); }
+    ~Server() { Stop(); DeleteCriticalSection(&lock); }
+    bool Alive() { return InterlockedCompareExchange(&ready, 0, 0) != 0; }
+    LONG Generation() { return InterlockedCompareExchange(&generation, 0, 0); }
+    void RememberDirect(bool value) { InterlockedExchange(&direct, value ? 1 : 0); }
+    bool Stopping() { return WaitForSingleObject(stop_event, 0) == WAIT_OBJECT_0; }
+
+    static bool WaitSocket(SOCKET s, bool writing, ULONGLONG deadline) {
+        ULONGLONG now = GetTickCount64();
+        if (now >= deadline) return false;
+        DWORD ms = (DWORD)(deadline - now);
+        fd_set fds, errors; FD_ZERO(&fds); FD_SET(s, &fds);
+        FD_ZERO(&errors); FD_SET(s, &errors);
+        timeval tv{}; tv.tv_sec = ms / 1000; tv.tv_usec = (ms % 1000) * 1000;
+        int result = select(0, writing ? nullptr : &fds, writing ? &fds : nullptr, &errors, &tv);
+        return result > 0 && !FD_ISSET(s, &errors);
+    }
+    static bool Exchange(SOCKET s, const std::string& json, std::string& reply,
+                         ULONGLONG deadline) {
+        std::string line = json + '\n';
+        size_t sent = 0;
+        while (sent < line.size()) {
+            if (!WaitSocket(s, true, deadline)) return false;
+            int n = send(s, line.data() + sent, (int)(line.size() - sent), 0);
+            if (n == SOCKET_ERROR && WSAGetLastError() == WSAEWOULDBLOCK) continue;
+            if (n <= 0) return false;
+            sent += n;
         }
+        reply.clear();
+        // One outstanding request. Reading only through its newline means a
+        // late response can never be drained and mistaken for another reply.
+        while (reply.size() < 1024 * 1024) {
+            if (!WaitSocket(s, false, deadline)) return false;
+            char buf[4096];
+            int n = recv(s, buf, sizeof(buf), 0);
+            if (n == SOCKET_ERROR && WSAGetLastError() == WSAEWOULDBLOCK) continue;
+            if (n <= 0) return false;
+            reply.append(buf, n);
+            size_t nl = reply.find('\n');
+            if (nl != std::string::npos) {
+                if (nl != reply.size() - 1) return false;
+                reply.resize(nl);
+                return true;
+            }
+        }
+        return false;
+    }
+    SOCKET Connect(ULONGLONG startup_deadline) {
+        tip_json::Value endpoint;
+        int port = 0, version = 0;
+        if (!ReadJsonFile(runtime_dir + L"\\endpoint.json", endpoint) ||
+            !JsonInt(endpoint, "version", version) || version != 1 ||
+            !JsonInt(endpoint, "port", port) || port < 1 || port > 65535 ||
+            endpoint.Get("token").kind != tip_json::Value::String) return INVALID_SOCKET;
+        ULONGLONG deadline = (std::min)(GetTickCount64() + 250, startup_deadline);
+        SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if (s == INVALID_SOCKET) return s;
+        // Neither this socket nor an active resident connection is inherited by Python.
+        SetHandleInformation((HANDLE)s, HANDLE_FLAG_INHERIT, 0);
+        u_long nonblocking = 1;
+        if (ioctlsocket(s, FIONBIO, &nonblocking) == SOCKET_ERROR) {
+            closesocket(s); return INVALID_SOCKET;
+        }
+        sockaddr_in addr{};
+        addr.sin_family = AF_INET; addr.sin_port = htons((u_short)port);
+        addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        int result = connect(s, (sockaddr*)&addr, sizeof(addr));
+        if (result == SOCKET_ERROR) {
+            if (WSAGetLastError() != WSAEWOULDBLOCK || !WaitSocket(s, true, deadline)) {
+                closesocket(s); return INVALID_SOCKET;
+            }
+            int error = 0, size = sizeof(error);
+            if (getsockopt(s, SOL_SOCKET, SO_ERROR, (char*)&error, &size) == SOCKET_ERROR || error) {
+                closesocket(s); return INVALID_SOCKET;
+            }
+        }
+        std::string reply;
+        tip_json::Value hello;
+        std::string request = "{\"op\":\"hello\",\"version\":1,\"token\":" +
+                              tip_json::Quote(endpoint.Get("token").text) + "}";
+        bool ok = false;
+        if (!Exchange(s, request, reply, deadline) || !tip_json::Parser(reply).Parse(hello) ||
+            hello.kind != tip_json::Value::Object || hello.object.size() != 3 ||
+            !JsonBool(hello, "ok", ok) || !ok || hello.Get("msg").kind != tip_json::Value::String ||
+            hello.Get("msg").text != "ready" || !JsonInt(hello, "version", version) || version != 1) {
+            closesocket(s); return INVALID_SOCKET;
+        }
+        ServerReply restored;
+        bool mode = InterlockedCompareExchange(&direct, 0, 0) != 0;
+        if (!Exchange(s, mode ? "{\"op\":\"set_direct\",\"direct\":true}" :
+                               "{\"op\":\"set_direct\",\"direct\":false}", reply,
+                      deadline) || !ParseReply(reply, restored) ||
+            restored.direct != mode) {
+            closesocket(s); return INVALID_SOCKET;
+        }
+        return s;
+    }
+    bool SpawnResident() {
+        wchar_t py[MAX_PATH];
+        if (!FindPython(py, MAX_PATH)) { Log(L"python.exe not found"); return false; }
+        // Quote the runtime path according to Windows command-line rules.
+        // Profile paths contain no quotes and this path has no trailing slash.
+        std::wstring command = L"\"" + std::wstring(py) +
+            L"\" -m oyayubi.ime.server --resident --runtime-dir \"" + runtime_dir + L"\"";
+        SECURITY_ATTRIBUTES sa{sizeof(sa), nullptr, TRUE};
+        HANDLE nul = CreateFileW(L"NUL", GENERIC_READ | GENERIC_WRITE,
+                                 FILE_SHARE_READ | FILE_SHARE_WRITE, &sa, OPEN_EXISTING, 0, nullptr);
+        if (nul == INVALID_HANDLE_VALUE) return false;
+        // Equivalent to subprocess close_fds=True: inherit only DEVNULL,
+        // never unrelated inheritable handles from the application hosting us.
+        STARTUPINFOEXW si{}; si.StartupInfo.cb = sizeof(si);
+        si.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+        si.StartupInfo.hStdInput = si.StartupInfo.hStdOutput = si.StartupInfo.hStdError = nul;
+        SIZE_T bytes = 0;
+        InitializeProcThreadAttributeList(nullptr, 1, 0, &bytes);
+        si.lpAttributeList = (LPPROC_THREAD_ATTRIBUTE_LIST)HeapAlloc(GetProcessHeap(), 0, bytes);
+        if (!si.lpAttributeList) { CloseHandle(nul); return false; }
+        if (!InitializeProcThreadAttributeList(si.lpAttributeList, 1, 0, &bytes)) {
+            HeapFree(GetProcessHeap(), 0, si.lpAttributeList); CloseHandle(nul); return false;
+        }
+        BOOL attributes = UpdateProcThreadAttribute(si.lpAttributeList, 0,
+            PROC_THREAD_ATTRIBUTE_HANDLE_LIST, &nul, sizeof(nul), nullptr, nullptr);
+        PROCESS_INFORMATION pi{};
+        std::wstring cwd = RepoDir();
+        BOOL made = attributes && CreateProcessW(nullptr, &command[0], nullptr, nullptr, TRUE,
+            DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | EXTENDED_STARTUPINFO_PRESENT,
+            nullptr, cwd.c_str(), &si.StartupInfo, &pi);
+        DWORD error = made ? ERROR_SUCCESS : GetLastError();
+        DeleteProcThreadAttributeList(si.lpAttributeList);
+        HeapFree(GetProcessHeap(), 0, si.lpAttributeList);
+        CloseHandle(nul);
+        SetLastError(error);
+        if (!made) { Log(L"resident spawn failed %lu", GetLastError()); return false; }
+        CloseHandle(pi.hThread); CloseHandle(pi.hProcess);
+        return true;
+    }
+    void Run() {
+        settings.Load();
+        runtime_dir = settings.runtime_dir;
+        if (runtime_dir.empty()) return;
+        while (!Stopping()) {
+            if (Alive()) {
+                // Detect an idle peer's death even in direct mode. Peek never
+                // removes data or overlaps a key exchange on the stream.
+                if (TryEnterCriticalSection(&lock)) {
+                    if (Alive() && !busy) {
+                        char byte;
+                        int n = recv(connection, &byte, 1, MSG_PEEK);
+                        if (n == 0 || (n == SOCKET_ERROR && WSAGetLastError() != WSAEWOULDBLOCK))
+                            DropLocked();
+                    }
+                    LeaveCriticalSection(&lock);
+                }
+                WaitForSingleObject(stop_event, 1000);
+                continue;
+            }
+            ULONGLONG deadline = GetTickCount64() + 15000;
+            SOCKET s = Connect(deadline);
+            if (s == INVALID_SOCKET && !Stopping() && SpawnResident()) {
+                while (!Stopping() && GetTickCount64() < deadline) {
+                    s = Connect(deadline);
+                    if (s != INVALID_SOCKET) break;
+                    WaitForSingleObject(stop_event, 50);
+                }
+            }
+            if (s != INVALID_SOCKET) {
+                EnterCriticalSection(&lock);
+                if (!Stopping()) {
+                    connection = s;
+                    InterlockedIncrement(&generation);
+                    InterlockedExchange(&ready, 1);
+                    s = INVALID_SOCKET;
+                }
+                LeaveCriticalSection(&lock);
+                if (s != INVALID_SOCKET) closesocket(s);
+            }
+            WaitForSingleObject(stop_event, 1000);
+        }
+    }
+    static unsigned __stdcall Worker(void* self) { ((Server*)self)->Run(); return 0; }
+    bool Start() {
+        settings = TipConfig();
+        WSADATA data{};
+        if (WSAStartup(MAKEWORD(2, 2), &data)) return false;
+        wsa = true;
+        stop_event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        if (!stop_event) { Stop(); return false; }
+        worker = (HANDLE)_beginthreadex(nullptr, 0, Worker, this, 0, nullptr);
+        if (!worker) { Stop(); return false; }
+        return true;
+    }
+    void DropLocked() {
+        InterlockedExchange(&ready, 0);
+        if (connection != INVALID_SOCKET) closesocket(connection);
+        connection = INVALID_SOCKET;
+    }
+    void Die(const wchar_t* why) {
+        EnterCriticalSection(&lock);
+        DropLocked();
+        LeaveCriticalSection(&lock);
+        Log(L"resident disconnected: %s", why);
+    }
+    void Stop() {
+        if (stop_event) SetEvent(stop_event);
+        Die(L"stop");
+        if (worker) { WaitForSingleObject(worker, INFINITE); CloseHandle(worker); worker = nullptr; }
+        if (stop_event) { CloseHandle(stop_event); stop_event = nullptr; }
+        if (wsa) { WSACleanup(); wsa = false; }
+    }
+    bool Send(const std::string& json, std::string& reply, DWORD budget_ms, LONG expected_generation = -1) {
+        if (!TryEnterCriticalSection(&lock)) return false;
+        bool ok = false;
+        if (!busy && Alive() && (expected_generation < 0 || Generation() == expected_generation)) {
+            busy = true;
+            ok = Exchange(connection, json, reply, GetTickCount64() + budget_ms);
+            if (!ok) DropLocked();
+            busy = false;
+        }
+        LeaveCriticalSection(&lock);
+        return ok;
+    }
+};
+// Three published display attributes: raw input, converted, focused bunsetsu.
+static const GUID kAttributeGuids[] = {
+    {0xa7c4e203, 0x0b3a, 0x4f11, {0x9e,0x61,0x0c,0x1a,0x0b,0x7e,0x0a,0x01}},
+    {0xa7c4e204, 0x0b3a, 0x4f11, {0x9e,0x61,0x0c,0x1a,0x0b,0x7e,0x0a,0x01}},
+    {0xa7c4e205, 0x0b3a, 0x4f11, {0x9e,0x61,0x0c,0x1a,0x0b,0x7e,0x0a,0x01}},
+};
+static TF_DISPLAYATTRIBUTE DefaultAttribute(int index) {
+    TF_DISPLAYATTRIBUTE a{};
+    a.crText.type = TF_CT_NONE; a.crBk.type = TF_CT_NONE;
+    a.crLine.type = TF_CT_NONE;
+    a.lsStyle = index == 0 ? TF_LS_DOT : TF_LS_SOLID;
+    a.fBoldLine = index == 2;
+    a.bAttr = index == 0 ? TF_ATTR_INPUT : (index == 1 ? TF_ATTR_CONVERTED : TF_ATTR_TARGET_CONVERTED);
+    return a;
+}
+class AttributeInfo : public ITfDisplayAttributeInfo {
+    LONG refs_ = 1;
+    int index_;
+    TF_DISPLAYATTRIBUTE attribute_;
+public:
+    explicit AttributeInfo(int i) : index_(i), attribute_(DefaultAttribute(i)) { InterlockedIncrement(&g_locks); }
+    ~AttributeInfo() { InterlockedDecrement(&g_locks); }
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID id, void** pp) override {
+        if (!pp) return E_POINTER;
         *pp = nullptr;
-        return E_NOINTERFACE;
+        if (id != IID_IUnknown && id != IID_ITfDisplayAttributeInfo) return E_NOINTERFACE;
+        *pp = static_cast<ITfDisplayAttributeInfo*>(this); AddRef(); return S_OK;
     }
     ULONG STDMETHODCALLTYPE AddRef() override { return InterlockedIncrement(&refs_); }
     ULONG STDMETHODCALLTYPE Release() override {
-        LONG n = InterlockedDecrement(&refs_);
-        if (!n) delete this;
-        return n;
+        LONG n = InterlockedDecrement(&refs_); if (!n) delete this; return n;
     }
+    HRESULT STDMETHODCALLTYPE GetGUID(GUID* g) override {
+        if (!g) return E_POINTER; *g = kAttributeGuids[index_]; return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GetDescription(BSTR* b) override {
+        if (!b) return E_POINTER;
+        const wchar_t* names[] = {L"NicolaIME input", L"NicolaIME converted", L"NicolaIME focused segment"};
+        *b = SysAllocString(names[index_]); return *b ? S_OK : E_OUTOFMEMORY;
+    }
+    HRESULT STDMETHODCALLTYPE GetAttributeInfo(TF_DISPLAYATTRIBUTE* a) override {
+        if (!a) return E_POINTER; *a = attribute_; return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE SetAttributeInfo(const TF_DISPLAYATTRIBUTE* a) override {
+        if (!a) return E_POINTER; attribute_ = *a; return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE Reset() override { attribute_ = DefaultAttribute(index_); return S_OK; }
+};
+class AttributeEnum : public IEnumTfDisplayAttributeInfo {
+    LONG refs_ = 1;
+    ULONG index_ = 0;
+public:
+    AttributeEnum() { InterlockedIncrement(&g_locks); }
+    ~AttributeEnum() { InterlockedDecrement(&g_locks); }
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID id, void** pp) override {
+        if (!pp) return E_POINTER;
+        *pp = nullptr;
+        if (id != IID_IUnknown && id != IID_IEnumTfDisplayAttributeInfo) return E_NOINTERFACE;
+        *pp = static_cast<IEnumTfDisplayAttributeInfo*>(this); AddRef(); return S_OK;
+    }
+    ULONG STDMETHODCALLTYPE AddRef() override { return InterlockedIncrement(&refs_); }
+    ULONG STDMETHODCALLTYPE Release() override {
+        LONG n = InterlockedDecrement(&refs_); if (!n) delete this; return n;
+    }
+    HRESULT STDMETHODCALLTYPE Clone(IEnumTfDisplayAttributeInfo** pp) override {
+        if (!pp) return E_POINTER;
+        auto* e = new AttributeEnum(); e->index_ = index_; *pp = e; return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE Next(ULONG count, ITfDisplayAttributeInfo** infos, ULONG* fetched) override {
+        if (!infos || (!fetched && count != 1)) return E_POINTER;
+        ULONG n = 0;
+        while (n < count && index_ < 3) infos[n++] = new AttributeInfo((int)index_++);
+        if (fetched) *fetched = n;
+        return n == count ? S_OK : S_FALSE;
+    }
+    HRESULT STDMETHODCALLTYPE Reset() override { index_ = 0; return S_OK; }
+    HRESULT STDMETHODCALLTYPE Skip(ULONG count) override {
+        ULONG n = (std::min)(count, 3UL - index_); index_ += n;
+        return n == count ? S_OK : S_FALSE;
+    }
+};
 
-    HRESULT DoEditSessionImpl(TfEditCookie ec) {
-        ITfRange* range = nullptr;
-        if (*comp_) {
-            (*comp_)->GetRange(&range);
-        } else if (!text_.empty() && !commit_) {
-            ITfInsertAtSelection* ins = nullptr;
-            if (SUCCEEDED(ctx_->QueryInterface(IID_ITfInsertAtSelection, (void**)&ins))) {
-                ins->InsertTextAtSelection(ec, 0, text_.c_str(), (LONG)text_.size(), &range);
-                ins->Release();
-            }
-            ITfContextComposition* cc = nullptr;
-            if (range && SUCCEEDED(ctx_->QueryInterface(IID_ITfContextComposition, (void**)&cc))) {
-                cc->StartComposition(ec, range, sink_, comp_);
-                cc->Release();
+// GetAppProperty/GetValue must run under a read cookie. No surrounding text is read.
+static bool PasswordScopeWithCookie(ITfContext* ctx, TfEditCookie ec) {
+    TF_SELECTION selection{}; ULONG fetched = 0;
+    if (FAILED(ctx->GetSelection(ec, TF_DEFAULT_SELECTION, 1, &selection, &fetched)) || !fetched)
+        return true;
+    bool disabled = false;
+    ITfReadOnlyProperty* prop = nullptr;
+    if (SUCCEEDED(ctx->GetAppProperty(GUID_PROP_INPUTSCOPE, &prop)) && prop) {
+        VARIANT v; VariantInit(&v);
+        if (SUCCEEDED(prop->GetValue(ec, selection.range, &v)) && v.vt == VT_UNKNOWN && v.punkVal) {
+            ITfInputScope* scope = nullptr;
+            if (SUCCEEDED(v.punkVal->QueryInterface(IID_ITfInputScope, (void**)&scope))) {
+                InputScope* scopes = nullptr; UINT count = 0;
+                if (SUCCEEDED(scope->GetInputScopes(&scopes, &count))) {
+                    for (UINT i = 0; i < count; ++i)
+                        if (scopes[i] == IS_PASSWORD || scopes[i] == IS_NUMERIC_PASSWORD) disabled = true;
+                } else disabled = true;
+                CoTaskMemFree(scopes);
+                scope->Release();
             }
         }
-        if (range) {
-            range->SetText(ec, 0, text_.c_str(), (LONG)text_.size());
-            if ((commit_ || text_.empty()) && *comp_) {
-                (*comp_)->EndComposition(ec);
-                (*comp_)->Release();
-                *comp_ = nullptr;
+        VariantClear(&v); prop->Release();
+    }
+    selection.range->Release();
+    return disabled;
+}
+class ScopeSession : public ITfEditSession {
+    LONG refs_ = 1;
+    ITfContext* ctx_;
+public:
+    bool disabled = true;
+    explicit ScopeSession(ITfContext* ctx) : ctx_(ctx) { ctx_->AddRef(); }
+    ~ScopeSession() { ctx_->Release(); }
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID id, void** pp) override {
+        if (!pp) return E_POINTER;
+        *pp = nullptr;
+        if (id != IID_IUnknown && id != IID_ITfEditSession) return E_NOINTERFACE;
+        *pp = static_cast<ITfEditSession*>(this); AddRef(); return S_OK;
+    }
+    ULONG STDMETHODCALLTYPE AddRef() override { return InterlockedIncrement(&refs_); }
+    ULONG STDMETHODCALLTYPE Release() override {
+        LONG n = InterlockedDecrement(&refs_); if (!n) delete this; return n;
+    }
+    HRESULT STDMETHODCALLTYPE DoEditSession(TfEditCookie ec) override {
+        disabled = PasswordScopeWithCookie(ctx_, ec);
+        return S_OK;
+    }
+};
+static bool PasswordScope(ITfContext* ctx, TfClientId client) {
+    auto* es = new ScopeSession(ctx);
+    HRESULT result = E_FAIL;
+    HRESULT hr = ctx->RequestEditSession(client, es, TF_ES_SYNC | TF_ES_READ, &result);
+    bool disabled = FAILED(hr) || FAILED(result) || es->disabled;
+    es->Release();
+    return disabled;
+}
+
+struct CompositionState {
+    ITfContext* ctx;
+    Server* server;
+    LONG connection_generation;
+    ITfComposition* composition = nullptr;
+    bool active = true, ending = false, position_pending = false, show_candidates = false;
+    std::vector<ServerReply> pending;
+    CompositionState(ITfContext* c, Server* s) : ctx(c), server(s), connection_generation(s->Generation()) {
+        ctx->AddRef();
+    }
+    ~CompositionState() {
+        if (composition) composition->Release();
+        ctx->Release();
+    }
+};
+
+// Python's display offsets count code points; TSF ranges count UTF-16 units.
+static LONG Utf16Offset(const std::wstring& text, int codepoints) {
+    size_t i = 0;
+    for (int n = 0; n < codepoints && i < text.size(); ++n) {
+        wchar_t c = text[i++];
+        if (c >= 0xd800 && c <= 0xdbff && i < text.size() &&
+            text[i] >= 0xdc00 && text[i] <= 0xdfff) ++i;
+    }
+    return (LONG)i;
+}
+
+static void PositionCandidate(TfEditCookie ec, ITfContext* ctx, ITfRange* caret, HWND window) {
+    if (!window) return;
+    ITfContextView* view = nullptr;
+    bool positioned = false;
+    if (SUCCEEDED(ctx->GetActiveView(&view))) {
+        RECT rect{}; BOOL clipped = FALSE;
+        // S_OK with an empty rectangle means the text is not visible.
+        if (SUCCEEDED(view->GetTextExt(ec, caret, &rect, &clipped)) && !IsRectEmpty(&rect)) {
+            SetWindowPos(window, HWND_TOPMOST, rect.left, rect.bottom + 4, 0, 0,
+                         SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+            positioned = true;
+        }
+        view->Release();
+    }
+    if (!positioned) ShowWindow(window, SW_HIDE);
+}
+
+using RetiredStates = std::vector<std::shared_ptr<CompositionState>>;
+class EditSession : public ITfEditSession {
+    LONG refs_ = 1;
+    std::shared_ptr<CompositionState> state_;
+    ITfCompositionSink* sink_;
+    TfGuidAtom atoms_[3];
+    HWND* candidate_;
+    bool discard_, position_only_;
+    RetiredStates* retired_;
+public:
+    EditSession(std::shared_ptr<CompositionState> state, ITfCompositionSink* sink,
+                const TfGuidAtom* atoms, HWND* candidate, RetiredStates* retired,
+                bool discard = false, bool position_only = false)
+        : state_(std::move(state)), sink_(sink), candidate_(candidate), discard_(discard),
+          position_only_(position_only), retired_(retired) {
+        sink_->AddRef();
+        for (int i = 0; i < 3; ++i) atoms_[i] = atoms[i];
+    }
+    ~EditSession() {
+        if (position_only_) state_->position_pending = false;
+        sink_->Release();
+    }
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** pp) override {
+        if (!pp) return E_POINTER;
+        *pp = nullptr;
+        if (riid != IID_IUnknown && riid != IID_ITfEditSession) return E_NOINTERFACE;
+        *pp = static_cast<ITfEditSession*>(this); AddRef(); return S_OK;
+    }
+    ULONG STDMETHODCALLTYPE AddRef() override { return InterlockedIncrement(&refs_); }
+    ULONG STDMETHODCALLTYPE Release() override {
+        LONG n = InterlockedDecrement(&refs_); if (!n) delete this; return n;
+    }
+    void End(TfEditCookie ec, const std::shared_ptr<CompositionState>& state) {
+        if (!state->composition) return;
+        state->ending = true;
+        ITfComposition* comp = state->composition;
+        state->composition = nullptr;
+        comp->EndComposition(ec);
+        comp->Release();
+        state->ending = false;
+    }
+    HRESULT Discard(TfEditCookie ec, const std::shared_ptr<CompositionState>& state) {
+        if (!state->composition) return S_OK;
+        ITfRange* range = nullptr;
+        HRESULT hr = state->composition->GetRange(&range);
+        if (FAILED(hr)) return hr;
+        hr = range->SetText(ec, 0, L"", 0);
+        ITfProperty* prop = nullptr;
+        if (SUCCEEDED(state->ctx->GetProperty(GUID_PROP_ATTRIBUTE, &prop))) {
+            prop->Clear(ec, range); prop->Release();
+        }
+        End(ec, state);
+        range->Release();
+        return hr;
+    }
+    void Attribute(TfEditCookie ec, ITfProperty* prop, ITfRange* range, TfGuidAtom atom) {
+        if (atom == TF_INVALID_GUIDATOM) return;
+        VARIANT v; VariantInit(&v); v.vt = VT_I4; v.lVal = (LONG)atom;
+        prop->SetValue(ec, range, &v);
+    }
+    HRESULT Write(TfEditCookie ec, const std::wstring& text, bool commit, const ServerReply& reply) {
+        ITfContext* ctx = state_->ctx;
+        ITfRange* range = nullptr;
+        HRESULT hr = S_OK;
+        if (state_->composition) {
+            hr = state_->composition->GetRange(&range);
+            if (SUCCEEDED(hr)) hr = range->SetText(ec, 0, text.data(), (LONG)text.size());
+        } else if (!text.empty()) {
+            ITfInsertAtSelection* ins = nullptr;
+            hr = ctx->QueryInterface(IID_ITfInsertAtSelection, (void**)&ins);
+            if (SUCCEEDED(hr)) {
+                // Acquire ownership before inserting preedit. StartComposition
+                // can return S_OK with a null composition when the app rejects it.
+                hr = commit ? ins->InsertTextAtSelection(ec, 0, text.data(), (LONG)text.size(), &range) :
+                              ins->InsertTextAtSelection(ec, TF_IAS_QUERYONLY, L"", 0, &range);
+                ins->Release();
             }
-            range->Release();
+            if (SUCCEEDED(hr) && range && !commit) {
+                ITfContextComposition* cc = nullptr;
+                hr = ctx->QueryInterface(IID_ITfContextComposition, (void**)&cc);
+                if (SUCCEEDED(hr)) {
+                    hr = cc->StartComposition(ec, range, sink_, &state_->composition);
+                    cc->Release();
+                    if (SUCCEEDED(hr)) {
+                        hr = state_->composition ?
+                            range->SetText(ec, 0, text.data(), (LONG)text.size()) : E_FAIL;
+                    }
+                }
+            }
+        }
+        if (FAILED(hr) || !range) { if (range) range->Release(); return hr; }
+        ITfProperty* prop = nullptr;
+        if (SUCCEEDED(ctx->GetProperty(GUID_PROP_ATTRIBUTE, &prop))) {
+            prop->Clear(ec, range);
+            if (!commit && !text.empty()) {
+                Attribute(ec, prop, range, atoms_[reply.converted ? 1 : 0]);
+                for (size_t i = 0; i < reply.segments.size(); ++i) {
+                    const auto& seg = reply.segments[i];
+                    LONG start = Utf16Offset(text, seg.display_start);
+                    LONG end = Utf16Offset(text, seg.display_end);
+                    ITfRange* part = nullptr;
+                    if (SUCCEEDED(range->Clone(&part))) {
+                        LONG moved = 0;
+                        part->Collapse(ec, TF_ANCHOR_START);
+                        part->ShiftEnd(ec, end, &moved, nullptr);
+                        part->ShiftStart(ec, start, &moved, nullptr);
+                        Attribute(ec, prop, part, atoms_[reply.converted ? ((int)i == reply.focus ? 2 : 1) : 0]);
+                        part->Release();
+                    }
+                }
+            }
+            prop->Release();
+        }
+        ITfRange* caret = nullptr;
+        if (SUCCEEDED(range->Clone(&caret))) {
+            caret->Collapse(ec, TF_ANCHOR_END);
+            TF_SELECTION selection{};
+            selection.range = caret; selection.style.ase = TF_AE_NONE;
+            ctx->SetSelection(ec, 1, &selection);
+            if (candidate_ && *candidate_ && !commit && reply.converted && !reply.candidates.empty()) {
+                PositionCandidate(ec, ctx, caret, *candidate_);
+            }
+            caret->Release();
+        }
+        if (commit || text.empty()) End(ec, state_);
+        range->Release();
+        return S_OK;
+    }
+    HRESULT DoEditSessionImpl(TfEditCookie ec) {
+        if (position_only_) {
+            state_->position_pending = false;
+            if (!state_->active || !state_->server->Alive() ||
+                state_->server->Generation() != state_->connection_generation ||
+                !state_->composition || !state_->show_candidates || !candidate_ || !*candidate_ ||
+                PasswordScopeWithCookie(state_->ctx, ec)) return S_OK;
+            ITfRange* caret = nullptr;
+            if (SUCCEEDED(state_->composition->GetRange(&caret))) {
+                caret->Collapse(ec, TF_ANCHOR_END);
+                PositionCandidate(ec, state_->ctx, caret, *candidate_);
+                caret->Release();
+            }
+            return S_OK;
+        }
+        if (discard_) return Discard(ec, state_);
+        if (!state_->active || !state_->server->Alive() ||
+            state_->server->Generation() != state_->connection_generation) return S_OK;
+        if (PasswordScopeWithCookie(state_->ctx, ec)) {
+            state_->pending.clear();
+            state_->active = false;
+            return S_OK;
+        }
+        // Synchronous edits can overtake queued asynchronous cleanup. Finish
+        // retired compositions in this context before inserting anything new;
+        // their later cleanup callbacks then see no composition and do nothing.
+        for (const auto& old : *retired_) {
+            if (old->ctx == state_->ctx && old->composition) {
+                HRESULT hr = Discard(ec, old);
+                if (FAILED(hr)) return hr;
+            }
+        }
+        retired_->erase(std::remove_if(retired_->begin(), retired_->end(),
+            [](const std::shared_ptr<CompositionState>& old) { return !old->composition; }), retired_->end());
+        std::vector<ServerReply> pending;
+        pending.swap(state_->pending);
+        for (const auto& r : pending) {
+            if (!state_->active || !state_->server->Alive() ||
+                state_->server->Generation() != state_->connection_generation) break;
+            // A converted phrase can commit and start the next composition in
+            // the same reply. Apply both in order under the same edit cookie.
+            HRESULT hr = S_OK;
+            if (!r.commit.empty()) hr = Write(ec, r.commit, true, r);
+            if (SUCCEEDED(hr)) hr = Write(ec, r.composition, false, r);
+            if (FAILED(hr)) return hr;
         }
         return S_OK;
     }
-
-    // CorvusSKK KeyHandler.cpp: SEH so a bug does not kill the TSF host.
     HRESULT STDMETHODCALLTYPE DoEditSession(TfEditCookie ec) override {
         HRESULT hr = S_OK;
-        __try {
-            hr = DoEditSessionImpl(ec);
-        } __except (EXCEPTION_EXECUTE_HANDLER) {
-            hr = S_OK;
-        }
+        __try { hr = DoEditSessionImpl(ec); }
+        __except (EXCEPTION_EXECUTE_HANDLER) { state_->active = false; hr = E_FAIL; }
+        // Queued edits report failures here, after RequestEditSession returned.
+        // Let the next timer/key reset the session instead of accepting more text.
+        if (FAILED(hr)) state_->active = false;
         return hr;
     }
 };
@@ -585,14 +973,25 @@ public:
 class Tip : public ITfTextInputProcessorEx,
             public ITfKeyEventSink,
             public ITfThreadMgrEventSink,
-            public ITfCompositionSink {
+            public ITfCompositionSink,
+            public ITfDisplayAttributeProvider {
 public:
     LONG refs_ = 1;
     ITfThreadMgr* tm_ = nullptr;
     TfClientId client_ = TF_CLIENTID_NULL;
     DWORD cookie_tm_ = TF_INVALID_COOKIE;
-    ITfComposition* composition_ = nullptr;
+    std::shared_ptr<CompositionState> state_;
+    RetiredStates retired_;
     Server server_;
+    TfGuidAtom atoms_[3] = {TF_INVALID_GUIDATOM, TF_INVALID_GUIDATOM, TF_INVALID_GUIDATOM};
+    LONG connection_generation_ = 0;
+    bool direct_ = false;
+    bool scope_allowed_ = false;
+    bool toggle_down_ = false, toggle_eaten_ = false;
+    int n_tokens_ = 0, focus_ = -1, page_ = 0;
+    bool has_next_page_ = false;
+    Tip() { InterlockedIncrement(&g_locks); }
+    ~Tip() { server_.Stop(); InterlockedDecrement(&g_locks); }
     HWND timer_hwnd_ = nullptr;
     HWND cand_hwnd_ = nullptr;
     std::wstring last_comp_;
@@ -601,6 +1000,7 @@ public:
     bool pending_timer_ = false;
     ULONGLONG timer_at_ = 0;
     bool down_eaten_[256]{};
+    unsigned down_mods_[256]{};
     std::vector<std::wstring> cands_;
     int cand_index_ = 0;
 
@@ -688,126 +1088,237 @@ public:
         }
         int rows = (int)cands_.size();
         int w = 280, h = 6 + rows * 22;
-        int x = 80, y = 80;
-        GUITHREADINFO gi{};
-        gi.cbSize = sizeof(gi);
-        if (GetGUIThreadInfo(GetCurrentThreadId(), &gi) && !IsRectEmpty(&gi.rcCaret)) {
-            x = gi.rcCaret.left;
-            y = gi.rcCaret.bottom + 4;
-        }
-        SetWindowPos(cand_hwnd_, HWND_TOPMOST, x, y, w, h,
-                     SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        // Placement/show happens under an edit cookie, using GetTextExt.
+        SetWindowPos(cand_hwnd_, nullptr, 0, 0, w, h, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
         InvalidateRect(cand_hwnd_, nullptr, TRUE);
     }
 
+    ITfContext* FocusContext() {
+        ITfDocumentMgr* dm = nullptr;
+        if (!tm_ || FAILED(tm_->GetFocus(&dm)) || !dm) return nullptr;
+        ITfContext* ctx = nullptr;
+        dm->GetTop(&ctx);
+        dm->Release();
+        return ctx;
+    }
+
+    void RequestEdit(std::shared_ptr<CompositionState> state, bool sync, bool discard = false) {
+        auto* es = new EditSession(state, this, atoms_, discard ? nullptr : &cand_hwnd_, &retired_, discard);
+        HRESULT result = S_OK;
+        DWORD flags = TF_ES_READWRITE | (sync ? TF_ES_SYNC : TF_ES_ASYNCDONTCARE);
+        HRESULT hr = state->ctx->RequestEditSession(client_, es, flags, &result);
+        if (sync && (hr == TF_E_SYNCHRONOUS || result == TF_E_SYNCHRONOUS))
+            hr = state->ctx->RequestEditSession(client_, es, TF_ES_READWRITE | TF_ES_ASYNCDONTCARE, &result);
+        if (FAILED(hr) || FAILED(result)) {
+            state->pending.clear();
+            if (!discard) server_.Die(L"edit rejected");
+        }
+        es->Release();
+    }
+
+    void ClearLocal() {
+        // Detach the old generation before requesting cleanup; pending edits
+        // retain that context and cannot write into a newly focused control.
+        auto old = state_;
+        state_.reset();
+        if (old) {
+            old->active = false;
+            old->pending.clear();
+            retired_.push_back(old);
+            if (old->composition && client_ != TF_CLIENTID_NULL) RequestEdit(old, true, true);
+        }
+        retired_.erase(std::remove_if(retired_.begin(), retired_.end(),
+            [](const std::shared_ptr<CompositionState>& old) { return !old->composition; }), retired_.end());
+        composing_ = converted_ = pending_timer_ = false;
+        timer_at_ = 0; n_tokens_ = 0; focus_ = -1; page_ = 0; has_next_page_ = false;
+        last_comp_.clear();
+        for (bool& eaten : down_eaten_) eaten = false;
+        toggle_down_ = toggle_eaten_ = false;
+        HideCands();
+    }
+
+    void ResetFocus() {
+        ClearLocal();
+        if (server_.Alive()) {
+            std::string bytes; ServerReply reply;
+            if (!server_.Send("{\"op\":\"reset\"}", bytes, kKeyBudgetMs) || !ParseReply(bytes, reply))
+                server_.Die(L"reset failed");
+            // reset preserves the mode. Do not apply any text from a focus callback.
+        }
+        // Check on entry too. If the read lock is unavailable here, keep
+        // timers disabled until a real key can obtain a synchronous read lock.
+        scope_allowed_ = tm_ && !KeyboardDisabled(tm_, client_) && !KeyboardClosed(tm_);
+    }
+
+    void SyncConnection() {
+        bool alive = server_.Alive();
+        LONG generation = server_.Generation();
+        if (!alive || generation != connection_generation_) {
+            ClearLocal();
+            connection_generation_ = generation;
+        } else if (state_ && !state_->active) {
+            ResetFocus();
+        }
+    }
+
     void NoteReply(const ServerReply& r) {
+        direct_ = r.direct;
+        server_.RememberDirect(direct_);
         last_comp_ = r.composition;
-        composing_ = !r.composition.empty() || r.n_tokens > 0;
+        n_tokens_ = r.n_tokens; focus_ = r.focus; page_ = r.page; has_next_page_ = r.has_next_page;
+        composing_ = !r.composition.empty() || r.n_tokens > 0 || r.has_timer;
         converted_ = r.converted;
-        pending_timer_ = r.has_timer;
+        pending_timer_ = r.has_timer && !r.direct;
         timer_at_ = r.timer;
         cands_ = r.candidates;
         cand_index_ = r.cand_index;
-        if (r.converted && !r.candidates.empty() && r.commit.empty())
-            ShowCands();
-        else
-            HideCands();
+        if (!r.direct && r.converted && !r.candidates.empty()) ShowCands();
+        else HideCands();
     }
 
-    void OnTimerImpl() {
-        server_.PumpReady();
-        if (!server_.ok) return;
-        if (!server_.Alive()) {
-            server_.Die(L"died on timer");
-            return;
-        }
-        if (!pending_timer_ || NowMs() < timer_at_) return;
-        char buf[80];
-        sprintf_s(buf, "{\"op\":\"timeout\",\"t\":%llu}", (unsigned long long)NowMs());
-        std::string reply;
-        if (!server_.Send(buf, reply, 40)) return;
-        auto r = ParseReply(reply);
-        if (r.composition == last_comp_ && r.commit.empty()) {
-            NoteReply(r);
-            return;
-        }
-        NoteReply(r);
-        Apply(r, /*sync=*/false);
-    }
-
-    void OnTimer() {
-        __try {
-            OnTimerImpl();
-        } __except (EXCEPTION_EXECUTE_HANDLER) {
-            Log(L"SEH in OnTimer");
-        }
-    }
-
-    void Apply(const ServerReply& r, bool sync) {
-        ITfDocumentMgr* dm = nullptr;
-        if (!tm_ || FAILED(tm_->GetFocus(&dm)) || !dm) return;
-        ITfContext* ctx = nullptr;
-        if (FAILED(dm->GetTop(&ctx)) || !ctx) {
-            dm->Release();
-            return;
-        }
-        std::wstring text = r.commit.empty() ? r.composition : r.commit;
-        bool commit = !r.commit.empty();
-        if (text.empty() && !composition_) {
-            ctx->Release();
-            dm->Release();
-            return;
-        }
-        auto* es = new EditSession(ctx, &composition_, this, text, commit);
-        HRESULT hrSession = S_OK;
-        // SampleIME / Mozc prefer SYNC on the key path. CorvusSKK uses
-        // ASYNCDONTCARE to avoid TF_E_SYNCHRONOUS. Try SYNC, then fall back.
-        DWORD flags = TF_ES_READWRITE | (sync ? TF_ES_SYNC : TF_ES_ASYNCDONTCARE);
-        HRESULT hr = ctx->RequestEditSession(client_, es, flags, &hrSession);
-        if (sync && (hr == TF_E_SYNCHRONOUS || hrSession == TF_E_SYNCHRONOUS)) {
-            ctx->RequestEditSession(client_, es, TF_ES_READWRITE | TF_ES_ASYNCDONTCARE,
-                                    &hrSession);
-        }
-        es->Release();
-        ctx->Release();
-        dm->Release();
-    }
-
-    bool CanEat(UINT vk) {
-        if (!server_.ok || !server_.Alive()) return false;
-        if (KeyboardDisabled(tm_)) return false;
-        if (KeyboardClosed(tm_)) return false;
-        return WantVk(vk, composing_, converted_);
-    }
-
-    bool HandleKeyImpl(bool down, UINT vk) {
-        char buf[96];
-        sprintf_s(buf, "{\"op\":\"%s\",\"vk\":%u,\"t\":%llu}", down ? "down" : "up", vk,
-                  (unsigned long long)NowMs());
-        std::string reply;
-        if (!server_.Send(buf, reply, kKeyBudgetMs)) {
-            Log(L"%s send failed vk=%u (fail-open)", down ? L"down" : L"up", vk);
+    bool ExchangeReply(const std::string& request, ServerReply& r, DWORD budget) {
+        std::string bytes;
+        if (!server_.Send(request, bytes, budget, connection_generation_) || !ParseReply(bytes, r)) {
+            server_.Die(L"request failed (fail-open)");
+            ClearLocal();
             return false;
         }
-        auto r = ParseReply(reply);
-        NoteReply(r);
-        Log(L"%s vk=%u comp=%s commit=%s", down ? L"down" : L"up", vk, r.composition.c_str(),
-            r.commit.c_str());
-        Apply(r, /*sync=*/true);
         return true;
     }
 
-    bool HandleKey(bool down, UINT vk) {
-        bool ok = false;
-        __try {
-            ok = HandleKeyImpl(down, vk);
-        } __except (EXCEPTION_EXECUTE_HANDLER) {
-            Log(L"SEH in HandleKey vk=%u", vk);
-            composing_ = false;
-            pending_timer_ = false;
-            ok = false;
+    void RequestCandidatePosition() {
+        if (!state_ || !state_->active || !state_->show_candidates || state_->position_pending) return;
+        auto state = state_;
+        state->position_pending = true;
+        auto* es = new EditSession(state, this, atoms_, &cand_hwnd_, &retired_, false, true);
+        HRESULT result = S_OK;
+        state->ctx->RequestEditSession(client_, es, TF_ES_READ | TF_ES_ASYNCDONTCARE, &result);
+        es->Release();
+    }
+
+    void OnTimerImpl() {
+        SyncConnection();
+        if (!server_.Alive()) return;
+        // A timer cannot depend on a synchronous input-scope edit lock.
+        // Scope was checked on the key that armed it; queued edits check again.
+        if (!scope_allowed_ || KeyboardDisabled(tm_, client_, false) || KeyboardClosed(tm_)) {
+            if (state_ || composing_ || toggle_down_) ResetFocus();
+            return;
         }
-        return ok;
+        ITfContext* ctx = FocusContext();
+        bool same = !state_ || (ctx && ctx == state_->ctx);
+        if (ctx) ctx->Release();
+        if (!same) { ResetFocus(); return; }
+        // GetTextExt can yield TS_E_NOLAYOUT after SetText. Retry with a read-only
+        // cookie on subsequent timer ticks, after the application lays out.
+        RequestCandidatePosition();
+        if (!pending_timer_ || NowMs() < timer_at_) return;
+        char buf[80];
+        sprintf_s(buf, "{\"op\":\"timeout\",\"t\":%llu}", (unsigned long long)NowMs());
+        ServerReply r;
+        if (!ExchangeReply(buf, r, 40)) return;
+        NoteReply(r);
+        Apply(r, false);
+    }
+    void OnTimer() {
+        __try { OnTimerImpl(); }
+        __except (EXCEPTION_EXECUTE_HANDLER) { Log(L"SEH in OnTimer"); }
+    }
+
+    void Apply(const ServerReply& r, bool sync) {
+        ITfContext* ctx = FocusContext();
+        if (!ctx) return;
+        if (state_ && state_->ctx != ctx) { ctx->Release(); ResetFocus(); return; }
+        if (!state_) state_ = std::make_shared<CompositionState>(ctx, &server_);
+        state_->show_candidates = !r.direct && r.converted && !r.candidates.empty();
+        ctx->Release();
+        state_->pending.push_back(r);
+        RequestEdit(state_, sync);
+    }
+
+    bool Eligible() {
+        return tm_ && !KeyboardDisabled(tm_, client_) && !KeyboardClosed(tm_);
+    }
+    bool ToggleKey(UINT vk) const {
+        return vk == server_.settings.toggle_vk && HeldMods() == server_.settings.toggle_mods;
+    }
+    bool CanEat(UINT vk) {
+        if (!server_.Alive() || !Eligible()) return false;
+        if (ToggleKey(vk) || (toggle_down_ && vk == server_.settings.toggle_vk)) return true;
+        if (direct_) return false;
+        bool current = server_.Generation() == connection_generation_;
+        return WantVk(vk, current && composing_, current && converted_, current && !cands_.empty());
+    }
+
+    bool HandleKeyImpl(bool down, UINT vk) {
+        bool before_composing = composing_, before_converted = converted_;
+        bool before_candidates = !cands_.empty();
+        bool before_timer = pending_timer_;
+        int before_tokens = n_tokens_;
+        char buf[128];
+        sprintf_s(buf, "{\"op\":\"%s\",\"vk\":%u,\"t\":%llu,\"mods\":", down ? "down" : "up", vk,
+                  (unsigned long long)NowMs());
+        ServerReply r;
+        if (!ExchangeReply(std::string(buf) + ModsJson(down ? HeldMods() : down_mods_[vk]) + "}", r, kKeyBudgetMs)) return false;
+        bool eat = false;
+        if (!r.direct && !r.pass_through) {
+            // A false pass_through is not a consumed bit. Combine the role at
+            // send time with the reply's input/candidate/timer mask.
+            bool state_mask = before_composing || before_tokens > 0 || before_timer ||
+                r.n_tokens > 0 || r.has_timer || r.converted || !r.candidates.empty() ||
+                !r.composition.empty() || !r.commit.empty();
+            if (!down) eat = true;  // only actual consumed downs send an up
+            else if (CharacterVk(vk) || vk == VK_SPACE) eat = state_mask;
+            else if (vk == VK_BACK || vk == VK_RETURN || vk == VK_ESCAPE) eat = before_composing && state_mask;
+            else if (vk == VK_F7) eat = !(HeldMods() & 1);
+            else if (vk == VK_F6) eat = before_converted && before_candidates && !(HeldMods() & 1);
+            else eat = before_converted && WantVk(vk, before_composing, before_converted, before_candidates);
+        }
+        NoteReply(r);
+        if (server_.settings.log_text)
+            Log(L"%s vk=%u comp=%s commit=%s", down ? L"down" : L"up", vk,
+                r.composition.c_str(), r.commit.c_str());
+        Apply(r, true);
+        return eat;
+    }
+    bool HandleKey(bool down, UINT vk) {
+        bool eat = false;
+        __try { eat = HandleKeyImpl(down, vk); }
+        __except (EXCEPTION_EXECUTE_HANDLER) {
+            Log(L"SEH in HandleKey vk=%u", vk);
+            server_.Die(L"key exception");
+            eat = false;
+        }
+        return eat;
+    }
+
+    bool ToggleImpl() {
+        ServerReply r;
+        if (!ExchangeReply("{\"op\":\"toggle_direct\"}", r, kKeyBudgetMs)) return false;
+        ClearLocal();
+        NoteReply(r);
+        return !r.pass_through;
+    }
+    bool Toggle() {
+        bool eaten = false;
+        __try { eaten = ToggleImpl(); }
+        __except (EXCEPTION_EXECUTE_HANDLER) {
+            Log(L"SEH in toggle");
+            server_.Die(L"toggle exception");
+        }
+        return eaten;
+    }
+
+    HRESULT STDMETHODCALLTYPE EnumDisplayAttributeInfo(IEnumTfDisplayAttributeInfo** pp) override {
+        if (!pp) return E_POINTER; *pp = new AttributeEnum(); return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GetDisplayAttributeInfo(REFGUID guid, ITfDisplayAttributeInfo** pp) override {
+        if (!pp) return E_POINTER;
+        *pp = nullptr;
+        for (int i = 0; i < 3; ++i) if (guid == kAttributeGuids[i]) {
+            *pp = new AttributeInfo(i); return S_OK;
+        }
+        return E_INVALIDARG;
     }
 
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** pp) override {
@@ -821,6 +1332,8 @@ public:
             *pp = static_cast<ITfThreadMgrEventSink*>(this);
         } else if (riid == IID_ITfCompositionSink) {
             *pp = static_cast<ITfCompositionSink*>(this);
+        } else if (riid == IID_ITfDisplayAttributeProvider) {
+            *pp = static_cast<ITfDisplayAttributeProvider*>(this);
         } else {
             *pp = nullptr;
             return E_NOINTERFACE;
@@ -839,6 +1352,7 @@ public:
         return ActivateEx(ptim, tid, 0);
     }
     HRESULT STDMETHODCALLTYPE Deactivate() override {
+        ClearLocal();
         if (timer_hwnd_) {
             KillTimer(timer_hwnd_, 1);
             DestroyWindow(timer_hwnd_);
@@ -867,6 +1381,7 @@ public:
             tm_ = nullptr;
         }
         client_ = TF_CLIENTID_NULL;
+        cookie_tm_ = TF_INVALID_COOKIE;
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE ActivateEx(ITfThreadMgr* ptim, TfClientId tid, DWORD) override {
@@ -883,75 +1398,111 @@ public:
             km->AdviseKeyEventSink(client_, this, TRUE);
             km->Release();
         }
+        ITfCategoryMgr* cat = nullptr;
+        if (SUCCEEDED(CoCreateInstance(CLSID_TF_CategoryMgr, nullptr, CLSCTX_INPROC_SERVER,
+                                      IID_ITfCategoryMgr, (void**)&cat))) {
+            for (int i = 0; i < 3; ++i) cat->RegisterGUID(kAttributeGuids[i], &atoms_[i]);
+            cat->Release();
+        }
         EnsureTimer();
         SetKeyboardOpen(tm_, client_, TRUE);
-        Log(L"ActivateEx client=%u (spawn, no wait)", (unsigned)tid);
-        // Must return immediately. Dictionary load happens in the child.
-        if (!server_.Spawn()) Log(L"server spawn failed — keys pass through");
+        Log(L"ActivateEx client=%u (connector worker, no wait)", (unsigned)tid);
+        if (!server_.Start()) Log(L"connector start failed — keys pass through");
         return S_OK;
     }
 
     HRESULT STDMETHODCALLTYPE OnSetFocus(ITfDocumentMgr*, ITfDocumentMgr*) override {
-        return S_OK;
+        ResetFocus(); return S_OK;
     }
     HRESULT STDMETHODCALLTYPE OnInitDocumentMgr(ITfDocumentMgr*) override { return S_OK; }
     HRESULT STDMETHODCALLTYPE OnUninitDocumentMgr(ITfDocumentMgr*) override { return S_OK; }
-    HRESULT STDMETHODCALLTYPE OnPushContext(ITfContext*) override { return S_OK; }
-    HRESULT STDMETHODCALLTYPE OnPopContext(ITfContext*) override { return S_OK; }
-
-    HRESULT STDMETHODCALLTYPE OnSetFocus(BOOL) override { return S_OK; }
+    HRESULT STDMETHODCALLTYPE OnPushContext(ITfContext*) override { ResetFocus(); return S_OK; }
+    HRESULT STDMETHODCALLTYPE OnPopContext(ITfContext*) override { ResetFocus(); return S_OK; }
+    HRESULT STDMETHODCALLTYPE OnSetFocus(BOOL) override { ResetFocus(); return S_OK; }
 
     HRESULT STDMETHODCALLTYPE OnTestKeyDown(ITfContext*, WPARAM w, LPARAM, BOOL* e) override {
         if (!e) return E_INVALIDARG;
-        server_.PumpReady();
         *e = CanEat(VkOf(w)) ? TRUE : FALSE;
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE OnTestKeyUp(ITfContext*, WPARAM w, LPARAM, BOOL* e) override {
         if (!e) return E_INVALIDARG;
         UINT vk = VkOf(w);
-        *e = (down_eaten_[vk] || CanEat(vk)) ? TRUE : FALSE;
+        // Read-only candidate check. No IPC, reset or state mutation here.
+        *e = server_.Alive() && Eligible() &&
+             ((toggle_down_ && vk == server_.settings.toggle_vk && toggle_eaten_) ||
+              (!direct_ && down_eaten_[vk])) ? TRUE : FALSE;
         return S_OK;
     }
-    HRESULT STDMETHODCALLTYPE OnKeyDown(ITfContext*, WPARAM w, LPARAM, BOOL* e) override {
+    HRESULT STDMETHODCALLTYPE OnKeyDown(ITfContext*, WPARAM w, LPARAM l, BOOL* e) override {
         if (!e) return E_INVALIDARG;
+        *e = FALSE;
         UINT vk = VkOf(w);
-        if (!CanEat(vk)) {
-            *e = FALSE;
+        SyncConnection();
+        if (!Eligible()) { ResetFocus(); return S_OK; }
+        scope_allowed_ = true;
+        if (!server_.Alive()) return S_OK;
+        ITfContext* ctx = FocusContext();
+        bool changed = state_ && (!ctx || state_->ctx != ctx);
+        if (ctx) ctx->Release();
+        if (changed) { ResetFocus(); return S_OK; }
+        if (toggle_down_ && vk == server_.settings.toggle_vk) {
+            *e = toggle_eaten_ ? TRUE : FALSE;
             return S_OK;
         }
-        // Mozc: a failed engine call is that key only. Do not keep eating.
-        if (!HandleKey(true, vk)) {
-            *e = FALSE;
+        // Toggle precedes the ordinary Alt/Ctrl/Win exclusion. The repeat bit
+        // also prevents a failed initial exchange from turning into a toggle.
+        if (ToggleKey(vk)) {
+            if (l & (LPARAM(1) << 30)) return S_OK;
+            bool eaten = Toggle();
+            toggle_down_ = true; toggle_eaten_ = eaten;
+            down_eaten_[vk] = eaten;
+            *e = eaten ? TRUE : FALSE;
             return S_OK;
         }
-        down_eaten_[vk] = true;
-        *e = TRUE;
+        if (!CanEat(vk)) return S_OK;
+        bool eaten = HandleKey(true, vk);
+        // Do not erase an earlier consumed down on a repeat; a connection
+        // failure clears all down state in ClearLocal().
+        if (eaten) {
+            if (!down_eaten_[vk]) down_mods_[vk] = HeldMods();
+            down_eaten_[vk] = true;
+        }
+        *e = eaten ? TRUE : FALSE;
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE OnKeyUp(ITfContext*, WPARAM w, LPARAM, BOOL* e) override {
         if (!e) return E_INVALIDARG;
+        *e = FALSE;
         UINT vk = VkOf(w);
-        bool promised = down_eaten_[vk];
-        down_eaten_[vk] = false;
-        if (!promised && !CanEat(vk)) {
-            *e = FALSE;
+        SyncConnection();
+        if (!Eligible()) { ResetFocus(); return S_OK; }
+        scope_allowed_ = true;
+        if (toggle_down_ && vk == server_.settings.toggle_vk) {
+            *e = server_.Alive() && toggle_eaten_ ? TRUE : FALSE;
+            toggle_down_ = toggle_eaten_ = false;
+            down_eaten_[vk] = false;
             return S_OK;
         }
-        if (promised || server_.ok) HandleKey(false, vk);
-        // If we ate the down, swallow the up even when the engine missed.
-        *e = TRUE;
+        bool promised = down_eaten_[vk];
+        down_eaten_[vk] = false;
+        if (!promised || direct_ || !server_.Alive()) return S_OK;
+        // Use the consumed down's modifiers on release so a newly pressed
+        // Ctrl/Alt cannot hide the release from the FSM.
+        // A successful paired release is consumed; a failed IPC is fail-open.
+        bool handled = HandleKey(false, vk);
+        *e = handled ? TRUE : FALSE;
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE OnPreservedKey(ITfContext*, REFGUID, BOOL* e) override {
         if (e) *e = FALSE;
         return S_OK;
     }
-
     HRESULT STDMETHODCALLTYPE OnCompositionTerminated(TfEditCookie, ITfComposition* c) override {
-        if (composition_ == c) {
-            composition_->Release();
-            composition_ = nullptr;
+        if (state_ && !state_->ending && state_->composition == c) {
+            state_->composition->Release();
+            state_->composition = nullptr;
+            ResetFocus();
         }
         return S_OK;
     }
@@ -1037,6 +1588,8 @@ static HRESULT RegisterCategories(BOOL add) {
     if (FAILED(CoCreateInstance(CLSID_TF_CategoryMgr, nullptr, CLSCTX_INPROC_SERVER,
                                 IID_ITfCategoryMgr, (void**)&cat)))
         return E_FAIL;
+    // Re-registration must remove the category advertised by older DLLs.
+    cat->UnregisterCategory(CLSID_OyayubiTip, GUID_TFCAT_TIPCAP_SECUREMODE, CLSID_OyayubiTip);
     for (const GUID& g : kCats) {
         if (add)
             cat->RegisterCategory(CLSID_OyayubiTip, g, CLSID_OyayubiTip);
@@ -1074,7 +1627,7 @@ static HRESULT RegisterProfile(BOOL add) {
 BOOL APIENTRY DllMain(HINSTANCE h, DWORD reason, LPVOID) {
     if (reason == DLL_PROCESS_ATTACH) {
         g_hinst = h;
-        DisableThreadLibraryCalls(h);
+        // /MT requires CRT thread attach/detach notifications.
     }
     return TRUE;
 }
