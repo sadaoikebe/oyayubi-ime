@@ -86,9 +86,11 @@ def argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--learning-file", type=Path, default=DEFAULT_LEARNING_PATH,
                         help="local UTF-8 JSONL history; missing file disables learning")
     parser.add_argument("--no-learning", action="store_true", help="disable confirmation learning")
-    lm = parser.add_argument_group("Stage 5b LM rescoring (experimental, off by default)")
-    lm.add_argument("--lm-rescore", action="store_true",
+    lm = parser.add_argument_group("Stage 5b LM rescoring (on by default for --resident)")
+    lm.add_argument("--lm-rescore", action="store_true", default=None,
                     help="rescore the k-best with a causal LM on Space (needs torch+transformers)")
+    lm.add_argument("--no-lm-rescore", action="store_false", dest="lm_rescore",
+                    help="disable LM rescoring (the resident default is on)")
     lm.add_argument("--lm-model", default=None,
                     help="HF model id or local directory (default rinna/japanese-gpt2-small)")
     lm.add_argument("--lm-alpha", type=float, default=None, help="LM weight (default 1.0)")
@@ -104,14 +106,20 @@ def load_session(args) -> ImeSession:
     sess = ImeSession(learning_path=None if args.no_learning else args.learning_file)
     sess.load()
     if args.lm_rescore:
-        # Imported only behind the flag: the default server has no LM dependency.
-        from oyayubi.ime.lm_rescore import (DEFAULT_ALPHA, DEFAULT_K, DEFAULT_MODEL,
-                                            CausalLmScorer, LmRescorer)
-        sess.lm = LmRescorer(
-            CausalLmScorer(args.lm_model or DEFAULT_MODEL, threads=args.lm_threads),
-            alpha=DEFAULT_ALPHA if args.lm_alpha is None else args.lm_alpha,
-            k=DEFAULT_K if args.lm_k is None else args.lm_k)
-        sess.lm.scorer.nll("", ["あ", "い"])  # warm up before "ready"
+        # The LM is optional equipment: a machine without torch/transformers
+        # (e.g. a fresh install) still gets a working IME, without rescoring.
+        try:
+            from oyayubi.ime.lm_rescore import (DEFAULT_ALPHA, DEFAULT_K, DEFAULT_MODEL,
+                                                CausalLmScorer, LmRescorer)
+            sess.lm = LmRescorer(
+                CausalLmScorer(args.lm_model or DEFAULT_MODEL, threads=args.lm_threads),
+                alpha=DEFAULT_ALPHA if args.lm_alpha is None else args.lm_alpha,
+                k=DEFAULT_K if args.lm_k is None else args.lm_k)
+            sess.lm.scorer.nll("", ["あ", "い"])  # warm up before "ready"
+        except Exception as exc:
+            print(f"LM rescoring unavailable ({type(exc).__name__}); continuing without it",
+                  file=sys.stderr, flush=True)
+            sess.lm = None
     return sess
 
 
@@ -132,6 +140,11 @@ def process_request(sess: ImeSession, msg: dict, *, log_text=False, lm_timing=Fa
 
 def main() -> None:
     args = argument_parser().parse_args()
+    if args.lm_rescore is None:
+        # Resident serving is the product path: LM rescoring paid off in the
+        # 2026-11-12 measurement (53 fixed vs 1 broken on the Mozc-error set),
+        # and the scorer loads once per server. The stdio host stays opt-in.
+        args.lm_rescore = args.resident
     # Pipes from the TIP default to cp1252; Japanese composition must be UTF-8.
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
