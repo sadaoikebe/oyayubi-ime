@@ -18,21 +18,31 @@ Push-Location $PSScriptRoot
 try {
     if (-not $env:LIB) {
         $vswhere = 'C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe'
+        $vsPath = $null
         if (Test-Path -LiteralPath $vswhere) {
-            $vsPath = & $vswhere -latest -products Microsoft.VisualStudio.Product.BuildTools `
+            $vsPath = & $vswhere -latest -products '*' `
                 -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-            if ($LASTEXITCODE -ne 0 -or -not $vsPath) {
-                throw 'vswhere で C++ BuildTools が見つかりませんでした。'
-            }
-        } else {
+            if ($LASTEXITCODE -ne 0) { $vsPath = $null }
+        }
+        if (-not $vsPath -or -not (Test-Path -LiteralPath (Join-Path $vsPath 'VC\Auxiliary\Build\vcvars64.bat') -PathType Leaf)) {
             $vsPath = 'C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools'
         }
-        . (Join-Path $vsPath 'Common7\Tools\Launch-VsDevShell.ps1') -Arch amd64
+        $vcvars64 = Join-Path $vsPath 'VC\Auxiliary\Build\vcvars64.bat'
+        if (-not (Test-Path -LiteralPath $vcvars64 -PathType Leaf)) {
+            throw 'vcvars64.bat が見つかりません。Visual Studio の C++ ビルドツールをインストールしてください。'
+        }
+        $environment = & cmd.exe /d /c "`"$vcvars64`" >nul && set"
+        if ($LASTEXITCODE -ne 0) {
+            throw 'vcvars64.bat による開発者環境の読み込みに失敗しました。'
+        }
+        foreach ($line in $environment) {
+            if ($line -match '^([^=]+)=(.*)$') {
+                Set-Item -LiteralPath ('env:' + $Matches[1]) -Value $Matches[2]
+            }
+        }
         if (-not $env:LIB) {
             throw '開発者環境の読み込みに失敗しました（LIB が未設定です）。'
         }
-        # Launch-VsDevShell may change the working directory.
-        Set-Location $PSScriptRoot
     }
 
     if (-not (Test-Path -LiteralPath 'build' -PathType Container)) {
