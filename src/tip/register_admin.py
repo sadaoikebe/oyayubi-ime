@@ -7,6 +7,7 @@ DllRegisterServer also removes the legacy SECUREMODE category; no secure desktop
 
 from __future__ import annotations
 
+import argparse
 import ctypes
 import sys
 import winreg
@@ -33,13 +34,17 @@ def set_sz(root, path, name, value):
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("dll", nargs="?", type=Path, default=DLL, help="登録する DLL のパス")
+    args = parser.parse_args()
+    dll_path = args.dll.resolve()
     if not elevated():
         print("管理者の PowerShell で実行してください:")
         print(rf"  python {Path(__file__).resolve()}")
         sys.exit(2)
-    if not DLL.exists():
-        raise SystemExit(f"missing {DLL}")
-    dll = str(DLL)
+    if not dll_path.exists():
+        raise SystemExit(f"missing {dll_path}")
+    dll = str(dll_path)
 
     clsid = rf"Software\Classes\CLSID\{CLSID}"
     set_sz(winreg.HKEY_LOCAL_MACHINE, clsid, None, "NicolaIME")

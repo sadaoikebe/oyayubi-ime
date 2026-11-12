@@ -32,9 +32,33 @@ TIPは周辺本文を取得しない。再接続時はdirectだけを復元し�
 認証トークンは常にログに出さない。自動起動サーバのstdioはNULへ接続し、旧`oyayubi_server.err.log`は作らない。
 サーバ自身の`--log-text`は独立した明示オプションで、引き続き既定オフ。
 
-DLLは`dist\NicolaIME3.dll`。管理者PowerShellで
+通常の Windows 開発ループは、リポジトリのルートから次の1コマンドで行う。
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\src\tip\dev-build.ps1
+```
+
+管理者への昇格、未ロードの開発者環境の読み込み、初回の CMake 構成、ビルド、CTest、
+登録解除・再登録まで実行する。Visual Studio C++ BuildTools、Windows SDK、CMake、Ninja、
+`python` コマンドが必要。ビルドやテストに失敗した場合は登録を更新せず停止する。
+
+ビルド成果物の `dist\NicolaIME3.dll` を `dist\NicolaIME3-a.dll` と
+`dist\NicolaIME3-b.dll` に交互にコピーして登録するため、通常の更新に再ログインは不要。
+新しいアプリから新版が読み込まれ、起動中の古いアプリは旧版のまま動く。
+すべてに新版を行き渡らせるにはアプリを再起動するかサインアウトする。
+次のコピー先スロットも古いアプリが使用中の場合は、使用中であることを表示して停止するので、
+該当アプリを終了するかサインアウトしてから再実行する。
+スロットの DLL は2つ溜まるだけで、残っていても害はない。
+登録処理は常駐サーバを起動しない。
+従来の `NicolaIME3.dll` をアプリが読み込んでいる場合は、初回の移行時だけ、
+それらのアプリの終了やサインアウトでビルド出力へのロックを解放してから実行する。
+
+手動で登録する場合は、管理者 PowerShell で
 `python src\tip\unregister_admin.py` → `python src\tip\register_admin.py`。
-登録処理は常駐を起動しない。DLL使用中なら旧アプリを閉じるかサインアウトして置換する。
+両スクリプトとも末尾に任意の DLL パスを指定できる。
+登録の既定は `dist\NicolaIME3.dll`、解除の既定は HKLM の InprocServer32 に現在登録された
+DLL（未登録なら `dist\NicolaIME3.dll`）。使用中の DLL を直接置換する場合は、
+その DLL を使うアプリを終了するかサインアウトする必要がある。
 通常ユーザーで`python -m oyayubi.ime.client`を実行すると常駐の起動・認証を先に確認できる。
 
 NicolaIMEを選ぶのはタスクバーの **Japanese → NicolaIME** または Win+Space。

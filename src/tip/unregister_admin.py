@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import ctypes
 import sys
 import winreg
@@ -44,10 +45,28 @@ def del_tree(root, path: str) -> None:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("dll", nargs="?", type=Path, help="解除する DLL のパス（省略時は現在の登録先）")
+    args = parser.parse_args()
     if not elevated():
         print("Run in Administrator PowerShell:")
         print(rf"  python {Path(__file__).resolve()}")
         sys.exit(2)
+
+    dll_path = args.dll
+    if dll_path is None:
+        try:
+            with winreg.OpenKey(
+                winreg.HKEY_LOCAL_MACHINE,
+                rf"Software\Classes\CLSID\{CLSID}\InprocServer32",
+                0,
+                winreg.KEY_READ | winreg.KEY_WOW64_64KEY,
+            ) as key:
+                registered, _ = winreg.QueryValueEx(key, None)
+            dll_path = Path(registered) if registered else DLL
+        except FileNotFoundError:
+            dll_path = DLL
+    dll_path = dll_path.resolve()
 
     fn = ctypes.WinDLL("input.dll").InstallLayoutOrTip
     fn.argtypes = [ctypes.c_wchar_p, ctypes.c_uint]
@@ -55,11 +74,11 @@ def main() -> None:
     for layout in LAYOUTS:
         print("uninstall", layout, fn(layout, 1))
 
-    if DLL.exists():
+    if dll_path.exists():
         ole32 = ctypes.OleDLL("ole32")
         ole32.CoInitialize(None)
         try:
-            d = ctypes.WinDLL(str(DLL))
+            d = ctypes.WinDLL(str(dll_path))
             print(f"DllUnregisterServer 0x{d.DllUnregisterServer() & 0xFFFFFFFF:08X}")
         except OSError as e:
             print("DllUnregisterServer skip", e)
