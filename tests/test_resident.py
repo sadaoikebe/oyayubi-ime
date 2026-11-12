@@ -19,8 +19,8 @@ from oyayubi.ime.lm_async import LmWorker
 from oyayubi.ime.lm_rescore import LmRescorer
 from oyayubi.ime.runtime_platform import process_lock, spawn_detached
 from oyayubi.ime.session import ImeSession
-from tools.wp0.mozc_dict import Entry, MozcLex
-from tools.wp0.table import load_table
+from oyayubi.lattice.mozc_dict import Entry, MozcLex
+from oyayubi.lattice.table import load_table
 
 
 def loaded_session(learning_path=None):
@@ -137,9 +137,11 @@ class ResidentTest(unittest.TestCase):
             reply = first.request({"op": "down", "vk": 13, "t": 250})
             self.assertEqual(reply["commit"], "卯")
             self.assertEqual(type_a(second)["composition"], "卯")
-            second.request({"op": "undo_learning"})  # No confirmation in this session.
+            second.request({"op": "down", "vk": 0x76, "t": 300})  # F7: no confirmation here.
+            second.request({"op": "up", "vk": 0x76, "t": 310})
             self.assertEqual(len(path.read_text().splitlines()), 1)
-            first.request({"op": "undo_learning"})
+            first.request({"op": "down", "vk": 0x76, "t": 300})
+            first.request({"op": "up", "vk": 0x76, "t": 310})
             second.request({"op": "reset"})
             self.assertEqual(type_a(second, 400)["composition"], "宇")
             path.unlink()
@@ -162,36 +164,6 @@ class ResidentTest(unittest.TestCase):
             rows = [json.loads(line) for line in path.read_text().splitlines()]
             self.assertEqual(len(rows), 2)
             self.assertEqual(len({r["record_id"] for r in rows}), 2)
-
-    def test_lm_model_shared_but_context_and_timing_are_per_connection(self):
-        calls = []
-
-        class Scorer:
-            def nll(self, context, candidates):
-                calls.append(context)
-                return [0] * len(candidates)
-
-        loaded = loaded_session()
-        loaded.lm = LmRescorer(Scorer())
-        sessions = []
-        factory = resident.SessionFactory(loaded)
-
-        def create():
-            session = factory()
-            sessions.append(session)
-            return session
-
-        with self.running(create):
-            first, second = self.connect(), self.connect()
-            for connection, context in ((first, "一"), (second, "二")):
-                connection.request({"op": "context", "text": context})
-                type_a(connection)
-                connection.request({"op": "down", "vk": 32, "t": 100})
-                connection.request({"op": "up", "vk": 32, "t": 130})
-            self.assertEqual(calls, ["一", "二"])
-            self.assertIs(sessions[0].lm.scorer, sessions[1].lm.scorer)
-            self.assertIsNot(sessions[0].lm, sessions[1].lm)
-            self.assertIsNot(sessions[0].lm.last, sessions[1].lm.last)
 
     def test_authentication_and_protocol_errors_do_not_allocate_or_break_peers(self):
         factory = Mock(side_effect=resident.SessionFactory(loaded_session()))

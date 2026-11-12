@@ -4,8 +4,8 @@ import json
 from pathlib import Path
 import unittest
 
+from oyayubi.lattice.mozc_dict import load_lex
 from tests.transcript import run_transcript
-from tools.wp0.mozc_dict import load_lex
 
 CASES = sorted((Path(__file__).parent / "transcripts").glob("*.json"))
 if not CASES:

@@ -10,8 +10,8 @@ from pathlib import Path
 import time
 from uuid import uuid4
 
-from tools.wp0.expand import is_literal_face, token_branches
-from tools.wp0.mozc_dict import DEFAULT_NOUN_ID, Entry, MozcLex
+from oyayubi.lattice.expand import is_literal_face, token_branches
+from oyayubi.lattice.mozc_dict import DEFAULT_NOUN_ID, Entry, MozcLex
 from .bunsetsu import Candidate, content
 
 DEFAULT_LEARNING_PATH = Path(__file__).resolve().parents[2] / "data" / "learning.jsonl"
@@ -68,7 +68,6 @@ class LearningStore:
         self.now = clock()
         self.revision = 0
         self.active = False
-        self.error: str | None = None
         self._signature = None
         self._needs_newline = False
         self._records: dict[tuple[str, str, str], Confirmation] = {}
@@ -100,8 +99,7 @@ class LearningStore:
             self._needs_newline = bool(raw) and not raw.endswith("\n")
         except FileNotFoundError:
             signature, lines = None, []
-        except (OSError, UnicodeError) as exc:
-            self.error = type(exc).__name__
+        except (OSError, UnicodeError):
             signature, lines = None, []
         self.active = signature is not None
         self._signature = signature
@@ -243,8 +241,7 @@ class LearningStore:
         except FileNotFoundError:
             self.sync()
             return False
-        except OSError as exc:
-            self.error = type(exc).__name__
+        except OSError:
             return False  # Persistence failure must not discard the user's commit.
         self.sync()
         return True

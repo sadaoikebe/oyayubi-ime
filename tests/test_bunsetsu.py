@@ -4,8 +4,8 @@ from collections import defaultdict
 import unittest
 
 from oyayubi.ime.bunsetsu import COST_WINDOW, CandidateStream, candidates, content
-from tools.wp0.mozc_dict import Entry, MozcLex
-from tools.wp0.token_viterbi import _spans_from
+from oyayubi.lattice.mozc_dict import Entry, MozcLex
+from oyayubi.lattice.token_viterbi import spans_from
 
 
 def lexicon(entries, matrix):
@@ -38,7 +38,7 @@ class BunsetsuTest(unittest.TestCase):
                     if pos == len(tokens):
                         paths.append((cost + lex.transition(rid, right), surface, reading, unknown))
                         return
-                    for w in _spans_from(tokens, pos, lex):
+                    for w in spans_from(tokens, pos, lex):
                         e = w.entry
                         walk(w.end, e.rid, cost + lex.transition(rid, e.lid) + e.cost,
                              surface + e.surface, reading + e.reading, unknown or w.unknown)

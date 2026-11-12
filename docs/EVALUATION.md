@@ -43,7 +43,10 @@ Fable の E2 スクリプトにあった50件制限と
 [Mozc quality_regression_util.cc](https://github.com/google/mozc/blob/master/src/converter/quality_regression_util.cc)。
 
 辞書は全エントリを読み込み、ユーザー辞書適用時も切り捨てない。
-旧キャッシュは8件以降を復元できないため、`data/cache/mozc_lex_v2.pkl` に再構築する。
+旧キャッシュは8件以降を復元できないため、`data/cache/mozc_lex_v2.pkl` に再構築した。
+2026-11-12 に変換エンジン（`mozc_dict`／`token_viterbi`／`decode`／`expand`／`table`）を `tools/wp0/` から
+`oyayubi/lattice/` へ移したため、pickle のモジュール名が変わり、キャッシュは `mozc_lex_v3.pkl`（中身は v2 と同一）になった。
+初回だけ辞書テキストから再構築する。評価・回帰のコマンド（`python3 -m tools.wp0.…`）は変わらない。
 候補列挙へ全エントリを渡す。Stage 5a の `nbest_tokens` は厳密 Viterbi＋後ろ向き A* で
 異なる表記を最小コスト順に列挙する。1-best の RID 枝刈りは維持する。
 単語の全候補を検査するときは `nbest_tokens(..., k=十分大きな値)` を使う。

@@ -10,8 +10,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DICT_DIR = ROOT / "third_party" / "mozc_oss_dict"
-# v1 caches discarded homonyms after the eighth entry; rebuild them once.
-CACHE = ROOT / "data" / "cache" / "mozc_lex_v2.pkl"
+# v1 caches discarded homonyms after the eighth entry; v2 pickles name the old
+# module path tools.wp0.mozc_dict. Each version bump rebuilds the cache once.
+CACHE = ROOT / "data" / "cache" / "mozc_lex_v3.pkl"
 USER_LEX = ROOT / "data" / "user_lexicon.jsonl"
 DEFAULT_NOUN_ID = 1851  # 名詞,一般 in Mozc id.def
 

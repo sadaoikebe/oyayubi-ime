@@ -18,10 +18,9 @@ from oyayubi.ime.lm_async import ConnectionPipeline, Job, LmStats, LmWorker
 from oyayubi.ime.lm_rescore import LmRescorer, conversion_picks
 from oyayubi.ime.server import dispatch
 from oyayubi.ime.session import ImeSession
+from oyayubi.lattice.mozc_dict import Entry, MozcLex, load_lex
+from oyayubi.lattice.table import load_table, reverse_table
 from tests.transcript import make_session
-from tools.wp0.mozc_dict import Entry, MozcLex, load_lex
-from tools.wp0.run_mozc_eval import reverse_table
-from tools.wp0.table import load_table
 
 TRANSCRIPTS = sorted((Path(__file__).parent / "transcripts").glob("*.json"))
 # Up of an unclassified key: a no-op for every session state. Sent last to both

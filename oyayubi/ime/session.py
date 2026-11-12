@@ -6,23 +6,18 @@ The FSM's timing and chord decisions are unchanged.
 
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
-
-ROOT = Path(__file__).resolve().parents[2]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
 
 from oyayubi.chord.fsm import AmbShift, ChordFsm, Plain, ThumbTap, Token
 from oyayubi.chord.keys import (
     SHIFT_VKS, SHORTCUT_VKS, VK_BACK, VK_ESCAPE, VK_RETURN, classify, literal_character,
 )
-from tools.wp0.mozc_dict import MozcLex, load_lex
-from tools.wp0.expand import is_literal_face, literal_text
-from tools.wp0.table import load_table
-from tools.wp0.token_viterbi import decode_tokens
+from oyayubi.lattice.expand import is_literal_face, literal_text
+from oyayubi.lattice.mozc_dict import MozcLex, load_lex
+from oyayubi.lattice.table import load_table
+from oyayubi.lattice.token_viterbi import decode_tokens
 from .bunsetsu import (BOS_ID, PAGE_SIZE, Candidate, CandidateStream, Segment,
                        candidates, segments_from)
 from .learning import DEFAULT_LEARNING_PATH, LearningStore

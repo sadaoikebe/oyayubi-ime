@@ -3,11 +3,10 @@ from __future__ import annotations
 import unittest
 
 from oyayubi.ime.bunsetsu import Candidate, CandidateStream, candidates, segments_from
+from oyayubi.lattice.expand import is_literal_face
+from oyayubi.lattice.table import load_table, reverse_table
+from oyayubi.lattice.token_viterbi import decode_tokens, nbest_tokens
 from tests.test_bunsetsu import lexicon
-from tools.wp0.expand import is_literal_face
-from tools.wp0.run_mozc_eval import reverse_table
-from tools.wp0.table import load_table
-from tools.wp0.token_viterbi import decode_tokens, nbest_tokens
 
 
 def plain(text):

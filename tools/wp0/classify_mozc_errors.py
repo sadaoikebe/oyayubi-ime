@@ -36,15 +36,16 @@ import traceback
 import unicodedata
 
 from oyayubi.ime.bunsetsu import PAGE_SIZE, candidates
-from . import mozc_dict
-from .decode import DecodeResult, Piece
-from .expand import is_literal_face
-from .mozc_dict import (BOS_ID, CACHE, DICT_DIR, MAX_WORD_MORA, POS_KEEP, ROOT,
-                        UNK_COST, UNK_LID, USER_LEX, Entry, MozcLex, apply_user_lex)
-from .run_mozc_eval import criterion_passes, parse_criterion, reverse_table
-from .table import DATA, load_table
-from .token_viterbi import (BOUNDARY_RID, _Word, _end_cost, _word_cost,
-                            decode_tokens, nbest_tokens)
+from oyayubi.lattice import mozc_dict
+from oyayubi.lattice.decode import DecodeResult, Piece
+from oyayubi.lattice.expand import is_literal_face
+from oyayubi.lattice.mozc_dict import (BOS_ID, CACHE, DICT_DIR, MAX_WORD_MORA, POS_KEEP, ROOT,
+                                       UNK_COST, UNK_LID, USER_LEX, Entry, MozcLex,
+                                       apply_user_lex)
+from oyayubi.lattice.table import DATA, load_table, reverse_table
+from oyayubi.lattice.token_viterbi import (BOUNDARY_RID, Word, decode_tokens, end_cost,
+                                           nbest_tokens, word_cost)
+from .run_mozc_eval import criterion_passes, parse_criterion
 
 
 PRIMARY_ORDER = (
@@ -140,7 +141,7 @@ def ui_segments(pieces: list[Piece], names: dict[int, str]) -> list[tuple[int, i
     """Same POS grouping as bunsetsu.segments_from, with the selected id.def."""
     groups = []
     for p in pieces:
-        pos = names.get(int(p.pos), "").split(",")
+        pos = names.get(p.lid, "").split(",")
         content = ((pos[0] in ("名詞", "動詞", "形容詞") and pos[1] not in ("接尾", "非自立"))
                    or pos[0] in ("副詞", "連体詞", "接続詞", "感動詞", "接頭詞"))
         if not groups or p.literal or p.learned or groups[-1][-1].literal or content:
@@ -154,20 +155,20 @@ def describe_path(decoded: DecodeResult, lex: MozcLex, overlay: set, names: dict
     prev = BOUNDARY_RID
     word_total = connection_total = 0
     for p in decoded.pieces:
-        e = Entry(p.surface, p.reading, int(p.pos), p.rid, p.cost)
+        e = Entry(p.surface, p.reading, p.lid, p.rid, p.cost)
         known = any(entry_key(e) == entry_key(other) for other in lex.by_reading.get(p.reading, []))
-        w = _Word(p.start, p.end, e, unknown=not known and not p.literal, literal=p.literal)
+        w = Word(p.start, p.end, e, unknown=not known and not p.literal, literal=p.literal)
         cost = 0 if p.literal else p.cost
-        connection = _word_cost(lex, prev, w) - cost
+        connection = word_cost(lex, prev, w) - cost
         word_total += cost
         connection_total += connection
-        pieces.append({**asdict(p), "lid": e.lid, "lid_name": names.get(e.lid),
+        pieces.append({**asdict(p), "lid_name": names.get(e.lid),
                        "rid_name": names.get(e.rid), "connection_from_rid": prev,
                        "connection_cost": connection, "unknown": w.unknown,
                        "source_layer": ("literal" if p.literal else "unknown_backoff" if w.unknown
                                         else "user_overlay" if entry_key(e) in overlay else "mozc_base")})
         prev = w.rid
-    eos = _end_cost(lex, prev)
+    eos = end_cost(lex, prev)
     return {"reading": decoded.reading, "surface": decoded.surface, "score": decoded.score,
             "pieces": pieces, "word_cost": word_total, "connection_cost": connection_total + eos,
             "bos_cost": pieces[0]["connection_cost"] if pieces else 0, "eos_cost": eos,
@@ -217,7 +218,7 @@ def constrained_path(reading: str, surface: str, lex: MozcLex,
     while i:
         _, previous, e = states[i][(out, rid)]
         start, old_out, old_rid = previous
-        pieces.append(Piece(e.surface, e.reading, str(e.lid), e.cost, start, i, e.rid))
+        pieces.append(Piece(e.surface, e.reading, e.lid, e.cost, start, i, e.rid))
         i, out, rid = start, old_out, old_rid
     return DecodeResult(reading, surface, score, list(reversed(pieces)))
 
@@ -312,7 +313,7 @@ def target_diagnostic(reading: str, target: str, decoded: DecodeResult, tokens: 
                 if wanted == selected:
                     continue
                 left = next((p.rid for p in reversed(decoded.pieces) if p.end == start), BOS_ID)
-                right = next((int(p.pos) for p in decoded.pieces if p.start == end), BOS_ID)
+                right = next((p.lid for p in decoded.pieces if p.start == end), BOS_ID)
                 ui_rank = None
                 for number, candidate in enumerate(candidates(tokens[start:end], lex, left, right), 1):
                     if candidate.surface == wanted and candidate.reading == reading[start:end]:
@@ -701,9 +702,10 @@ def main():
     if cache:
         inputs.append(cache)
     hashes = {str(path.resolve()): sha256(path) for path in inputs}
-    engine_files = [Path(__file__), ROOT / "tools/wp0/mozc_dict.py", ROOT / "tools/wp0/token_viterbi.py",
-                    ROOT / "tools/wp0/run_mozc_eval.py", ROOT / "tools/wp0/expand.py",
-                    ROOT / "tools/wp0/decode.py", ROOT / "tools/wp0/table.py", ROOT / "oyayubi/ime/bunsetsu.py"]
+    engine_files = [Path(__file__), ROOT / "oyayubi/lattice/mozc_dict.py",
+                    ROOT / "oyayubi/lattice/token_viterbi.py", ROOT / "tools/wp0/run_mozc_eval.py",
+                    ROOT / "oyayubi/lattice/expand.py", ROOT / "oyayubi/lattice/decode.py",
+                    ROOT / "oyayubi/lattice/table.py", ROOT / "oyayubi/ime/bunsetsu.py"]
     git = lambda *parts: subprocess.check_output(["git", *parts], cwd=ROOT)
     manifest = {"format_version": 1, "python": platform.python_version(),
                 "code_head": git("rev-parse", "HEAD").decode().strip(),

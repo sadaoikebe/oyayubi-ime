@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from tools.wp0 import mozc_dict
+from oyayubi.lattice import mozc_dict
 
 
 class ZeroRowPenaltyTest(unittest.TestCase):

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 import gc
 import hmac
 import json
@@ -38,7 +37,6 @@ class SessionFactory:
         return ImeSession(
             _table=loaded._table, _lex=loaded._lex, learning_path=loaded.learning_path,
             _learning=loaded._learning,
-            lm=replace(loaded.lm, last={}) if loaded.lm is not None else None,
         )
 
 

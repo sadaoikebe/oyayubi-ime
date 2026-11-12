@@ -14,10 +14,9 @@ from pathlib import Path
 import re
 import time
 
-from .mozc_dict import DICT_DIR, load_lex
-from .expand import is_literal_face
-from .table import load_table
-from .token_viterbi import decode_tokens, nbest_tokens
+from oyayubi.lattice.mozc_dict import DICT_DIR, load_lex
+from oyayubi.lattice.table import load_table, reverse_table
+from oyayubi.lattice.token_viterbi import decode_tokens, nbest_tokens
 
 
 def parse_criterion(command: str) -> tuple[str, bool, int] | None:
@@ -39,25 +38,6 @@ def criterion_passes(criterion, argument: str, best: str, candidates: list[str])
     kind, negative, topn = criterion
     hit = argument in best if kind == "Match" else argument in candidates[:topn]
     return not hit if negative else hit
-
-
-def reverse_table(table: dict) -> dict[str, dict]:
-    """Map each face to the lattice token produced by its key."""
-    result = {}
-    # Plain faces take precedence if a kana appears on multiple keys.
-    for key, faces in table["keys"].items():
-        kana = faces.get("plain")
-        # Evaluation encodes kana readings only; punctuation is handled by the
-        # IME as a literal boundary, not as a kana dictionary arc.
-        if kana and not is_literal_face(kana):
-            result.setdefault(kana, {"kind": "plain", "key": key, "kana": kana})
-    for key, faces in table["keys"].items():
-        shifts = {face: faces[face] for face in ("left", "right") if faces.get(face)}
-        token = {"kind": "amb" if len(shifts) > 1 else "shift", "key": key, "faces": shifts}
-        for kana in shifts.values():
-            if not is_literal_face(kana):
-                result.setdefault(kana, token)
-    return result
 
 
 def main() -> None:

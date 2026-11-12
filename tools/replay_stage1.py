@@ -17,7 +17,7 @@ from oyayubi.chord.keys import (
     classify, literal_character,
 )
 from oyayubi.ime.recording import SCHEMA, VK_NEXT_PROMPT
-from tools.wp0.table import load_table
+from oyayubi.lattice.table import load_table
 
 LABELS = {
     "thumb_overlap_shift_loss": "親指の重なりでシフト消失（推定）",

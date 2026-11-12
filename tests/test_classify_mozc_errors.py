@@ -8,10 +8,10 @@ import time
 import unittest
 from unittest.mock import patch
 
+from oyayubi.lattice.mozc_dict import Entry, MAX_WORD_MORA, MozcLex, UNK_COST
+from oyayubi.lattice.token_viterbi import decode_tokens, nbest_tokens
 from tools.wp0 import classify_mozc_errors as diagnostic
-from tools.wp0.mozc_dict import Entry, MAX_WORD_MORA, MozcLex, UNK_COST
 from tools.wp0.run_mozc_eval import criterion_passes, parse_criterion
-from tools.wp0.token_viterbi import decode_tokens, nbest_tokens
 
 
 NAMES = {0: "BOS/EOS,*,*", 1: "名詞,一般,*", 2: "助詞,格助詞,*"}

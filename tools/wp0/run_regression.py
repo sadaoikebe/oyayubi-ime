@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from .mozc_dict import load_lex
-from .run_mozc_eval import reverse_table
-from .table import load_table
-from .token_viterbi import decode_tokens, nbest_tokens
+from oyayubi.lattice.mozc_dict import load_lex
+from oyayubi.lattice.table import load_table, reverse_table
+from oyayubi.lattice.token_viterbi import decode_tokens, nbest_tokens
 
 
 def main() -> int:

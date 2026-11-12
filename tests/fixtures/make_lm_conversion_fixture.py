@@ -15,10 +15,9 @@ sys.path.insert(0, str(ROOT))
 from oyayubi.chord.fsm import AmbShift, Plain  # noqa: E402
 from oyayubi.ime.lm_rescore import CausalLmScorer, LmRescorer  # noqa: E402
 from oyayubi.ime.session import ImeSession, Literal  # noqa: E402
+from oyayubi.lattice.table import load_table, reverse_table  # noqa: E402
 from tools.wp0.fetch_ajimee import DATA  # noqa: E402
 from tools.wp0.run_ajimee_eval import hiragana  # noqa: E402
-from tools.wp0.run_mozc_eval import reverse_table  # noqa: E402
-from tools.wp0.table import load_table  # noqa: E402
 
 LIMIT = 30
 OUT = Path(__file__).with_name("lm_conversion_expected.json")

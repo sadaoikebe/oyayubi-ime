@@ -22,7 +22,7 @@ BOUNDARY_RID = -1
 
 
 @dataclass(slots=True)
-class _Word:
+class Word:
     start: int
     end: int
     entry: Entry
@@ -35,13 +35,13 @@ class _Word:
         return BOUNDARY_RID if self.literal else self.entry.rid
 
 
-def _word_cost(lex: MozcLex, rid: int, word: _Word) -> int:
+def word_cost(lex: MozcLex, rid: int, word: Word) -> int:
     if word.literal:
         return 0 if rid == BOUNDARY_RID else lex.transition(rid, BOS_ID)
     return lex.transition(BOS_ID if rid == BOUNDARY_RID else rid, word.entry.lid) + word.entry.cost
 
 
-def _end_cost(lex: MozcLex, rid: int, right: int = BOS_ID) -> int:
+def end_cost(lex: MozcLex, rid: int, right: int = BOS_ID) -> int:
     if rid == BOUNDARY_RID:
         return 0 if right == BOS_ID else lex.transition(BOS_ID, right)
     return lex.transition(rid, right)
@@ -57,14 +57,14 @@ class _St:
     context: str = ""  # current bunsetsu spelling, used only by the learning layer
 
 
-def _spans_from(tokens: list[dict], i: int, lex: MozcLex, learning=None) -> list[_Word]:
-    out: list[_Word] = []
+def spans_from(tokens: list[dict], i: int, lex: MozcLex, learning=None) -> list[Word]:
+    out: list[Word] = []
     stack = [(i, "")]
     while stack:
         pos, acc = stack.pop()
         if acc:
             for e in lex.by_reading.get(acc, ()):
-                out.append(_Word(i, pos, e))
+                out.append(Word(i, pos, e))
         if pos >= len(tokens) or (pos - i) >= MAX_WORD_MORA:
             continue
         for kana in token_branches(tokens[pos]):
@@ -78,11 +78,11 @@ def _spans_from(tokens: list[dict], i: int, lex: MozcLex, learning=None) -> list
         if tokens[i]["kind"] == "literal" or is_literal_face(kana):
             # Explicit Stage 2A literals already contain their display text.
             text = kana if tokens[i]["kind"] == "literal" else literal_text(kana)
-            out.append(_Word(i, i + 1, Entry(text, text, BOS_ID, BOS_ID, 0), literal=True))
+            out.append(Word(i, i + 1, Entry(text, text, BOS_ID, BOS_ID, 0), literal=True))
         elif kana not in have_one:
-            out.append(_Word(i, i + 1, Entry(kana, kana, UNK_LID, UNK_LID, UNK_COST), True))
+            out.append(Word(i, i + 1, Entry(kana, kana, UNK_LID, UNK_LID, UNK_COST), True))
     if learning is not None:
-        out.extend(_Word(i, end, e, learned=True)
+        out.extend(Word(i, end, e, learned=True)
                    for end, e in learning.spans(tokens, i, lex))
     return out
 
@@ -112,7 +112,7 @@ def decode_tokens(tokens: list[dict], lex: MozcLex, *, learning=None,
     t0 = time.perf_counter()
     states: list[list[_St]] = [[] for _ in range(n + 1)]
     states[0] = [_St(0, BOUNDARY_RID, -1, -1, "", left_surface)]
-    words: list[_Word] = []
+    words: list[Word] = []
     n_spans = 0
 
     for i in range(n):
@@ -120,13 +120,13 @@ def decode_tokens(tokens: list[dict], lex: MozcLex, *, learning=None,
             continue
         if len(states[i]) > POS_KEEP:
             states[i] = _prune(states[i], mode="rid")
-        spans = _spans_from(tokens, i, lex, learning)
+        spans = spans_from(tokens, i, lex, learning)
         n_spans += len(spans)
         for w in spans:
             wi = len(words)
             words.append(w)
             for si, st in enumerate(states[i]):
-                nsc = st.score + _word_cost(lex, st.rid, w)
+                nsc = st.score + word_cost(lex, st.rid, w)
                 context = ""
                 if learning is not None:
                     if w.learned:
@@ -144,12 +144,12 @@ def decode_tokens(tokens: list[dict], lex: MozcLex, *, learning=None,
     best_i = 0
     best_score = 10**18
     for i, st in enumerate(states[n]):
-        sc = st.score + _end_cost(lex, st.rid)
+        sc = st.score + end_cost(lex, st.rid)
         if sc < best_score:
             best_score = sc
             best_i = i
 
-    path: list[_Word] = []
+    path: list[Word] = []
     pos, idx = n, best_i
     while pos > 0:
         st = states[pos][idx]
@@ -161,7 +161,7 @@ def decode_tokens(tokens: list[dict], lex: MozcLex, *, learning=None,
     reading = "".join(w.entry.reading for w in path)
     surface = "".join(w.entry.surface for w in path)
     pieces = [
-        Piece(w.entry.surface, w.entry.reading, str(w.entry.lid), w.entry.cost,
+        Piece(w.entry.surface, w.entry.reading, w.entry.lid, w.entry.cost,
               w.start, w.end, w.entry.rid, w.literal, w.learned)
         for w in path
     ]
@@ -210,10 +210,10 @@ def nbest_tokens(
         # A right-hand literal (or EOS) closes the current kana run. Using
         # BOUNDARY_RID, rather than LID=0, preserves real dictionary POS=0.
         if lid == BOUNDARY_RID:
-            return _end_cost(lex, rid)
+            return end_cost(lex, rid)
         return lex.transition(BOS_ID if rid == BOUNDARY_RID else rid, lid)
 
-    incoming: list[list[_Word]] = [[] for _ in range(n + 1)]
+    incoming: list[list[Word]] = [[] for _ in range(n + 1)]
     forward: list[dict[int, int]] = [{} for _ in range(n + 1)]
     forward[0][BOUNDARY_RID] = 0
     # prefix[i][lid] includes the connection into the next word, but not its
@@ -222,7 +222,7 @@ def nbest_tokens(
     for i in range(n):
         if not forward[i]:
             continue
-        for w in _spans_from(tokens, i, lex):
+        for w in spans_from(tokens, i, lex):
             if w.unknown or w.entry.cost >= UNK_COST:
                 continue  # Apply the existing output policy before searching.
             lid = BOUNDARY_RID if w.literal else w.entry.lid
@@ -237,7 +237,7 @@ def nbest_tokens(
     if not forward[n]:
         return out, stats()  # No dictionary/literal-only covering path.
 
-    best = min(cost + _end_cost(lex, rid) for rid, cost in forward[n].items())
+    best = min(cost + end_cost(lex, rid) for rid, cost in forward[n].items())
     serial = count()
     # bound, tie-breaker, suffix cost, start, first LID, surface, linked path
     heap = [(best, next(serial), 0, n, BOUNDARY_RID, "", None)]
@@ -260,7 +260,7 @@ def nbest_tokens(
                 w, path = path
                 e = w.entry
                 reading.append(e.reading)
-                pieces.append(Piece(e.surface, e.reading, str(e.lid), e.cost,
+                pieces.append(Piece(e.surface, e.reading, e.lid, e.cost,
                                     w.start, w.end, e.rid, w.literal, w.learned))
             out.append(DecodeResult("".join(reading), surface, bound, pieces))
             continue

@@ -1,3 +1,1 @@
-from .fsm import AmbShift, ChordFsm, Plain, ThumbTap, Token
-
-__all__ = ["AmbShift", "ChordFsm", "Plain", "ThumbTap", "Token"]
+"""NICOLA chord FSM (NICOLA-SPEC host port) and key classification."""

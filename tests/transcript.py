@@ -11,8 +11,8 @@ from pathlib import Path
 
 from oyayubi.ime.server import dispatch
 from oyayubi.ime.session import ImeSession
-from tools.wp0.mozc_dict import Entry, MozcLex
-from tools.wp0.table import load_table
+from oyayubi.lattice.mozc_dict import Entry, MozcLex
+from oyayubi.lattice.table import load_table
 
 VISIBLE = {"composition", "candidates", "cand_index", "converted", "commit", "committed"}
 SEGMENT_VISIBLE = {"segments", "focus", "candidate_page", "candidate_kinds", "has_next_page"}

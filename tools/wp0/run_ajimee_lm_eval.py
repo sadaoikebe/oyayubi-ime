@@ -24,11 +24,10 @@ import time
 from oyayubi.ime.lm_rescore import DEFAULT_MODEL, CausalLmScorer, LmRescorer
 
 from .fetch_ajimee import DATA
-from .mozc_dict import load_lex
+from oyayubi.lattice.mozc_dict import load_lex
 from .run_ajimee_eval import chunks, hiragana
-from .run_mozc_eval import reverse_table
-from .table import load_table
-from .token_viterbi import decode_tokens
+from oyayubi.lattice.table import load_table, reverse_table
+from oyayubi.lattice.token_viterbi import decode_tokens
 
 
 def pct(values: list[float], q: float) -> float:
@@ -47,7 +46,7 @@ def main() -> None:
     parser.add_argument("--threads", type=int, default=4)
     parser.add_argument("--ctx-tokens", type=int, default=48)
     parser.add_argument("--ctx-max", type=int, default=128)
-    parser.add_argument("--variant", choices=("full", "lcp", "batch", "no-incremental", "naive"),
+    parser.add_argument("--variant", choices=("full", "no-incremental", "naive"),
                         default="full", help="latency ablation (scores are identical)")
     parser.add_argument("--limit", type=int, default=0, help="first N items only")
     parser.add_argument("--summary", type=Path, help="write results as JSON (no text)")
@@ -64,7 +63,6 @@ def main() -> None:
     t0 = time.perf_counter()
     scorer = CausalLmScorer(args.model, threads=args.threads, ctx_tokens=args.ctx_tokens,
                             ctx_max=args.ctx_max, kv_cache=args.variant != "naive",
-                            share={"lcp": "lcp", "batch": "none"}.get(args.variant, "tree"),
                             incremental=args.variant != "no-incremental")
     load_s = time.perf_counter() - t0
     scorer.nll("", ["あ", "い"])  # warm-up, as the server does before "ready"

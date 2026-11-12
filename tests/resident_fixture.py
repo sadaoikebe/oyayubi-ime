@@ -5,8 +5,8 @@ from unittest.mock import patch
 
 from oyayubi.ime import resident, server
 from oyayubi.ime.session import ImeSession
-from tools.wp0.mozc_dict import MozcLex
-from tools.wp0.table import load_table
+from oyayubi.lattice.mozc_dict import MozcLex
+from oyayubi.lattice.table import load_table
 
 
 def main():

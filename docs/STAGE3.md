@@ -62,7 +62,7 @@ TSFの表示・キー消費・フォーカスに集中できる。待受けは `
   `runtime_platform.py` にWindowsの起動フラグだけを分離する。
   子のstdioはDEVNULLで、終了ハンドルをTIPが所有してkillする形にしない。
   実機ではTIPのワーカーからこの手順を移植する。ActivateExやTSFキー処理で辞書ロードを待たない。
-- 初回待機は既定15秒、接続・認証は1回最大250ms。通常キー応答はTIPの現行150msを上限にする。
+- 初回待機は既定15秒、接続・認証は1回最大250ms。通常キー応答はTIPの `kKeyBudgetMs`（250ms）を上限にする。
   起動中はキーをアプリへ渡す。失敗キーは再送しない。
   返信待ちが失敗した接続は閉じ、遅れた応答を次のキーの応答に流用しない。
   サーバのkillは行わず、ワーカーで再接続・必要なら再spawnする。
@@ -224,7 +224,7 @@ Windowsビルド・リンク・TSF実機スモークの完了を意味しない�
 
 | ファイル | 反映内容 |
 | --- | --- |
-| `src/tip/oyayubi_tip.cpp` | Winsock認証接続、起動ワーカー、detach/NUL、250ms接続・150msキー期限、再接続とdirect復元。トグル／返信状態による消費判定、modsとdown/up対応、focus reset、入力スコープ除外、display attribute provider、文節のUTF-16範囲、キャレットと候補位置、本文ログの明示設定 |
+| `src/tip/oyayubi_tip.cpp` | Winsock認証接続、起動ワーカー、detach/NUL、250ms接続・250msキー期限、再接続とdirect復元。トグル／返信状態による消費判定、modsとdown/up対応、focus reset、入力スコープ除外、display attribute provider、文節のUTF-16範囲、キャレットと候補位置、本文ログの明示設定 |
 | `src/tip/tip_json.h` | endpoint・設定・返信の構造化JSONパーサ。quote、改行等のescapeとUnicode／surrogate pairの復元。外部依存なし |
 | `src/tip/CMakeLists.txt` | `ws2_32`等のリンク、新規ヘッダとテストを登録。`TIP_BUILD_JSON_TESTS`は既定ON、Linuxではテストだけビルド。MSVC runtime設定をターゲット生成前へ移し、`/utf-8`とWindows 10/11対象のAPI宣言マクロを指定 |
 | `src/tip/tests/tip_json_test.cpp` | endpoint／返信、偽の入れ子フィールド、escape／サロゲート、壊れたJSON、64-bit整数境界・範囲超過を検査。LinuxのCMake Releaseビルド・CTest成功 |
@@ -248,7 +248,7 @@ GetTextExtが不可視を示す空矩形を返す場合と、active viewを取�
 | 項目 | 照合箇所・結果 |
 | --- | --- |
 | 1 SECUREMODE | `kCats`から除去済み。`RegisterCategories`の旧カテゴリUnregisterを維持 |
-| 2 常駐接続 | `Server::Start/Run/Connect/SpawnResident/Send/Stop`。ワーカー起動、250ms接続、150msキー、直列化、切断再接続、世代、direct復元、killなし。`ws2_32`リンク済み |
+| 2 常駐接続 | `Server::Start/Run/Connect/SpawnResident/Send/Stop`。ワーカー起動、250ms接続、250msキー、直列化、切断再接続、世代、direct復元、killなし。`ws2_32`リンク済み |
 | 3 JSON／返信 | `tip_json.h`、`ParseReply/NoteReply`。direct・pass_through・文節・focus・page・timerを構造で読取り、escape／Unicodeを復元。今回整数範囲超過も修正 |
 | 4 トグル | `TipConfig/ToggleKey/OnKeyDown/OnKeyUp/ToggleImpl`。既定Altのみ、設定変更、初回downのみ反転、repeat／up対応、未確定破棄 |
 | 5 キー消費 | `WantVk/CanEat/HandleKeyImpl/OnTestKey*/OnKey*`。OnTestは照会のみ、実キーで一度送信、返信状態と送信前の役割で判定。Shiftをmodsへ載せ、消費downのみupを対応。IPC失敗は素通し |
@@ -283,7 +283,7 @@ APIはMicrosoft LearnおよびMicrosoft公開SDKヘッダと照合した。
 PCで特に確認する箇所:
 
 - MSVC＋Windows 10/11 SDK。`inputscope.h`の`IS_NUMERIC_PASSWORD`、`ITfDisplayAttributeProvider`一式とGUID、`ws2_32`のリンク。SEHのラッパーへデストラクタ付きローカル変数を入れない（C2712回避）。
-- `WSAStartup`、非ブロッキング`connect`／`select`／部分送受信、切断時と150ms超過時のfail-open。
+- `WSAStartup`、非ブロッキング`connect`／`select`／部分送受信、切断時と250ms超過時のfail-open。
 - `STARTUPINFOEXW`、`PROC_THREAD_ATTRIBUTE_HANDLE_LIST`によるNULのみの継承、
   `DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP`、アプリ終了後の常駐維持。
 - `GetAppProperty(GUID_PROP_INPUTSCOPE)`の読み取りcookie、パスワード／数値パスワード欄、

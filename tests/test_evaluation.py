@@ -6,11 +6,11 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from tools.wp0 import mozc_dict
-from tools.wp0.mozc_dict import Entry, MozcLex, apply_user_lex
+from oyayubi.lattice import mozc_dict
+from oyayubi.lattice.mozc_dict import Entry, MozcLex, apply_user_lex
+from oyayubi.lattice.token_viterbi import decode_tokens, nbest_tokens
 from tools.wp0.run_ajimee_eval import chunks, convert, hiragana
 from tools.wp0.run_mozc_eval import criterion_passes, parse_criterion
-from tools.wp0.token_viterbi import decode_tokens, nbest_tokens
 
 
 class EvaluationTest(unittest.TestCase):

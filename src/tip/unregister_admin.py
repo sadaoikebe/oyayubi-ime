@@ -88,8 +88,7 @@ def main() -> None:
         (winreg.HKEY_CURRENT_USER, "HKCU"),
     ):
         for path in (
-            rf"SOFTWARE\Microsoft\CTF\TIP\{CLSID}",
-            rf"Software\Microsoft\CTF\TIP\{CLSID}",
+            rf"SOFTWARE\Microsoft\CTF\TIP\{CLSID}",  # registry keys are case-insensitive
             rf"Software\Classes\CLSID\{CLSID}",
         ):
             del_tree(root, path)

@@ -7,9 +7,9 @@ from heapq import heappop, heappush
 from itertools import count
 from typing import Iterator
 
-from tools.wp0.decode import Piece
-from tools.wp0.mozc_dict import BOS_ID, DICT_DIR, UNK_COST, MozcLex
-from tools.wp0.token_viterbi import BOUNDARY_RID, _end_cost, _spans_from, _word_cost
+from oyayubi.lattice.decode import Piece
+from oyayubi.lattice.mozc_dict import BOS_ID, DICT_DIR, UNK_COST, MozcLex
+from oyayubi.lattice.token_viterbi import BOUNDARY_RID, end_cost, spans_from, word_cost
 
 # Half a single unknown-character penalty. This bounds implausible dictionary
 # analyses, not the number of homonyms, and never limits the kana escape route.
@@ -59,15 +59,15 @@ def segments_from(pieces: list[Piece], offset: int, lex: MozcLex | None = None) 
     groups: list[list[Piece]] = []
     for piece in pieces:
         if (not groups or piece.literal or piece.learned or groups[-1][-1].literal
-                or content(int(piece.pos))):
+                or content(piece.lid)):
             groups.append([])
         groups[-1].append(piece)
     return [Segment(offset + g[0].start, offset + g[-1].end,
                     Candidate("".join(p.surface for p in g), "".join(p.reading for p in g),
-                              0, int(g[0].pos), g[-1].rid,
+                              0, g[0].lid, g[-1].rid,
                               "literal" if g[0].literal else "dictionary",
                               sum(p.cost for p in g) + (sum(
-                                  lex.transition(a.rid, int(b.pos)) for a, b in zip(g, g[1:]))
+                                  lex.transition(a.rid, b.lid) for a, b in zip(g, g[1:]))
                                   if lex is not None else 0))) for g in groups]
 
 
@@ -81,7 +81,7 @@ def _paths(tokens: list[dict], lex: MozcLex, left: int, right: int,
     the same reading. Both permit negative word/connection costs.
     """
     n = len(tokens)
-    arcs = [[w for w in _spans_from(tokens, i, lex, learning) if kana or not w.unknown]
+    arcs = [[w for w in spans_from(tokens, i, lex, learning) if kana or not w.unknown]
             for i in range(n)]
     # Suffix costs for every reachable previous RID; compute iteratively so a
     # long unknown segment cannot exceed Python's recursion limit.
@@ -93,7 +93,7 @@ def _paths(tokens: list[dict], lex: MozcLex, left: int, right: int,
             for w in arcs[i]:
                 rids[w.end].add(w.rid)
     suffix = [{} for _ in range(n + 1)]
-    suffix[n] = {rid: _end_cost(lex, rid, right) for rid in rids[n]}
+    suffix[n] = {rid: end_cost(lex, rid, right) for rid in rids[n]}
     inf = float("inf")
     # The dictionary score band must be anchored to a path with a real word.
     # A zero-cost literal alone must not displace the kana side's dictionary
@@ -102,11 +102,11 @@ def _paths(tokens: list[dict], lex: MozcLex, left: int, right: int,
     word_suffix[n] = {rid: inf for rid in rids[n]}
     for i in range(n - 1, -1, -1):
         for rid in rids[i]:
-            suffix[i][rid] = min((_word_cost(lex, rid, w)
+            suffix[i][rid] = min((word_cost(lex, rid, w)
                                  + suffix[w.end][w.rid] for w in arcs[i]), default=inf)
             if not kana:
                 word_suffix[i][rid] = min((
-                    _word_cost(lex, rid, w)
+                    word_cost(lex, rid, w)
                     + (word_suffix if w.literal else suffix)[w.end][w.rid]
                     for w in arcs[i]), default=inf)
     best = suffix[0].get(initial, inf)
@@ -142,7 +142,7 @@ def _paths(tokens: list[dict], lex: MozcLex, left: int, right: int,
             continue
         for w in arcs[pos]:
             e = w.entry
-            nc = cost + _word_cost(lex, rid, w)
+            nc = cost + word_cost(lex, rid, w)
             nr = reading + e.reading
             ns = surface + e.surface
             bonus = (learning.bonus(nr, ns, left_surface)

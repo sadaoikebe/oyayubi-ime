@@ -10,8 +10,6 @@ One JSON object per line:
   {"op":"reset"}  # focus loss or application-terminated composition; no commit
   {"op":"set_direct","direct":true}
   {"op":"toggle_direct"}
-  {"op":"forget_candidate"}  # also unmodified F6 while candidates are visible
-  {"op":"undo_learning"}  # also unmodified F7; undo this session's last learning
   {"op":"context","text":"確定済み"}
   {"op":"stats"}  # resident only: counts since start, no text
 Reply: {"composition":"...","commit":"...","converted":false,"fsm":"S1","pending":false}
@@ -25,10 +23,6 @@ import gc
 import json
 import sys
 from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[2]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
 
 from oyayubi.ime.session import ImeSession
 from oyayubi.ime.learning import DEFAULT_LEARNING_PATH
@@ -62,10 +56,6 @@ def apply_op(sess: ImeSession, msg: dict) -> str:
         sess.set_direct(not sess.direct)
     elif op == "context":
         sess._lm_context = msg["text"][-CONTEXT_CHARS:]
-    elif op == "forget_candidate":
-        sess.forget_candidate()
-    elif op == "undo_learning":
-        sess.undo_learning()
     return commit
 
 

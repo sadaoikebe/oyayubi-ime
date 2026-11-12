@@ -9,7 +9,7 @@ import unittest
 from oyayubi.chord.fsm import AmbShift, Plain, ThumbTap
 from oyayubi.ime.lm_rescore import LmRescorer, conversion_picks
 from oyayubi.ime.session import ImeSession
-from tools.wp0.decode import DecodeResult
+from oyayubi.lattice.decode import DecodeResult
 
 KIDOKU = [Plain("k"), AmbShift("j"), Plain("i")]  # き + (ど|お) + く
 
@@ -152,8 +152,7 @@ class RealModelTest(unittest.TestCase):
 
     def test_variants_match_naive(self):
         cands = ["記憶にない", "既読にない", "記憶に泣い", "既読", "きどくにない", "記"]
-        variants = [self.make(share=s) for s in ("tree", "lcp", "none")]
-        variants.append(self.make(incremental=False))
+        variants = [self.make(), self.make(incremental=False)]
         for ctx in ("", "***REMOVED***", "***REMOVED***"):
             ref = self.ref.nll(ctx, cands)
             for v in variants:
@@ -163,8 +162,7 @@ class RealModelTest(unittest.TestCase):
     def test_conversion_picks_match_pinned_refresh(self):
         """Pinned before the refactor from _refresh(rescore=True) at 75703b8."""
         from tests.fixtures.make_lm_conversion_fixture import OUT, session_tokens
-        from tools.wp0.run_mozc_eval import reverse_table
-        from tools.wp0.table import load_table
+        from oyayubi.lattice.table import load_table, reverse_table
         rows = json.loads(OUT.read_text(encoding="utf-8"))
         reverse = reverse_table(load_table())
         sess = ImeSession(learning_path=None)

@@ -29,6 +29,7 @@
 | セッション | 句読点・数字・記号・Shift英字のリテラル、変換後の打ち続けで確定、Enter/Esc/BS、reset通知。時刻つきトランスクリプト19ケースで検証。TIPへの新機能接続はStage 3 |
 | 確定学習 | 文節の読み・表記・左隣をローカルJSONLへ保存。1-best・文節候補へ減衰するボーナス、未知かなのユーザー語登録。F6で候補の忘却、F7で確定ごとの学習取消（複数回可）。いずれも追記式。ファイルなしは無効。評価は学習を読み込まない |
 | TSF | Notepad で NicolaIME として打てる。`かえる`（W 単独→Space+W→Space+I）で「か」が残る |
+| 常駐サーバ | ユーザーごとに 1 プロセス（`python -m oyayubi.ime.server --resident`）を全アプリで共有。TIP が loopback TCP＋トークン認証で接続し、不在なら起動する。詳細は [STAGE3.md](STAGE3.md) と `src/tip/README.md` |
 | 登録 | `ITfInputProcessorProfileMgr` のみ。日本語の第 2 IME。Alt+Shift は言語巡回なので Microsoft IME が当たる。切替は Win+Space かトレイ |
 
 試験窓: `python -m oyayubi.ime.host_win32`（TSF を通さない）。
@@ -37,7 +38,6 @@
 
 まだ無いもの:
 
-- 常駐サーバ（今はアプリごとに Python。起動直後はローマ字素通し）
 - 上文リスコア
 - 直接入力切替のキー割当て（Sadao決定待ち）
 

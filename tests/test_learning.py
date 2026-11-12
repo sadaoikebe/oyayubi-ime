@@ -13,14 +13,21 @@ from oyayubi.ime.learning import (CONTEXT_BONUS, HALF_LIFE_SECONDS, PAIR_BONUS,
                                   Confirmation, LearningStore)
 from oyayubi.ime.server import dispatch
 from oyayubi.ime.session import ImeSession
+from oyayubi.lattice.mozc_dict import Entry, MozcLex, load_lex
+from oyayubi.lattice.table import reverse_table
+from oyayubi.lattice.token_viterbi import decode_tokens, end_cost, nbest_tokens, spans_from, word_cost
 from tests.test_bunsetsu import lexicon
-from tools.wp0.mozc_dict import Entry, MozcLex, load_lex
-from tools.wp0.run_mozc_eval import reverse_table
-from tools.wp0.token_viterbi import _end_cost, _spans_from, _word_cost, decode_tokens, nbest_tokens
 
 
 def tokens(reading):
     return [{"kind": "plain", "kana": c} for c in reading]
+
+
+def press(s, vk):
+    """Unmodified key down and up; returns the down reply (F6/F7 act on down)."""
+    reply = dispatch(s, {"op": "down", "vk": vk})
+    dispatch(s, {"op": "up", "vk": vk})
+    return reply
 
 
 class LearningTest(unittest.TestCase):
@@ -244,12 +251,12 @@ class LearningTest(unittest.TestCase):
 
                 def walk(pos, rid, score, reading, surface):
                     if pos == len(ts):
-                        cost = score + _end_cost(lex, rid, right) - model.bonus(reading, surface, "左")
+                        cost = score + end_cost(lex, rid, right) - model.bonus(reading, surface, "左")
                         expected[surface] = min(expected.get(surface, float("inf")), cost)
                         return
-                    for w in _spans_from(ts, pos, lex, model):
+                    for w in spans_from(ts, pos, lex, model):
                         if not w.unknown:
-                            walk(w.end, w.rid, score + _word_cost(lex, rid, w),
+                            walk(w.end, w.rid, score + word_cost(lex, rid, w),
                                  reading + w.entry.reading, surface + w.entry.surface)
 
                 walk(0, -1 if left == 0 else left, 0, "", "")
@@ -296,7 +303,6 @@ class LearningTest(unittest.TestCase):
         expected = s.composition
         with patch("oyayubi.ime.learning.os.open", side_effect=PermissionError):
             self.assertEqual(dispatch(s, {"op": "down", "vk": 13})["commit"], expected)
-        self.assertEqual(store.error, "PermissionError")
 
     def test_ordinary_decode_never_opens_learning_history(self):
         # A learning file exists and favors a different spelling, but ordinary
@@ -378,7 +384,7 @@ class LearningTest(unittest.TestCase):
         self.assertEqual(len(confirmations), 3)
         self.assertEqual(len({r["record_id"] for r in confirmations}), 3)
         before = self.path.read_bytes()
-        reply = dispatch(s, {"op": "undo_learning"})
+        reply = press(s, 0x76)
         self.assertEqual((reply["composition"], reply["commit"]), ("", ""))
         self.assertTrue(self.path.read_bytes().startswith(before))
         tombstone = self.rows()[-1]
@@ -406,10 +412,10 @@ class LearningTest(unittest.TestCase):
         dispatch(s, {"op": "down", "vk": 0x76})  # repeat must not undo the next group
         dispatch(s, {"op": "up", "vk": 0x76})
         self.assertEqual(len(self.rows()), 3)
-        dispatch(s, {"op": "undo_learning"})
+        press(s, 0x76)
         self.assertEqual(self.store().bonus("こうせい", "校正", ""), 0)
         before = self.path.read_bytes()
-        dispatch(s, {"op": "undo_learning"})
+        press(s, 0x76)
         self.assertEqual(self.path.read_bytes(), before)
 
     def test_undo_targets_own_records_without_removing_other_session_learning(self):
@@ -418,9 +424,9 @@ class LearningTest(unittest.TestCase):
             self.type_reading(session, "こうせい")
             self.choose(session, "校正")
             dispatch(session, {"op": "down", "vk": 13})
-        dispatch(s, {"op": "undo_learning"})
+        press(s, 0x76)
         self.assertEqual(self.store().bonus("こうせい", "校正", ""), 6000)
-        dispatch(other, {"op": "undo_learning"})
+        press(other, 0x76)
         self.assertEqual(self.store().bonus("こうせい", "校正", ""), 0)
 
     def test_autocommit_is_undoable_but_literals_and_cancellations_add_no_group(self):
@@ -431,10 +437,10 @@ class LearningTest(unittest.TestCase):
         dispatch(s, {"op": "down", "vk": 13})  # literal-only confirmation
         self.type_reading(s, "こうせい")
         dispatch(s, {"op": "down", "vk": 27})
-        dispatch(s, {"op": "undo_learning"})
+        press(s, 0x76)
         self.assertEqual(self.rows()[-1]["record_ids"], [self.rows()[0]["record_id"]])
         before = self.path.read_bytes()
-        dispatch(s, {"op": "undo_learning"})
+        press(s, 0x76)
         self.assertEqual(self.path.read_bytes(), before)
 
     def test_undo_and_forget_preserve_other_selections_and_resized_intervals(self):
@@ -448,9 +454,9 @@ class LearningTest(unittest.TestCase):
         dispatch(s, {"op": "down", "vk": 39, "mods": ["shift"]})
         dispatch(s, {"op": "up", "vk": 39})
         before, focus = s.segment_snapshot(), s.focus
-        dispatch(s, {"op": "undo_learning"})
+        press(s, 0x76)
         self.assertEqual((s.segment_snapshot(), s.focus), (before, focus))
-        dispatch(s, {"op": "forget_candidate"})
+        press(s, 0x75)
         self.assertEqual([(r["start"], r["end"]) for r in s.segment_snapshot()],
                          [(r["start"], r["end"]) for r in before])
         for i, row in enumerate(s.segment_snapshot()):
@@ -476,8 +482,8 @@ class LearningTest(unittest.TestCase):
         self.assertFalse(s.forget_candidate())
         self.assertFalse(self.path.exists())
         disabled = ImeSession(learning_path=None)
-        for op in ("forget_candidate", "undo_learning"):
-            self.assertEqual(dispatch(disabled, {"op": op})["commit"], "")
+        for vk in (0x75, 0x76):
+            self.assertEqual(press(disabled, vk)["commit"], "")
 
     def test_learning_keys_require_unmodified_input_and_forget_requires_candidates(self):
         s = self.session()
@@ -487,8 +493,7 @@ class LearningTest(unittest.TestCase):
         dispatch(s, {"op": "reset"})
         self.type_reading(s, "こうせい")
         before = self.path.read_bytes()
-        dispatch(s, {"op": "forget_candidate"})  # no candidate window
-        dispatch(s, {"op": "down", "vk": 0x75})
+        dispatch(s, {"op": "down", "vk": 0x75})  # no candidate window
         self.choose(s, "校正")
         for mods in (["shift"], ["ctrl"], ["alt"], ["win"]):
             for vk in (0x75, 0x76):

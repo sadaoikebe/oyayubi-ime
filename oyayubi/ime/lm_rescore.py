@@ -14,13 +14,11 @@ Latency work, all exact (no approximation of the E6 score):
   run (incremental extension). The window is the last ctx_tokens..ctx_max-1
   tokens with a start that moves in fixed steps, so scores are deterministic.
   ctx_max == ctx_tokens reproduces E6's fixed last-48 window.
-- Token trie (default ``share="tree"``): the candidates' token sequences are
+- Token trie: the candidates' token sequences are
   merged into a trie and every internal node is run exactly once, in a single
   forward call over the cached context, with an ancestor-only attention mask
   and per-node position ids. No padding, no repeated prefixes, and a node that
   ends every candidate through it (a leaf) is never run, only predicted.
-  ``share="lcp"`` runs the common prefix once and the rest as a right-padded
-  batch (portable fallback); ``share="none"`` is the plain padded batch.
 - Results are memoized per (context, candidate).
 """
 
@@ -31,9 +29,9 @@ from dataclasses import dataclass, field
 import time
 from typing import Protocol, Sequence
 
-from tools.wp0.decode import DecodeResult
-from tools.wp0.mozc_dict import MozcLex
-from tools.wp0.token_viterbi import decode_tokens, nbest_tokens
+from oyayubi.lattice.decode import DecodeResult
+from oyayubi.lattice.mozc_dict import MozcLex
+from oyayubi.lattice.token_viterbi import decode_tokens, nbest_tokens
 
 from .bunsetsu import segments_from
 
@@ -53,8 +51,7 @@ class CausalLmScorer:
 
     def __init__(self, model: str = DEFAULT_MODEL, *, threads: int | None = None,
                  ctx_tokens: int = 48, ctx_max: int = 128, kv_cache: bool = True,
-                 share: str = "tree", incremental: bool = True,
-                 memo_size: int = 4096) -> None:
+                 incremental: bool = True, memo_size: int = 4096) -> None:
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -72,9 +69,6 @@ class CausalLmScorer:
         self.ctx_tokens = ctx_tokens
         self.ctx_max = max(ctx_max, ctx_tokens)
         self.kv_cache = kv_cache
-        if share not in ("tree", "lcp", "none"):
-            raise ValueError("share must be tree, lcp or none")
-        self.share = share
         self.incremental = incremental
         self.memo: OrderedDict[tuple[str, str], float] = OrderedDict()
         self.memo_size = memo_size
@@ -102,14 +96,6 @@ class CausalLmScorer:
         out = self.model(input_ids=torch.tensor(ids, dtype=torch.long),
                          past_key_values=past, use_cache=True)
         return out.past_key_values, torch.log_softmax(out.logits.float(), -1)
-
-    @staticmethod
-    def _expand(past, n: int):
-        if hasattr(past, "to_legacy_cache"):  # transformers Cache object
-            legacy = past.to_legacy_cache()
-            return type(past).from_legacy_cache(
-                tuple((k.expand(n, -1, -1, -1), v.expand(n, -1, -1, -1)) for k, v in legacy))
-        return tuple((k.expand(n, -1, -1, -1), v.expand(n, -1, -1, -1)) for k, v in past)
 
     def _window_start(self, n: int) -> int:
         """Deterministic window: the last ctx_tokens..ctx_max-1 tokens.
@@ -166,42 +152,7 @@ class CausalLmScorer:
 
     def _kv(self, context: str, cands: list[str]) -> list[float]:
         past, logp = self._context(context)
-        ids = [self.encode(c) for c in cands]
-        shared = 0.0
-        if self.share == "tree":
-            return self._trie(past, logp, ids)
-        if self.share == "lcp" and len(ids) > 1:
-            lcp = 0
-            shortest = min(len(x) for x in ids)
-            while lcp < shortest and all(x[lcp] == ids[0][lcp] for x in ids):
-                lcp += 1
-            # Keep at least one token per candidate so every row has a suffix
-            # (the suffix batch needs a nonempty sequence; cost is identical).
-            lcp = min(lcp, shortest - 1) if shortest else 0
-            if lcp > 0:
-                prefix = ids[0][:lcp]
-                shared = -float(logp[prefix[0]])
-                past, lp = self._run([prefix], past)
-                for j in range(1, lcp):
-                    shared -= float(lp[0, j - 1, prefix[j]])
-                logp = lp[0, -1]
-                self.stats["cand_tokens_run"] += lcp
-                ids = [x[lcp:] for x in ids]
-        out = [shared] * len(ids)
-        rows = [i for i, x in enumerate(ids) if x]
-        for i in rows:
-            out[i] -= float(logp[ids[i][0]])
-        rows = [i for i in rows if len(ids[i]) > 1]
-        if rows:
-            # Run x[:-1]: the last token is only predicted, never conditioned on.
-            width = max(len(ids[i]) - 1 for i in rows)
-            batch = [ids[i][:-1] + [self.pad] * (width - len(ids[i]) + 1) for i in rows]
-            _, lp = self._run(batch, self._expand(past, len(rows)))
-            self.stats["cand_tokens_run"] += sum(len(ids[i]) - 1 for i in rows)
-            for r, i in enumerate(rows):
-                x = ids[i]
-                out[i] -= sum(float(lp[r, j - 1, x[j]]) for j in range(1, len(x)))
-        return out
+        return self._trie(past, logp, [self.encode(c) for c in cands])
 
     def _trie(self, past, logp, ids: list[list[int]]) -> list[float]:
         torch = self.torch

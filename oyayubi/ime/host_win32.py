@@ -9,12 +9,7 @@ from __future__ import annotations
 import argparse
 import ctypes
 import ctypes.wintypes as w
-import sys
 from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[2]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
 
 from oyayubi.ime.session import ImeSession
 from oyayubi.ime.recording import PROMPTS_PATH, Recorder, load_prompts
@@ -206,7 +201,6 @@ def paint(hwnd) -> None:
         user32.DrawTextW(hdc, text, -1, ctypes.byref(rc), DT_WORDBREAK | DT_NOPREFIX)
         user32.EndPaint(hwnd, ctypes.byref(ps))
         return
-    committed = session.committed + ("" if not hasattr(session, "committed") else "")
     body = session.committed
     comp = session.composition
     status = "変換済" if session.converted else "入力中"
@@ -215,17 +209,9 @@ def paint(hwnd) -> None:
         "Space+文字 = 親指シフト（左右不明）。Space 単独 = 変換。Enter = 確定。Esc = 取消。\n"
         "F6 = 注目候補の学習を忘却。F7 = 直前の学習を戻す（確定文字は保持）。\n"
         f"[{status}] tokens={len(session.tokens)} fsm={session.fsm.state}\n\n"
-        f"{body}"
-        f"[{comp}]" if comp else f"{body}"
     )
     if not comp:
-        text = (
-            "oyayubi-ime 試験窓  （Notepad 用ではない。TSF TIP は src/tip）\n"
-            "Space+文字 = 親指シフト（左右不明）。Space 単独 = 変換。Enter = 確定。Esc = 取消。\n"
-            "F6 = 注目候補の学習を忘却。F7 = 直前の学習を戻す（確定文字は保持）。\n"
-            f"[{status}] tokens={len(session.tokens)} fsm={session.fsm.state}\n\n"
-            f"{body}|"
-        )
+        text += f"{body}|"
     else:
         cands = ""
         if session.converted and session.candidates:
@@ -234,14 +220,7 @@ def paint(hwnd) -> None:
                 mark = ">" if i == session.cand_index else " "
                 bits.append(f"{mark}{i + 1}.{c}")
             cands = "\n" + "  ".join(bits)
-        text = (
-            "oyayubi-ime 試験窓  （Notepad 用ではない。TSF TIP は src/tip）\n"
-            "Space+文字 = 親指シフト（左右不明）。Space 単独 = 変換。Enter = 確定。Esc = 取消。\n"
-            "F6 = 注目候補の学習を忘却。F7 = 直前の学習を戻す（確定文字は保持）。\n"
-            f"[{status}] tokens={len(session.tokens)} fsm={session.fsm.state}\n\n"
-            f"{body}〖{comp}〗"
-            f"{cands}"
-        )
+        text += f"{body}〖{comp}〗{cands}"
     user32.DrawTextW(hdc, text, -1, ctypes.byref(rc), DT_WORDBREAK | DT_NOPREFIX)
     user32.EndPaint(hwnd, ctypes.byref(ps))
 
