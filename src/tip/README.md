@@ -10,7 +10,7 @@ Win11 の `TextInputHost` は共有なので、ActivateEx では接続ワーカ�
 | IPC 失敗 | 応答上限はキー・タイマーとも `kKeyBudgetMs` = 250ms。失敗した接続を閉じ、そのキーを渡す。キーの再送・常駐サーバの kill は行わない |
 | LM 待ち | 返信の `pending: true` は変換が LM の結果待ち。表示は変えず候補窓も出さない。返信の `timer` で16msタイマーが `timeout` を送って取りに来る。保留中のキーは「変換済み・候補あり」と同じ基準で食べる（サーバが順番に溜めて再生する）。`pending` が無い返信は `false` 扱い |
 | 入力除外 | disabled / empty / keyboard closed、`IS_PASSWORD` / `IS_NUMERIC_PASSWORD`。パスワード欄ではトグルも扱わない |
-| キー | 文字・親指、編集中のBS/Enter/Esc、文節左右・Shift左右、候補上下・PgUp/PgDn・数字、F6/F7。消費したdownのupだけサーバへ送る |
+| キー | 文字・親指、編集中のBS/Enter/Esc、文節左右・Shift左右、候補上下・PgUp/PgDn・数字、F6/F7（Shift併用含む）。消費したdownのupだけサーバへ送る |
 | モード | Alt＋VK_OEM_3（US配列の Alt＋バッククォート）で direct 切替。repeatで再反転しない。未確定入力は破棄 |
 | フォーカス | 両方のOnSetFocus、context push/pop、composition外部終了でreset。候補・タイマー・down状態・確定上文を破棄 |
 | 編集 | SYNCが拒否されたらASYNC。世代を無効化して旧編集を破棄。commitと次compositionを順番に適用 |

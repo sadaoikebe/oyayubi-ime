@@ -137,10 +137,10 @@ class ResidentTest(unittest.TestCase):
             reply = first.request({"op": "down", "vk": 13, "t": 250})
             self.assertEqual(reply["commit"], "卯")
             self.assertEqual(type_a(second)["composition"], "卯")
-            second.request({"op": "down", "vk": 0x76, "t": 300})  # F7: no confirmation here.
+            second.request({"op": "down", "vk": 0x76, "t": 300, "mods": ["shift"]})  # Shift+F7: no confirmation here.
             second.request({"op": "up", "vk": 0x76, "t": 310})
             self.assertEqual(len(path.read_text().splitlines()), 1)
-            first.request({"op": "down", "vk": 0x76, "t": 300})
+            first.request({"op": "down", "vk": 0x76, "t": 300, "mods": ["shift"]})
             first.request({"op": "up", "vk": 0x76, "t": 310})
             second.request({"op": "reset"})
             self.assertEqual(type_a(second, 400)["composition"], "宇")

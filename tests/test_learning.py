@@ -30,6 +30,13 @@ def press(s, vk):
     return reply
 
 
+def press_shift(s, vk):
+    """Shift+key down and up (the learning operations live on Shift+F6/F7)."""
+    reply = dispatch(s, {"op": "down", "vk": vk, "mods": ["shift"]})
+    dispatch(s, {"op": "up", "vk": vk, "mods": ["shift"]})
+    return reply
+
+
 class LearningTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -343,10 +350,10 @@ class LearningTest(unittest.TestCase):
         self.type_reading(s, "こうせい")
         self.choose(s, "校正")
         self.assertEqual(s.candidates[0], "校正")
-        reply = dispatch(s, {"op": "down", "vk": 0x75})  # F6
+        reply = dispatch(s, {"op": "down", "vk": 0x75, "mods": ["shift"]})  # Shift+F6
         self.assertEqual((reply["composition"], reply["commit"]), ("構成", ""))
         self.assertEqual(reply["candidates"], baseline)
-        dispatch(s, {"op": "down", "vk": 0x75})  # repeat must not suppress 構成 too
+        dispatch(s, {"op": "down", "vk": 0x75, "mods": ["shift"]})  # repeat must not suppress 構成 too
         dispatch(s, {"op": "up", "vk": 0x75})
         self.assertEqual(len(self.rows()), 2)
         self.assertEqual(self.rows()[-1]["type"], "suppress")
@@ -401,7 +408,7 @@ class LearningTest(unittest.TestCase):
         self.assertEqual(len(confirmations), 3)
         self.assertEqual(len({r["record_id"] for r in confirmations}), 3)
         before = self.path.read_bytes()
-        reply = press(s, 0x76)
+        reply = press_shift(s, 0x76)
         self.assertEqual((reply["composition"], reply["commit"]), ("", ""))
         self.assertTrue(self.path.read_bytes().startswith(before))
         tombstone = self.rows()[-1]
@@ -424,15 +431,15 @@ class LearningTest(unittest.TestCase):
             dispatch(s, {"op": "down", "vk": 13})
             self.now += HALF_LIFE_SECONDS
         self.assertEqual(self.store().bonus("こうせい", "校正", ""), 3000)
-        dispatch(s, {"op": "down", "vk": 0x76})  # F7 after commit, no candidates
+        dispatch(s, {"op": "down", "vk": 0x76, "mods": ["shift"]})  # Shift+F7 after commit, no candidates
         self.assertEqual(self.store().bonus("こうせい", "校正", ""), 1500)
-        dispatch(s, {"op": "down", "vk": 0x76})  # repeat must not undo the next group
+        dispatch(s, {"op": "down", "vk": 0x76, "mods": ["shift"]})  # repeat must not undo the next group
         dispatch(s, {"op": "up", "vk": 0x76})
         self.assertEqual(len(self.rows()), 3)
-        press(s, 0x76)
+        press_shift(s, 0x76)
         self.assertEqual(self.store().bonus("こうせい", "校正", ""), 0)
         before = self.path.read_bytes()
-        press(s, 0x76)
+        press_shift(s, 0x76)
         self.assertEqual(self.path.read_bytes(), before)
 
     def test_undo_targets_own_records_without_removing_other_session_learning(self):
@@ -441,9 +448,9 @@ class LearningTest(unittest.TestCase):
             self.type_reading(session, "こうせい")
             self.choose(session, "校正")
             dispatch(session, {"op": "down", "vk": 13})
-        press(s, 0x76)
+        press_shift(s, 0x76)
         self.assertEqual(self.store().bonus("こうせい", "校正", ""), 6000)
-        press(other, 0x76)
+        press_shift(other, 0x76)
         self.assertEqual(self.store().bonus("こうせい", "校正", ""), 0)
 
     def test_autocommit_is_undoable_but_literals_and_cancellations_add_no_group(self):
@@ -454,10 +461,10 @@ class LearningTest(unittest.TestCase):
         dispatch(s, {"op": "down", "vk": 13})  # literal-only confirmation
         self.type_reading(s, "こうせい")
         dispatch(s, {"op": "down", "vk": 27})
-        press(s, 0x76)
+        press_shift(s, 0x76)
         self.assertEqual(self.rows()[-1]["record_ids"], [self.rows()[0]["record_id"]])
         before = self.path.read_bytes()
-        press(s, 0x76)
+        press_shift(s, 0x76)
         self.assertEqual(self.path.read_bytes(), before)
 
     def test_undo_and_forget_preserve_other_selections_and_resized_intervals(self):
@@ -471,9 +478,9 @@ class LearningTest(unittest.TestCase):
         dispatch(s, {"op": "down", "vk": 39, "mods": ["shift"]})
         dispatch(s, {"op": "up", "vk": 39})
         before, focus = s.segment_snapshot(), s.focus
-        press(s, 0x76)
+        press_shift(s, 0x76)
         self.assertEqual((s.segment_snapshot(), s.focus), (before, focus))
-        press(s, 0x75)
+        press_shift(s, 0x75)
         self.assertEqual([(r["start"], r["end"]) for r in s.segment_snapshot()],
                          [(r["start"], r["end"]) for r in before])
         for i, row in enumerate(s.segment_snapshot()):
@@ -500,9 +507,9 @@ class LearningTest(unittest.TestCase):
         self.assertFalse(self.path.exists())
         disabled = ImeSession(learning_path=None)
         for vk in (0x75, 0x76):
-            self.assertEqual(press(disabled, vk)["commit"], "")
+            self.assertEqual(press_shift(disabled, vk)["commit"], "")
 
-    def test_learning_keys_require_unmodified_input_and_forget_requires_candidates(self):
+    def test_learning_keys_live_on_shift_and_plain_keys_write_nothing(self):
         s = self.session()
         self.type_reading(s, "こうせい")
         self.choose(s, "校正")
@@ -510,9 +517,10 @@ class LearningTest(unittest.TestCase):
         dispatch(s, {"op": "reset"})
         self.type_reading(s, "こうせい")
         before = self.path.read_bytes()
-        dispatch(s, {"op": "down", "vk": 0x75})  # no candidate window
+        dispatch(s, {"op": "down", "vk": 0x75, "mods": ["shift"]})  # no candidate window
+        dispatch(s, {"op": "up", "vk": 0x75, "mods": ["shift"]})
         self.choose(s, "校正")
-        for mods in (["shift"], ["ctrl"], ["alt"], ["win"]):
+        for mods in ([], ["ctrl"], ["alt"], ["win"]):
             for vk in (0x75, 0x76):
                 dispatch(s, {"op": "down", "vk": vk, "mods": mods})
                 dispatch(s, {"op": "up", "vk": vk, "mods": mods})
@@ -521,10 +529,10 @@ class LearningTest(unittest.TestCase):
         dispatch(s, {"op": "down", "vk": 0x76})
         dispatch(s, {"op": "up", "vk": 0x76})
         dispatch(s, {"op": "up", "vk": 16})
+        self.assertEqual(self.rows()[-1]["type"], "tombstone")  # Shift+F7 undid
         dispatch(s, {"op": "set_direct", "direct": True})
         for vk in (0x75, 0x76):
             self.assertTrue(dispatch(s, {"op": "down", "vk": vk})["pass_through"])
-        self.assertEqual(self.path.read_bytes(), before)
 
     def test_corrupt_control_records_do_not_hide_valid_confirmations(self):
         store = self.store()

@@ -119,8 +119,8 @@ static bool WantVk(UINT vk, bool composing, bool converted, bool candidates) {
     bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
     if (CharacterVk(vk) || vk == VK_SPACE) return true;
     if (vk == VK_RETURN || vk == VK_BACK || vk == VK_ESCAPE) return composing;
-    if (!shift && vk == VK_F7) return true;
-    if (!shift && vk == VK_F6) return converted && candidates;
+    if (vk == VK_F7) return true;
+    if (vk == VK_F6) return composing;
     if (converted) {
         if (vk == VK_LEFT || vk == VK_RIGHT) return true;
         if (!shift && (vk == VK_UP || vk == VK_DOWN || vk == VK_PRIOR || vk == VK_NEXT)) return true;
@@ -1352,8 +1352,8 @@ public:
             if (!down) eat = true;  // only actual consumed downs send an up
             else if (CharacterVk(vk) || vk == VK_SPACE) eat = state_mask;
             else if (vk == VK_BACK || vk == VK_RETURN || vk == VK_ESCAPE) eat = before_composing && state_mask;
-            else if (vk == VK_F7) eat = !(HeldMods() & 1);
-            else if (vk == VK_F6) eat = before_converted && before_candidates && !(HeldMods() & 1);
+            else if (vk == VK_F7) eat = true;
+            else if (vk == VK_F6) eat = before_composing || before_converted;
             else eat = before_converted && WantVk(vk, before_composing, before_converted, before_candidates);
         }
         bool was_pending = NoteReply(r);

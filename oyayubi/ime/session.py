@@ -180,18 +180,26 @@ class ImeSession:
             if down and not self.tokens:
                 self._lm_context = ""  # Ctrl/Alt/Win may move the caret or edit text.
             return None
-        if down and not shift and (vk == VK_F7 or (
-                vk == VK_F6 and self.converted and self.candidates)):
+        if down and vk in (VK_F6, VK_F7):
             pending = self._finish_pending()
+            if shift:
+                # The learning corrections live on Shift+F6/F7; the plain
+                # keys carry the conventional script conversions below.
+                def learning_key() -> None:
+                    if vk == VK_F6:
+                        if self.converted and self.candidates:
+                            self.forget_candidate()
+                    else:
+                        self.undo_learning()
+                    self._literal_down.add(vk)
+                    return None
+                return self._then(pending, learning_key)
 
-            def learning_key() -> None:
-                if vk == VK_F6:
-                    self.forget_candidate()
-                else:
-                    self.undo_learning()
+            def kana_key() -> None:
+                self._select_kana(vk == VK_F7)
                 self._literal_down.add(vk)
                 return None
-            return self._then(pending, learning_key)
+            return self._then(pending, kana_key)
         if kind == "EDIT":
             if not down:
                 return None
@@ -306,6 +314,36 @@ class ImeSession:
         self.converted = False
         self._clear_cands()
         self._refresh()
+
+    def _select_kana(self, katakana: bool) -> None:
+        """F6/F7: give the focused clause its hiragana/katakana spelling.
+
+        The two kana rows close out every clause's candidate stream,
+        hiragana first; selecting one is an ordinary candidate pick, so
+        a later commit learns it like any other selection. Input not yet
+        converted converts first, as with the MS-IME gesture.
+        """
+        if not self.tokens:
+            return
+        if not self.converted:
+            self.converted = True
+            if self.lm is not None:
+                self._refresh(rescore=True)
+            self._open_cands()
+        if self.focus < 0:
+            return
+        segment = self.segments[self.focus]
+        if segment.literal or segment.choices is None:
+            return
+        stream = segment.choices
+        rows: list[int] = []
+        i = 0
+        while len(rows) < 2 and stream.ensure(i):
+            if stream.cache[i].kind == "kana":
+                rows.append(i)
+            i += 1
+        if rows:
+            self._select(rows[1] if katakana and len(rows) > 1 else rows[0])
 
     def forget_candidate(self) -> bool:
         """Suppress the highlighted pair, then choose the newly ranked first row."""
