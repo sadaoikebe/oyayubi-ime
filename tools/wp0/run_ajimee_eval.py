@@ -15,7 +15,7 @@ import statistics
 import time
 
 from .fetch_ajimee import DATA
-from oyayubi.lattice.mozc_dict import load_lex
+from oyayubi.lattice.mozc_dict import BOS_ID, left_id_after, load_lex
 from oyayubi.lattice.table import load_table, reverse_table
 from oyayubi.lattice.token_viterbi import decode_tokens
 
@@ -44,16 +44,18 @@ def convert(reading, mode, reverse, lex):
     surface, decoded_reading = "", ""
     elapsed = 0.0
     ambiguous = 0
+    left_id = BOS_ID  # as ImeSession._refresh: a digit literal leaves a numeral context
     for is_kana, text in chunks(reading, reverse):
         if not is_kana:
             surface += text
             decoded_reading += text
+            left_id = left_id_after(text, lex)
             continue
         tokens = ([reverse[c] for c in text] if mode == "amb" else
                   [{"kind": "plain", "key": "?", "kana": c} for c in text])
         ambiguous += sum(t["kind"] == "amb" for t in tokens)
         start = time.perf_counter()
-        decoded, _ = decode_tokens(tokens, lex)
+        decoded, _ = decode_tokens(tokens, lex, left_id=left_id)
         elapsed += (time.perf_counter() - start) * 1000
         surface += decoded.surface
         decoded_reading += decoded.reading

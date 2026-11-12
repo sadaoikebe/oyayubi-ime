@@ -7,6 +7,7 @@ formed by concatenating commits. Tests never update their own expectations.
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from pathlib import Path
 
 from oyayubi.ime.server import dispatch
@@ -15,6 +16,7 @@ from oyayubi.lattice.mozc_dict import Entry, MozcLex
 from oyayubi.lattice.table import load_table
 
 VISIBLE = {"composition", "candidates", "cand_index", "converted", "commit", "committed"}
+TRANSCRIPT_NOW = datetime(2026, 11, 12, 9, 30)  # a Thursday
 SEGMENT_VISIBLE = {"segments", "focus", "candidate_page", "candidate_kinds", "has_next_page"}
 
 
@@ -42,7 +44,9 @@ def make_session(case: dict, real_lex: MozcLex | None = None) -> ImeSession:
             size = len(matrix)
             costs = [cost for row in matrix for cost in row]
         lex = MozcLex(by_reading, prefixes, costs, size)
-    return ImeSession(_table=load_table(), _lex=lex, learning_path=None)
+    # Date rows depend on the clock; a transcript sees one fixed day.
+    return ImeSession(_table=load_table(), _lex=lex, learning_path=None,
+                      clock=lambda: TRANSCRIPT_NOW)
 
 
 def run_transcript(test, path: Path, real_lex: MozcLex | None = None) -> None:

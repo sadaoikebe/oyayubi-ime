@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from functools import lru_cache
 from heapq import heappop, heappush
 from itertools import count
@@ -10,6 +11,8 @@ from typing import Iterator
 from oyayubi.lattice.decode import Piece
 from oyayubi.lattice.mozc_dict import BOS_ID, DICT_DIR, UNK_COST, MozcLex
 from oyayubi.lattice.token_viterbi import BOUNDARY_RID, end_cost, spans_from, word_cost
+
+from .dates import date_spellings
 
 # Half a single unknown-character penalty. This bounds implausible dictionary
 # analyses, not the number of homonyms, and never limits the kana escape route.
@@ -161,12 +164,16 @@ def _paths(tokens: list[dict], lex: MozcLex, left: int, right: int,
 
 
 def candidates(tokens: list[dict], lex: MozcLex, left: int, right: int,
-               *, learning=None, left_surface: str = "") -> Iterator[Candidate]:
+               *, learning=None, left_surface: str = "",
+               now: datetime | None = None) -> Iterator[Candidate]:
+    """Dictionary rows, then kana rows, then date rows (with now)."""
     literals = set()
+    dictionary = []
     for c in _paths(tokens, lex, left, right, kana=False,
                     learning=learning, left_surface=left_surface):
         if c.kind == "literal":
             literals.add(c.surface)
+        dictionary.append(c)
         yield c
     # Even a reading absent from every dictionary prefix remains reachable.
     for c in _paths(tokens, lex, left, right, kana=True, learning=learning):
@@ -178,6 +185,24 @@ def candidates(tokens: list[dict], lex: MozcLex, left: int, right: int,
         kata = "".join(chr(ord(ch) + 0x60) if "ぁ" <= ch <= "ゖ" else ch for ch in hira)
         yield Candidate(hira, hira, c.score, c.lid, c.rid, "kana")
         yield Candidate(kata, hira, c.score, c.lid, c.rid, "kana")
+    # Last, so every existing row keeps its place (and its number key).
+    if now is not None:
+        yield from _date_rows(dictionary, now)
+
+
+def _date_rows(dictionary: list[Candidate], now: datetime) -> Iterator[Candidate]:
+    """きょう → 2026/11/12 …; a kana tail (きょうは → 今日は) is kept as typed."""
+    seen = {c.surface for c in dictionary}
+    for c in dictionary:
+        for cut in range(len(c.reading), 0, -1):
+            tail = c.reading[cut:]
+            spellings = date_spellings(c.reading[:cut], now)
+            if spellings and c.surface.endswith(tail):
+                for text in spellings:
+                    if text + tail not in seen:
+                        seen.add(text + tail)
+                        yield Candidate(text + tail, c.reading, c.score, c.lid, c.rid, "date")
+                break
 
 
 @dataclass

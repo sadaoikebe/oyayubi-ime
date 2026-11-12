@@ -54,7 +54,7 @@ class BunsetsuResizeTest(unittest.TestCase):
     def test_literal_barrier_and_shrinking_before_it(self):
         s = session("かたく", [("かた", "肩", 0), ("か", "蚊", 10),
                               ("た", "田", 10), ("く", "区", 0)])
-        s.tokens.insert(2, Literal("0"))
+        s.tokens.insert(2, Literal("!"))
         s._refresh()
         tap(s, 32)
         literal, right = s.segments[1:]
@@ -63,7 +63,7 @@ class BunsetsuResizeTest(unittest.TestCase):
         self.assertEqual(s.segment_snapshot(), before)
         tap(s, 37, ["shift"])
         self.assertEqual(intervals(s), [(0, 1), (1, 2), (2, 3), (3, 4)])
-        self.assertEqual(s.composition, "蚊田0区")
+        self.assertEqual(s.composition, "蚊田!区")
         self.assertIs(s.segments[2], literal)
         self.assertIs(s.segments[3], right)
         tap(s, 39, ["shift"])
@@ -112,10 +112,23 @@ class BunsetsuResizeTest(unittest.TestCase):
 
     def test_no_focus_with_only_literals(self):
         s = make_session({"lexicon": []})
-        tap(s, 48)
+        tap(s, 49, ["shift"])  # "!"
         tap(s, 32)
         self.assertTrue(s.converted)
         self.assertEqual(s.focus, -1)
+        before = s.segment_snapshot()
+        for vk in (37, 39):
+            tap(s, vk, ["shift"])
+            self.assertEqual(s.segment_snapshot(), before)
+
+    def test_digit_run_is_focusable_but_keeps_its_interval(self):
+        s = make_session({"lexicon": []})
+        for vk in (49, 50):
+            tap(s, vk)
+        tap(s, 32)
+        self.assertEqual((intervals(s), s.focus), ([(0, 2)], 0))
+        self.assertEqual(s.candidates[0], "12")
+        self.assertIn("十二", s.candidates)
         before = s.segment_snapshot()
         for vk in (37, 39):
             tap(s, vk, ["shift"])

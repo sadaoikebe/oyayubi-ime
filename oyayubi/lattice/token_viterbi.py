@@ -106,12 +106,16 @@ def _prune(sts: list[_St], *, mode: Literal["rid", "reading"]) -> list[_St]:
 
 
 def decode_tokens(tokens: list[dict], lex: MozcLex, *, learning=None,
-                  left_surface: str = "") -> tuple[DecodeResult, dict]:
-    """Decode 1-best using RID pruning for accuracy without rescoring (WP0 §10/13)."""
+                  left_surface: str = "", left_id: int = BOS_ID) -> tuple[DecodeResult, dict]:
+    """Decode 1-best using RID pruning for accuracy without rescoring (WP0 §10/13).
+
+    left_id is the POS to the left of the run (BOS_ID: a sentence/literal boundary).
+    """
     n = len(tokens)
     t0 = time.perf_counter()
     states: list[list[_St]] = [[] for _ in range(n + 1)]
-    states[0] = [_St(0, BOUNDARY_RID, -1, -1, "", left_surface)]
+    states[0] = [_St(0, BOUNDARY_RID if left_id == BOS_ID else left_id, -1, -1, "",
+                     left_surface)]
     words: list[Word] = []
     n_spans = 0
 
@@ -183,6 +187,8 @@ def nbest_tokens(
     tokens: list[dict],
     lex: MozcLex,
     k: int = 8,
+    *,
+    left_id: int = BOS_ID,
 ) -> tuple[list[DecodeResult], dict]:
     """Return the cheapest k distinct surfaces, in nondecreasing cost order.
 
@@ -215,7 +221,7 @@ def nbest_tokens(
 
     incoming: list[list[Word]] = [[] for _ in range(n + 1)]
     forward: list[dict[int, int]] = [{} for _ in range(n + 1)]
-    forward[0][BOUNDARY_RID] = 0
+    forward[0][BOUNDARY_RID if left_id == BOS_ID else left_id] = 0
     # prefix[i][lid] includes the connection into the next word, but not its
     # word cost. It is an exact completion cost for a backward suffix.
     prefix: list[dict[int, int]] = [{} for _ in range(n + 1)]

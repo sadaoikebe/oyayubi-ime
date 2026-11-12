@@ -18,7 +18,7 @@ import statistics
 import time
 
 from .fetch_ajimee import DATA
-from oyayubi.lattice.mozc_dict import load_lex
+from oyayubi.lattice.mozc_dict import BOS_ID, left_id_after, load_lex
 from .run_ajimee_eval import chunks, hiragana
 from oyayubi.lattice.table import load_table, reverse_table
 from oyayubi.lattice.token_viterbi import decode_tokens, nbest_tokens
@@ -89,17 +89,19 @@ def main() -> None:
             raise ValueError("expected_output must be a nonempty list of strings")
         per_chunk, anchored, best = [], [], []
         elapsed = 0.0
+        left_id = BOS_ID
         for is_kana, text in chunks(reading, reverse):
             if not is_kana:
                 per_chunk.append([(text, 0)])
                 anchored.append([(text, 0)])
                 best.append(text)
+                left_id = left_id_after(text, lex)
                 continue
             tokens = [reverse[c] for c in text]
-            decoded, _ = decode_tokens(tokens, lex)
+            decoded, _ = decode_tokens(tokens, lex, left_id=left_id)
             best.append(decoded.surface)
             start = time.perf_counter()
-            results, _ = nbest_tokens(tokens, lex, k=max(ks))
+            results, _ = nbest_tokens(tokens, lex, k=max(ks), left_id=left_id)
             elapsed += (time.perf_counter() - start) * 1000
             cs = [(d.surface, d.score) for d in results]
             if [score for _, score in cs] != sorted(score for _, score in cs):

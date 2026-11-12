@@ -17,6 +17,7 @@ USER_LEX = ROOT / "data" / "user_lexicon.jsonl"
 DEFAULT_NOUN_ID = 1851  # 名詞,一般 in Mozc id.def
 
 BOS_ID = 0
+NUMBER_ID = 2044  # 名詞,数,アラビア数字
 UNK_LID = 1  # その他,間投
 UNK_COST = 12000
 MAX_WORD_MORA = 16
@@ -41,6 +42,16 @@ class MozcLex:
 
     def transition(self, rid: int, lid: int) -> int:
         return self.connect[rid * self.pos_size + lid]
+
+
+def left_id_after(literal: str, lex: MozcLex) -> int:
+    """POS context for a kana run after a literal: a digit reads as a numeral.
+
+    Any other literal (punctuation, Latin) is a sentence boundary, as before.
+    Small test lexicons have no Mozc numeral POS and keep the boundary.
+    """
+    digit = literal and ("0" <= literal[-1] <= "9" or "０" <= literal[-1] <= "９")
+    return NUMBER_ID if digit and NUMBER_ID < lex.pos_size else BOS_ID
 
 
 def _parse_dict_files() -> tuple[dict[str, list[Entry]], set[str]]:

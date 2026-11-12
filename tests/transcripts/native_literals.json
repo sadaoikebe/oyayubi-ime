@@ -743,7 +743,11 @@
         "fsm": "S1",
         "n_tokens": 14,
         "timer": null,
-        "candidates": [],
+        "candidates": [
+          "09",
+          "０９",
+          "〇九"
+        ],
         "cand_index": 0,
         "committed": ""
       }

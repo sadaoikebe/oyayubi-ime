@@ -7,6 +7,7 @@ The FSM's timing and chord decisions are unchanged.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
@@ -15,13 +16,15 @@ from oyayubi.chord.keys import (
     SHIFT_VKS, SHORTCUT_VKS, VK_BACK, VK_ESCAPE, VK_RETURN, classify, literal_character,
 )
 from oyayubi.lattice.expand import is_literal_face, literal_text
-from oyayubi.lattice.mozc_dict import MozcLex, load_lex
+from oyayubi.lattice.mozc_dict import MozcLex, left_id_after, load_lex
 from oyayubi.lattice.table import load_table
 from oyayubi.lattice.token_viterbi import decode_tokens
 from .bunsetsu import (BOS_ID, PAGE_SIZE, Candidate, CandidateStream, Segment,
                        candidates, segments_from)
 from .learning import DEFAULT_LEARNING_PATH, LearningStore
 from .lm_rescore import CONTEXT_CHARS, LmRescorer, conversion_picks
+from .numbers import is_digit, number_spellings
+from .personal import PersonalLexicon
 
 VK_LEFT = 0x25
 VK_RIGHT = 0x27
@@ -107,6 +110,8 @@ class ImeSession:
     _lex: MozcLex | None = None
     _modifiers: set[int] = field(default_factory=set)
     _literal_down: set[int] = field(default_factory=set)
+    clock: Callable[[], datetime] = datetime.now  # date rows (U3); fixed in transcripts
+    personal: PersonalLexicon | None = None  # the user's word list (D1), shared
 
     def load(self) -> None:
         if not self._table:
@@ -251,11 +256,13 @@ class ImeSession:
         parts = self._parts()
         if not any(isinstance(part, list) for part in parts):
             return None
+        self._sync_personal()
         learning = self._learning.snapshot() if self._learning is not None else None
         return ConversionRequest(
             parts, self._lm_context, self._left_surface, learning,
             (repr(parts), self._lm_context, self._left_surface,
-             learning.revision if learning is not None else None))
+             learning.revision if learning is not None else None,
+             self.personal.revision if self.personal is not None else None))
 
     def finish_conversion(self, picks) -> str:
         """Resolve the awaited conversion (picks None: the Viterbi 1-best).
@@ -307,7 +314,7 @@ class ImeSession:
             return False
         segment = self.segments[self.focus]
         c = segment.selected
-        if c.kind == "literal" or not c.reading or is_literal_face(c.reading):
+        if c.kind in ("literal", "number", "date") or not c.reading or is_literal_face(c.reading):
             return False
         if not self._learning.suppress(c.reading, c.surface):
             return False
@@ -354,7 +361,7 @@ class ImeSession:
 
     def _on_cand_key(self, vk: int) -> str | None:
         if vk in (VK_LEFT, VK_RIGHT):
-            eligible = [i for i, s in enumerate(self.segments) if not s.literal]
+            eligible = _stops(self.segments)
             if self.focus in eligible:
                 at = eligible.index(self.focus) + (1 if vk == VK_RIGHT else -1)
                 self.focus = eligible[max(0, min(at, len(eligible) - 1))]
@@ -382,8 +389,18 @@ class ImeSession:
 
     def _prepare_cands(self, index: int, *, reselect: bool = False) -> None:
         segment = self.segments[index]
-        left = (self.segments[index - 1].selected.rid
-                if index > 0 and not self.segments[index - 1].literal else BOS_ID)
+        before = self.segments[index - 1] if index > 0 else None
+        if segment.selected.kind == "number":
+            if segment.choices is None:
+                digits = segment.selected.reading
+                segment.choices = CandidateStream(iter([
+                    Candidate(text, digits, 0, BOS_ID, BOS_ID, "number")
+                    for text in number_spellings(digits)]))
+                segment.index = segment.choices.find(segment.selected)
+            return
+        left = (BOS_ID if before is None
+                else left_id_after(before.selected.reading, self._lex) if before.literal
+                else before.selected.rid)
         right = (self.segments[index + 1].selected.lid
                  if index + 1 < len(self.segments)
                  and not self.segments[index + 1].literal else BOS_ID)
@@ -391,12 +408,13 @@ class ImeSession:
                         if index > 0 else self._left_surface)
         learning = self._learning.snapshot() if self._learning is not None else None
         context = (left, right, left_surface,
-                   (learning.revision, learning.now) if learning is not None else None)
+                   (learning.revision, learning.now) if learning is not None else None,
+                   self.personal.revision if self.personal is not None else None)
         if segment.choices is None or segment.context != context:
             assert self._lex is not None
             segment.choices = CandidateStream(candidates(
                 self._lattice()[segment.start:segment.end], self._lex, left, right,
-                learning=learning, left_surface=left_surface))
+                learning=learning, left_surface=left_surface, now=self.clock()))
             segment.context = context
             if not reselect:
                 segment.index = segment.choices.find(segment.selected)
@@ -409,6 +427,8 @@ class ImeSession:
     def _resize(self, delta: int) -> None:
         """Override one automatic boundary, keeping all other intervals intact."""
         segment = self.segments[self.focus]
+        if segment.literal:
+            return  # a digit run keeps its interval
         following = self.focus + 1
         if delta > 0:
             if following == len(self.segments) or self.segments[following].literal:
@@ -561,6 +581,7 @@ class ImeSession:
         """Rebuild segments from the 1-best; with rescore or picks, from the LM's picks."""
         self.segments = []
         offset = 0
+        self._sync_personal()
         learning = self._learning.snapshot() if self._learning is not None else None
         left_surface = self._left_surface
         parts = self._parts()
@@ -571,25 +592,38 @@ class ImeSession:
         if picks is not None and len(picks) != sum(isinstance(p, list) for p in parts):
             picks = None
         kana_runs = 0
+        left_id = BOS_ID
         for part in parts:
             if isinstance(part, str):
-                self.segments.append(Segment(offset, offset + 1,
-                    Candidate(part, part, 0, BOS_ID, BOS_ID, "literal"), literal=True))
+                last = self.segments[-1] if self.segments else None
+                if is_digit(part) and last is not None and last.selected.kind == "number":
+                    digits = last.selected.reading + part
+                    last.end += 1
+                    last.selected = Candidate(digits, digits, 0, BOS_ID, BOS_ID, "number")
+                else:
+                    self.segments.append(Segment(offset, offset + 1, Candidate(
+                        part, part, 0, BOS_ID, BOS_ID, "number" if is_digit(part)
+                        else "literal"), literal=True))
                 offset += 1
                 left_surface = part
+                left_id = left_id_after(part, self._lex)
             elif self._lex is not None:
                 if picks is not None:
                     dec = picks[kana_runs]
                 else:
                     dec, _ = decode_tokens(part, self._lex, learning=learning,
-                                           left_surface=left_surface)
+                                           left_surface=left_surface, left_id=left_id)
                 kana_runs += 1
                 self.segments.extend(segments_from(dec.pieces, offset, self._lex))
                 offset += len(part)
                 if self.segments:
                     left_surface = self.segments[-1].selected.surface
-        self.focus = next((i for i, s in enumerate(self.segments) if not s.literal), -1)
+        self.focus = next(iter(_stops(self.segments)), -1)
         self.composition = "".join(s.selected.surface for s in self.segments)
+
+    def _sync_personal(self) -> None:
+        if self.personal is not None and self._lex is not None:
+            self.personal.sync(self._lex)
 
     def _commit(self, *, reset_input: bool = True) -> str:
         text = self.composition
@@ -622,3 +656,10 @@ class ImeSession:
         self._lm_context += text
         if len(self._lm_context) > 4 * CONTEXT_CHARS:
             self._lm_context = self._lm_context[-CONTEXT_CHARS:]
+
+
+def _stops(segments: list[Segment]) -> list[int]:
+    """Focus stops: the kana intervals; literals are skipped. Only a composition
+    without kana lets a run of typed digits take focus (its spellings)."""
+    kana = [i for i, s in enumerate(segments) if not s.literal]
+    return kana or [i for i, s in enumerate(segments) if s.selected.kind == "number"]

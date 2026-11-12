@@ -24,7 +24,7 @@ import time
 from oyayubi.ime.lm_rescore import DEFAULT_MODEL, CausalLmScorer, LmRescorer
 
 from .fetch_ajimee import DATA
-from oyayubi.lattice.mozc_dict import load_lex
+from oyayubi.lattice.mozc_dict import BOS_ID, left_id_after, load_lex
 from .run_ajimee_eval import chunks, hiragana
 from oyayubi.lattice.table import load_table, reverse_table
 from oyayubi.lattice.token_viterbi import decode_tokens
@@ -92,16 +92,18 @@ def main() -> None:
                     out, rd = "", ""
                     rescorer.last = {}
                     start = time.perf_counter()
+                    left_id = BOS_ID
                     for is_kana, text in chunks(reading, reverse):
                         if not is_kana:
                             out += text
                             rd += text
+                            left_id = left_id_after(text, lex)
                             continue
                         tokens = [reverse[ch] for ch in text]
-                        dec, _ = decode_tokens(tokens, lex)
+                        dec, _ = decode_tokens(tokens, lex, left_id=left_id)
                         if alpha:
                             dec = rescorer.rescore((ctx if use_ctx else "") + out,
-                                                   dec, tokens, lex)
+                                                   dec, tokens, lex, left_id)
                         out += dec.surface
                         rd += dec.reading
                     ms = (time.perf_counter() - start) * 1000

@@ -30,7 +30,7 @@ import time
 from typing import Protocol, Sequence
 
 from oyayubi.lattice.decode import DecodeResult
-from oyayubi.lattice.mozc_dict import MozcLex
+from oyayubi.lattice.mozc_dict import BOS_ID, MozcLex, left_id_after
 from oyayubi.lattice.token_viterbi import decode_tokens, nbest_tokens
 
 from .bunsetsu import segments_from
@@ -226,9 +226,10 @@ class LmRescorer:
     k: int = DEFAULT_K
     last: dict = field(default_factory=dict)  # stats of the most recent conversion
 
-    def pool(self, best: DecodeResult, tokens: list[dict], lex: MozcLex) -> list[DecodeResult]:
+    def pool(self, best: DecodeResult, tokens: list[dict], lex: MozcLex,
+             left_id: int = BOS_ID) -> list[DecodeResult]:
         """1-best (with learning, if any) first, then k-best surfaces, k in total."""
-        nb, _ = nbest_tokens(tokens, lex, k=self.k)
+        nb, _ = nbest_tokens(tokens, lex, k=self.k, left_id=left_id)
         return ([best] + [d for d in nb if d.surface != best.surface])[:max(1, self.k)]
 
     def choose(self, context: str, pool: list[DecodeResult]) -> DecodeResult:
@@ -241,9 +242,9 @@ class LmRescorer:
                    key=lambda dn: (dn[0].score - base) + self.alpha * COST_PER_NAT * dn[1])[0]
 
     def rescore(self, context: str, best: DecodeResult, tokens: list[dict],
-                lex: MozcLex) -> DecodeResult:
+                lex: MozcLex, left_id: int = BOS_ID) -> DecodeResult:
         t0 = time.perf_counter()
-        pool = self.pool(best, tokens, lex)
+        pool = self.pool(best, tokens, lex, left_id)
         t1 = time.perf_counter()
         pick = self.choose(context, pool)
         t2 = time.perf_counter()
@@ -264,15 +265,18 @@ def conversion_picks(parts, lex: MozcLex, learning, left_surface: str, lm_contex
     """
     picks: list[DecodeResult] = []
     text = ""
+    left_id = BOS_ID
     for part in parts:
         if isinstance(part, str):  # literal
             text += part
             left_surface = part
+            left_id = left_id_after(part, lex)
             continue
         if cancelled():
             return None
-        dec, _ = decode_tokens(part, lex, learning=learning, left_surface=left_surface)
-        dec = rescorer.rescore(lm_context + text, dec, part, lex)
+        dec, _ = decode_tokens(part, lex, learning=learning, left_surface=left_surface,
+                               left_id=left_id)
+        dec = rescorer.rescore(lm_context + text, dec, part, lex, left_id)
         picks.append(dec)
         segs = segments_from(dec.pieces, 0, lex)
         text += "".join(s.selected.surface for s in segs)
