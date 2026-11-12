@@ -26,6 +26,8 @@ from pathlib import Path
 
 from oyayubi.ime.session import ImeSession
 from oyayubi.ime.learning import DEFAULT_LEARNING_PATH
+from oyayubi.ime.personal import DEFAULT_PERSONAL_PATH, PersonalLexicon
+from oyayubi.ime import config
 from oyayubi.ime.lm_rescore import CONTEXT_CHARS
 
 
@@ -92,6 +94,11 @@ def argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--learning-file", type=Path, default=DEFAULT_LEARNING_PATH,
                         help="local UTF-8 JSONL history; missing file disables learning")
     parser.add_argument("--no-learning", action="store_true", help="disable confirmation learning")
+    parser.add_argument("--personal-file", type=Path, default=DEFAULT_PERSONAL_PATH,
+                        help="the user's word list (JSONL; edit with python -m oyayubi.ime.manage word)")
+    parser.add_argument("--config", type=Path, default=None,
+                        help="settings file (default <runtime dir>/config.json; "
+                             "command-line options override it)")
     lm = parser.add_argument_group("Stage 5b LM rescoring (on by default for --resident)")
     lm.add_argument("--lm-rescore", action="store_true", default=None,
                     help="rescore the k-best with a causal LM on Space (needs torch+transformers)")
@@ -133,7 +140,8 @@ def load_session(args, with_lm: bool = True) -> ImeSession:
 
     with_lm=False leaves sess.lm unset (the resident server loads it on a worker).
     """
-    sess = ImeSession(learning_path=None if args.no_learning else args.learning_file)
+    sess = ImeSession(learning_path=None if args.no_learning else args.learning_file,
+                      personal=PersonalLexicon(args.personal_file))
     sess.load()
     if with_lm and args.lm_rescore:
         # The LM is optional equipment: a machine without torch/transformers
@@ -163,7 +171,7 @@ def process_request(sess: ImeSession, msg: dict, *, log_text=False, lm_timing=Fa
 
 
 def main() -> None:
-    args = argument_parser().parse_args()
+    args = config.parse_args(argument_parser())
     if args.lm_rescore is None:
         # Resident serving is the product path: LM rescoring paid off in the
         # 2026-11-12 measurement (53 fixed vs 1 broken on the Mozc-error set),

@@ -1,5 +1,7 @@
 data/cache/
 data/learning.jsonl
+data/learning.jsonl.paused
+data/personal_lexicon.jsonl
 data/recordings/
 third_party/mozc_oss_dict/dictionary*.txt
 third_party/mozc_oss_dict/connection_single_column.txt

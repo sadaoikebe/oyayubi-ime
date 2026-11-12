@@ -1,0 +1,77 @@
+{
+  "format": 1,
+  "label": "local-snapshot-20261112",
+  "upstream_commit": "unknown",
+  "dictionary_dir": "third_party/mozc_oss_dict",
+  "files": {
+    "dictionary00.txt": {
+      "size": 7157174,
+      "sha256": "9e07ce292932c4fff327ed8cb06274c09acca556bd8bdf7c7ef1f6173eae3b61"
+    },
+    "dictionary01.txt": {
+      "size": 6428663,
+      "sha256": "836fd5fd8399510de0d8ef7b33be913cca6bbaee7b712cc8045fba03f4c75a89"
+    },
+    "dictionary02.txt": {
+      "size": 6480134,
+      "sha256": "93943858d0cfd092b849a78def6901eaf228177e1ac5663544e865a3a1e45a9e"
+    },
+    "dictionary03.txt": {
+      "size": 7434257,
+      "sha256": "cb9f1b0b4a7550d682d86244a021cd17e0b15366328819e69135b5f183a1a24b"
+    },
+    "dictionary04.txt": {
+      "size": 5399172,
+      "sha256": "9fdc4e3948d03463de13ab5782adffbc11dd06e934cb80138c5920029cd3d2f6"
+    },
+    "dictionary05.txt": {
+      "size": 5316454,
+      "sha256": "199e3b0f050b691823ae7ba943090d437f51af6436b27c5f3dc69cafa12000e4"
+    },
+    "dictionary06.txt": {
+      "size": 5373350,
+      "sha256": "b95b14f7770ae2a824bc8e9fad8b03c1bc45c504f93a36554b8b56daa0368d2a"
+    },
+    "dictionary07.txt": {
+      "size": 5315756,
+      "sha256": "7f53649b529d4c8c495d3a8dd9c4d489dfe7696080f7423107ff01331174be48"
+    },
+    "dictionary08.txt": {
+      "size": 4887114,
+      "sha256": "50a31bb5fc1646721b00be371a5695dffab1292bda143e1e59cc70cbbdd8643f"
+    },
+    "dictionary09.txt": {
+      "size": 6690572,
+      "sha256": "4e5fcd4cbfbf11395166a37b506f547fc54d20edc0884f5184ecd3fc705f0d9a"
+    },
+    "suffix.txt": {
+      "size": 39893,
+      "sha256": "37ace4c057615a10c2e06e19e57010916390b0709f0156d1ee17ce82f3272dd9"
+    },
+    "connection_single_column.txt": {
+      "size": 36428642,
+      "sha256": "68823a1f6617372ccb89afdbcb334d7a0bcfa82c9c5dda03fc1f80f1cab5c48e"
+    },
+    "id.def": {
+      "size": 151747,
+      "sha256": "07a05a268c3783b7e02b36e4aa591555a2dd19a1f3c93891576740761c154f2d"
+    },
+    "evaluation.tsv": {
+      "size": 54770,
+      "sha256": "b31842bef8b2bdaef4d13a1f19581366749285bfa7365de8b302456956a3e8ce"
+    },
+    "README.txt": {
+      "size": 5750,
+      "sha256": "6b1de66bc6fa30e0b45dc45b8c8f6c57bd78aff923c261a3efffac8eb86f7bac"
+    },
+    "README.md": {
+      "size": 1516,
+      "sha256": "a05a67759c983e5e53d7634f2f5ed71531233e51b2cea0f8c404dfed3323c129"
+    }
+  },
+  "user_lexicon": {
+    "path": "data/user_lexicon.jsonl",
+    "size": 5092,
+    "sha256": "7667a79fa9c653a2a5f4dbbe11dd0adc5679b9452ce88f3ec8de070207e209f4"
+  }
+}

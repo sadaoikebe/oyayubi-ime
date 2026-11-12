@@ -100,6 +100,23 @@ class LearningTest(unittest.TestCase):
         dispatch(s, {"op": "down", "vk": 13})
         self.assertFalse(self.path.exists())  # no automatic recreation on commit
 
+    def test_number_and_date_rows_are_never_learned(self):
+        store = self.store()
+        rows = [(Candidate("一二", "12", 0, 0, 0, "number"), ""),
+                (Candidate("2026/11/12", "きょう", 0, 1851, 1851, "date", 3000), "")]
+        self.assertEqual(store.confirm(rows, self.lex), [])
+        self.assertEqual(self.path.read_text(encoding="utf-8"), "")
+        s = self.session()
+        self.type_reading(s, "きょう")
+        s.converted = True
+        s._open_cands()
+        stream = s.segments[s.focus].choices
+        stream.last()
+        date = next(c.surface for c in stream.cache if c.kind == "date")
+        self.choose(s, date, kind="date")
+        self.assertEqual(s._commit(), date)
+        self.assertEqual(self.path.read_text(encoding="utf-8"), "")
+
     def test_multiword_bunsetsu_records_left_and_preserves_raw_cost(self):
         s = self.session()
         self.type_reading(s, "きかんのこうせいをした")

@@ -15,11 +15,11 @@ import time
 from .lm_async import ConnectionPipeline, LmStats, LmWorker
 from .runtime_platform import process_lock
 from .server import build_rescorer, load_session, process_request
+from .config import DEFAULT_RUNTIME_DIR
 from .session import ImeSession
 
 VERSION = 1
 MAX_LINE = 1024 * 1024
-DEFAULT_RUNTIME_DIR = Path.home() / ".oyayubi-ime"
 
 
 def private_directory(path: Path) -> None:
@@ -36,7 +36,7 @@ class SessionFactory:
         loaded = self.loaded
         return ImeSession(
             _table=loaded._table, _lex=loaded._lex, learning_path=loaded.learning_path,
-            _learning=loaded._learning,
+            _learning=loaded._learning, personal=loaded.personal,
         )
 
 

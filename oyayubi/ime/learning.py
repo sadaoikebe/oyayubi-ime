@@ -21,6 +21,12 @@ HALF_LIFE_SECONDS = 30 * 24 * 60 * 60
 USER_WORD_COST = 6000
 
 
+def pause_marker(path: Path) -> Path:
+    """While this file exists, the history is used but nothing new is recorded (S3)."""
+    path = Path(path)
+    return path.with_name(path.name + ".paused")
+
+
 @dataclass(frozen=True)
 class Confirmation:
     reading: str
@@ -198,11 +204,11 @@ class LearningStore:
 
     def confirm(self, selections: list[tuple[Candidate, str]], lex: MozcLex) -> list[str]:
         self.sync()
-        if not self.active:
+        if not self.active or pause_marker(self.path).exists():
             return []
         rows = []
         for c, left in selections:
-            if c.kind == "literal" or not c.reading or is_literal_face(c.reading):
+            if c.kind in ("literal", "number", "date") or not c.reading or is_literal_face(c.reading):
                 continue
             cost, lid, rid = c.word_cost, c.lid, c.rid
             user_word = any(r.user_word for r in self._pairs.get((c.reading, c.surface), ()))
