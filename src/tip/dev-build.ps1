@@ -1,8 +1,4 @@
 ﻿# Windows PowerShell 5.1: save this file as UTF-8 with BOM.
-param(
-    [switch]$Watch
-)
-
 $ErrorActionPreference = 'Stop'
 
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -12,14 +8,14 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
     $quotedPath = "'" + $PSCommandPath.Replace("'", "''") + "'"
     $quotedArgs = @($args | ForEach-Object { "'" + ([string]$_).Replace("'", "''") + "'" })
     $command = '& ' + $quotedPath + ' ' + ($quotedArgs -join ' ')
-    if ($Watch) { $command += ' -Watch' }
     $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
     $process = Start-Process -FilePath powershell.exe -Verb RunAs -Wait -PassThru `
         -ArgumentList "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $encoded"
     exit $process.ExitCode
 }
 
-function Invoke-DevBuild {
+Push-Location $PSScriptRoot
+try {
     if (-not $env:LIB) {
         $vswhere = 'C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe'
         $vsPath = $null
@@ -91,53 +87,8 @@ function Invoke-DevBuild {
     & python (Join-Path $PSScriptRoot 'register_admin.py') $slot
     if ($LASTEXITCODE -ne 0) { throw 'TIP の登録に失敗しました。' }
 
-    # Never start the server here: this process is elevated.
-    Get-CimInstance Win32_Process -Filter "Name = 'python.exe' OR Name = 'pythonw.exe'" |
-        Where-Object { $_.CommandLine -like '*oyayubi.ime.server*' } |
-        ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
-
     Write-Host ("現在有効な DLL: " + [IO.Path]::GetFileName($slot))
     Write-Host '新しいアプリから新版が読み込まれます。古いアプリは旧版のままなので、全部に行き渡らせたければアプリ再起動かサインアウトをしてください。'
-    Write-Host '常駐サーバを終了しました。次に新しく開いたアプリで打ち始めると、TIP が通常権限で自動起動します。'
-}
-
-function Get-SourceSnapshot {
-    # Ignore CMake-generated sources so a build does not trigger another build.
-    $buildPath = (Join-Path $PSScriptRoot 'build') + [IO.Path]::DirectorySeparatorChar
-    $entries = Get-ChildItem -LiteralPath $PSScriptRoot -Recurse -File |
-        Where-Object {
-            -not $_.FullName.StartsWith($buildPath, [StringComparison]::OrdinalIgnoreCase) -and
-            ($_.Extension -in @('.cpp', '.h', '.def') -or $_.Name -eq 'CMakeLists.txt')
-        } |
-        Sort-Object FullName |
-        ForEach-Object { $_.FullName + '|' + $_.LastWriteTimeUtc.Ticks }
-    return ($entries -join "`n")
-}
-
-Push-Location $PSScriptRoot
-try {
-    if (-not $Watch) {
-        Invoke-DevBuild
-    } else {
-        Write-Host 'Watch: ソースを2秒間隔で監視します。Ctrl+C で終了します。'
-        $snapshot = Get-SourceSnapshot
-        while ($true) {
-            try {
-                Invoke-DevBuild
-            } catch {
-                Write-Error -ErrorRecord $_ -ErrorAction Continue
-                Write-Host 'Watch: 次のソース変更を待ちます。'
-            }
-
-            do {
-                Start-Sleep -Seconds 2
-                $current = Get-SourceSnapshot
-            } while ($current -eq $snapshot)
-            # Capture before building so saves during the build trigger the next run.
-            $snapshot = $current
-            Write-Host 'Watch: ソース変更を検知しました。再ビルドします。'
-        }
-    }
 } finally {
     Pop-Location
 }
