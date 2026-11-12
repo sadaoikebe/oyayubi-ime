@@ -56,7 +56,10 @@ static const GUID kCats[] = {
 static LONG g_locks = 0;
 static HINSTANCE g_hinst = nullptr;
 
-static const DWORD kKeyBudgetMs = 150;  // hard cap on the TSF key thread
+// Hard cap on the TSF thread for every request (keys and timer polls alike).
+// The LM no longer runs inside a request (the server replies "pending"), so
+// this is only the one-time wait for a dead server: 3x the healthy worst case.
+static const DWORD kKeyBudgetMs = 250;
 
 static void Log(const wchar_t* fmt, ...) {
     wchar_t path[MAX_PATH];
@@ -239,6 +242,7 @@ struct SegmentReply {
 struct ServerReply {
     std::wstring composition, commit;
     bool direct = false, pass_through = false, converted = false;
+    bool pending = false;  // the conversion awaits the LM; poll with the timer
     int n_tokens = 0, focus = -1, page = 0;
     bool has_next_page = false, has_timer = false;
     ULONGLONG timer = 0;
@@ -268,7 +272,8 @@ static bool ParseReply(const std::string& s, ServerReply& r) {
         !JsonBool(v, "converted", r.converted) || !JsonInt(v, "n_tokens", r.n_tokens) ||
         !JsonInt(v, "focus", r.focus) || !JsonInt(v, "candidate_page", r.page) ||
         !JsonInt(v, "cand_index", r.cand_index) ||
-        !JsonBool(v, "has_next_page", r.has_next_page)) return false;
+        !JsonBool(v, "has_next_page", r.has_next_page) ||
+        !tip_json::OptionalBool(v, "pending", r.pending)) return false;
     r.composition = Utf8ToWide(v.Get("composition").text);
     r.commit = Utf8ToWide(v.Get("commit").text);
     const auto& timer = v.Get("timer");
@@ -1008,6 +1013,7 @@ public:
     std::wstring last_comp_;
     bool composing_ = false;
     bool converted_ = false;
+    bool pending_ = false;  // server: conversion awaiting the LM
     bool pending_timer_ = false;
     ULONGLONG timer_at_ = 0;
     bool down_eaten_[256]{};
@@ -1140,7 +1146,7 @@ public:
         }
         retired_.erase(std::remove_if(retired_.begin(), retired_.end(),
             [](const std::shared_ptr<CompositionState>& old) { return !old->composition; }), retired_.end());
-        composing_ = converted_ = pending_timer_ = false;
+        composing_ = converted_ = pending_ = pending_timer_ = false;
         timer_at_ = 0; n_tokens_ = 0; focus_ = -1; page_ = 0; has_next_page_ = false;
         last_comp_.clear();
         for (bool& eaten : down_eaten_) eaten = false;
@@ -1223,19 +1229,23 @@ public:
         }
     }
 
-    void NoteReply(const ServerReply& r) {
+    // Returns whether the previous reply was pending.
+    bool NoteReply(const ServerReply& r) {
+        bool was = pending_;
+        pending_ = r.pending;
         direct_ = r.direct;
         server_.RememberDirect(direct_);
         last_comp_ = r.composition;
         n_tokens_ = r.n_tokens; focus_ = r.focus; page_ = r.page; has_next_page_ = r.has_next_page;
         composing_ = !r.composition.empty() || r.n_tokens > 0 || r.has_timer;
-        converted_ = r.converted;
+        converted_ = r.converted || r.pending;
         pending_timer_ = r.has_timer && !r.direct;
         timer_at_ = r.timer;
         cands_ = r.candidates;
         cand_index_ = r.cand_index;
         if (!r.direct && r.converted && !r.candidates.empty()) ShowCands();
         else HideCands();
+        return was;
     }
 
     bool ExchangeReply(const std::string& request, ServerReply& r, DWORD budget) {
@@ -1284,8 +1294,10 @@ public:
         char buf[80];
         sprintf_s(buf, "{\"op\":\"timeout\",\"t\":%llu}", (unsigned long long)NowMs());
         ServerReply r;
-        if (!ExchangeReply(buf, r, 40)) return;
-        NoteReply(r);
+        if (!ExchangeReply(buf, r, kKeyBudgetMs)) return;
+        bool was_pending = NoteReply(r);
+        // Still pending: the display has not changed, do not rewrite it every tick.
+        if (r.pending && was_pending && r.commit.empty()) return;
         Apply(r, false);
     }
     void OnTimer() {
@@ -1315,12 +1327,14 @@ public:
         if (ToggleKey(vk) || (toggle_down_ && vk == server_.settings.toggle_vk)) return true;
         if (direct_) return false;
         bool current = server_.Generation() == connection_generation_;
-        return WantVk(vk, current && composing_, current && converted_, current && !cands_.empty());
+        // A pending conversion always resolves to converted with candidates.
+        return WantVk(vk, current && composing_, current && converted_,
+                      current && (!cands_.empty() || pending_));
     }
 
     bool HandleKeyImpl(bool down, UINT vk) {
         bool before_composing = composing_, before_converted = converted_;
-        bool before_candidates = !cands_.empty();
+        bool before_candidates = !cands_.empty() || pending_;
         bool before_timer = pending_timer_;
         int before_tokens = n_tokens_;
         char buf[128];
@@ -1342,11 +1356,11 @@ public:
             else if (vk == VK_F6) eat = before_converted && before_candidates && !(HeldMods() & 1);
             else eat = before_converted && WantVk(vk, before_composing, before_converted, before_candidates);
         }
-        NoteReply(r);
+        bool was_pending = NoteReply(r);
         if (server_.settings.log_text)
             Log(L"%s vk=%u comp=%s commit=%s", down ? L"down" : L"up", vk,
                 r.composition.c_str(), r.commit.c_str());
-        Apply(r, true);
+        if (!(r.pending && was_pending && r.commit.empty())) Apply(r, true);
         return eat;
     }
     bool HandleKey(bool down, UINT vk) {

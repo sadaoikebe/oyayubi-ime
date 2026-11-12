@@ -35,6 +35,14 @@ int main() {
     assert(!reply.Get("direct").boolean && reply.Get("has_next_page").boolean);
     assert(reply.Get("segments").array[0].Get("display_end").Int(n) && n == 1);
     assert(reply.Get("candidates").array[0].text == "a\"b");
+    // "pending" (LM wait) is optional: absent keeps the default, a bool is read,
+    // any other type rejects the reply.
+    bool pending = true;
+    assert(tip_json::OptionalBool(reply, "pending", pending) && pending);
+    assert(tip_json::OptionalBool(Parse(R"({"pending":false})"), "pending", pending) && !pending);
+    assert(tip_json::OptionalBool(Parse(R"({"pending":true})"), "pending", pending) && pending);
+    assert(!tip_json::OptionalBool(Parse(R"({"pending":1})"), "pending", pending));
+    assert(!tip_json::OptionalBool(Parse(R"({"pending":null})"), "pending", pending));
     assert(Parse(" [true,false,null,-12,0.5,1e-2] \r\n").array.size() == 6);
     assert(!Parse("1e2").Int(n));
     assert(Parse("9223372036854775807").Int(n) && n == LLONG_MAX);

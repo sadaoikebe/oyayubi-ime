@@ -128,8 +128,10 @@ AJIMEE 全200文（SHA-256 `e9eb668f…`）、amb 条件、学習なし。
 
 ## 残課題
 
-- 遅延: この VM で中央値 約0.5秒。実機（Sadao の PC）での実測と、
-  それでも重い場合の実行系見直し（ONNX 化など）は未着手。
+- 遅延: この VM で中央値 約0.5秒。常駐サーバでは LM をキー応答の同期経路から外した
+  （設計 `~/workspace/nicola-projects/lm-conversion-design-2026-11-12.md` の D1〜D8：専用ワーカー、猶予 30ms、`pending` 返信と保留中キーの再生、
+  400ms 打ち切りで Viterbi、親指押下での先読み、TIP 予算 250ms）。stdio・評価は同期のまま。
+  実機での確認と統計（`python -m oyayubi.ime.client --stats`）は同設計書の §9。
 - α の最終決定と、LM リスコアを製品既定にするかは Sadao の判断事項（現状は既定オフのまま）。
 - Windows 実機でのモデル取得・サーバ起動（`--lm-rescore`）は未検証。
 - `docs/EVALUATION.md` / `docs/STATUS.md` への Stage 5b 追記は未実施。

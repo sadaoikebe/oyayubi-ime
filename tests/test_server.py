@@ -84,7 +84,7 @@ class ServerTest(unittest.TestCase):
                 "n_tokens": 0, "timer": None, "candidates": [], "cand_index": 0,
                 "segments": [], "focus": -1, "candidate_page": 0,
                 "candidate_kinds": [], "has_next_page": False,
-                "direct": False, "pass_through": False,
+                "direct": False, "pass_through": False, "pending": False,
             })
         self.assertEqual(replies[-1]["commit"], "う")
         self.assertEqual(stderr.getvalue(), "")

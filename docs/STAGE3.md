@@ -175,7 +175,7 @@ resetは既存どおりdirectと学習undoを保持する。
 | 設定ファイル | `%USERPROFILE%\\.oyayubi-ime\\tip.json`の読込を実装済み。toggleキーはAlt+VK_OEM_3、サーバと同じruntime既定を共有。変更後はTIPを再Activate |
 | Windows ACL | ユーザープロファイルの継承ACLを使用。別ユーザーの読取り不可を実機で確認、共有ディレクトリは使わない |
 | LM／周辺本文 | LMオフ。オンでも接続内の確定上文のみ。TSFでの周辺本文取得は当面しない |
-| 遅い変換 | 既存150msをキー応答上限にし、超過時はfail-open。LMオンの予算・非同期UIは別途実測して決める |
+| 遅い変換 | 常駐サーバは LM をワーカーで走らせ、間に合わなければ `pending` を返して16msタイマーで取りに来る。TIP予算はキー・タイマーとも250ms、超過時はfail-open（設計 `~/workspace/nicola-projects/lm-conversion-design-2026-11-12.md`） |
 | 専用キー消費マスク | 今回wire互換を維持。既存返信状態でTIPの判定を揃える。専用consumeフィールドの追加は必要なら別変更としてテストする |
 
 ## Linuxでの受け入れ

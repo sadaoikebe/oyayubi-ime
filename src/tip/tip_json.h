@@ -165,6 +165,14 @@ public:
         Space(); return p_ == s_.size();
     }
 };
+// An optional boolean member: absent leaves b unchanged, any other type fails.
+inline bool OptionalBool(const Value& v, const char* key, bool& b) {
+    if (v.object.find(key) == v.object.end()) return true;
+    const auto& x = v.Get(key);
+    if (x.kind != Value::Boolean) return false;
+    b = x.boolean;
+    return true;
+}
 inline std::string Quote(const std::string& s) {
     const char* hex = "0123456789abcdef";
     std::string out = "\"";

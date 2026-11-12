@@ -1,6 +1,7 @@
 """Reference TIP lifecycle: connect first, otherwise spawn and wait off the key thread.
 
 python -m oyayubi.ime.client [--runtime-dir PATH] checks/starts the resident server.
+python -m oyayubi.ime.client --stats prints the running server's statistics (no text).
 """
 
 from __future__ import annotations
@@ -91,7 +92,13 @@ def connect_or_start(directory: Path = DEFAULT_RUNTIME_DIR, *, timeout=15.0,
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runtime-dir", type=Path, default=DEFAULT_RUNTIME_DIR)
+    parser.add_argument("--stats", action="store_true",
+                        help="print the running server's LM/latency statistics and exit")
     args = parser.parse_args()
+    if args.stats:
+        with connect(args.runtime_dir, timeout=1) as connection:
+            print(json.dumps(connection.request({"op": "stats"})["stats"], indent=1))
+        return
     with connect_or_start(args.runtime_dir):
         print("resident server ready")
 

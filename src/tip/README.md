@@ -7,7 +7,8 @@ Win11 の `TextInputHost` は共有なので、ActivateEx では接続ワーカ�
 | --- | --- |
 | 常駐接続 | `~/.oyayubi-ime/endpoint.json` の port/token で loopback TCP 認証。既存接続を先に試し、不在なら Python を detach 起動 |
 | 起動・復旧 | 初回待機15秒、接続＋認証250ms以内、再接続待ち1秒。起動中はキーを渡す |
-| IPC 失敗 | キー応答上限150ms（タイマー40ms）。失敗した接続を閉じ、そのキーを渡す。キーの再送・常駐サーバの kill は行わない |
+| IPC 失敗 | 応答上限はキー・タイマーとも `kKeyBudgetMs` = 250ms。失敗した接続を閉じ、そのキーを渡す。キーの再送・常駐サーバの kill は行わない |
+| LM 待ち | 返信の `pending: true` は変換が LM の結果待ち。表示は変えず候補窓も出さない。返信の `timer` で16msタイマーが `timeout` を送って取りに来る。保留中のキーは「変換済み・候補あり」と同じ基準で食べる（サーバが順番に溜めて再生する）。`pending` が無い返信は `false` 扱い |
 | 入力除外 | disabled / empty / keyboard closed、`IS_PASSWORD` / `IS_NUMERIC_PASSWORD`。パスワード欄ではトグルも扱わない |
 | キー | 文字・親指、編集中のBS/Enter/Esc、文節左右・Shift左右、候補上下・PgUp/PgDn・数字、F6/F7。消費したdownのupだけサーバへ送る |
 | モード | Alt＋VK_OEM_3（US配列の Alt＋バッククォート）で direct 切替。repeatで再反転しない。未確定入力は破棄 |

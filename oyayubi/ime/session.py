@@ -9,6 +9,7 @@ from __future__ import annotations
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Callable
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -25,7 +26,7 @@ from tools.wp0.token_viterbi import decode_tokens
 from .bunsetsu import (BOS_ID, PAGE_SIZE, Candidate, CandidateStream, Segment,
                        candidates, segments_from)
 from .learning import DEFAULT_LEARNING_PATH, LearningStore
-from .lm_rescore import CONTEXT_CHARS, LmRescorer
+from .lm_rescore import CONTEXT_CHARS, LmRescorer, conversion_picks
 
 VK_LEFT = 0x25
 VK_RIGHT = 0x27
@@ -71,6 +72,16 @@ def to_lattice_token(tok: Token | Literal, table: dict) -> dict | None:
     return None
 
 
+@dataclass(frozen=True)
+class ConversionRequest:
+    """Everything the LM worker needs for one conversion, captured at ThumbTap."""
+    parts: list  # ImeSession._parts()
+    lm_context: str
+    left_surface: str
+    learning: object | None  # LearningStore.snapshot()
+    key: tuple  # (repr(parts), lm_context, left_surface, learning revision or None)
+
+
 @dataclass
 class ImeSession:
     fsm: ChordFsm = field(default_factory=ChordFsm)
@@ -91,6 +102,10 @@ class ImeSession:
     _learning_undo: list[list[str]] = field(default_factory=list)
     # Stage 5b, off unless a rescorer is given (server --lm-rescore).
     lm: LmRescorer | None = None
+    # Resident pipeline only: a ThumbTap leaves the LM pick to a worker.
+    lm_deferred: bool = False
+    _await: ConversionRequest | None = None  # conversion waiting for the worker
+    _continuation: Callable[[], str | None] | None = None  # rest of that key event
     _left_surface: str = ""
     _lm_context: str = ""  # text committed on this connection since the last reset
     _table: dict = field(default_factory=dict)
@@ -124,6 +139,8 @@ class ImeSession:
         self.focus = -1
         self.converted = False
         self._clear_cands()
+        self._await = None
+        self._continuation = None
 
     def set_direct(self, direct: bool) -> None:
         """Change input mode, discarding unfinished input on a transition."""
@@ -166,17 +183,20 @@ class ImeSession:
         if down and not shift and (vk == VK_F7 or (
                 vk == VK_F6 and self.converted and self.candidates)):
             pending = self._finish_pending()
-            if vk == VK_F6:
-                self.forget_candidate()
-            else:
-                self.undo_learning()
-            self._literal_down.add(vk)
-            return pending
+
+            def learning_key() -> None:
+                if vk == VK_F6:
+                    self.forget_candidate()
+                else:
+                    self.undo_learning()
+                self._literal_down.add(vk)
+                return None
+            return self._then(pending, learning_key)
         if kind == "EDIT":
             if not down:
                 return None
             pending = self._finish_pending()
-            return (pending or "") + (self._edit(vk) or "") or None
+            return self._then(pending, lambda: self._edit(vk))
         if (down and shift and self.converted and self.focus >= 0
                 and vk in (VK_LEFT, VK_RIGHT)):
             pending = self._finish_pending()
@@ -200,23 +220,63 @@ class ImeSession:
             if not down:
                 return None
             pending = self._finish_pending()
-            self._literal_down.add(vk)
-            insert = self._ingest([Literal(literal)])
-            return (pending or "") + (insert or "") or None
+
+            def literal_key() -> str | None:
+                self._literal_down.add(vk)
+                return self._ingest([Literal(literal)])
+            return self._then(pending, literal_key)
         if kind not in ("M", "O"):
             if down and not self.tokens:
                 self._lm_context = ""  # Arrows/Home/Tab etc.: the caret may have moved.
             return None
         assert key is not None
-        due = self.flush_timeout(now_ms) or ""
-        if down and f"{kind}:{key}" in self.fsm.down_keys:
-            return due or None  # HID repeat is not the next character stroke.
-        if down and kind == "M" and self.converted:
-            # Preserve a pending Space chord: only composition is committed here.
-            due += self._commit(reset_input=False)
-        raw = (self.fsm.on_down(kind, key, now_ms) if down
-               else self.fsm.on_up(kind, key, now_ms))
-        return due + (self._ingest(raw) or "") or None
+        due = self.flush_timeout(now_ms)
+
+        def chord_key() -> str | None:
+            if down and f"{kind}:{key}" in self.fsm.down_keys:
+                return None  # HID repeat is not the next character stroke.
+            insert = ""
+            if down and kind == "M" and self.converted:
+                # Preserve a pending Space chord: only composition is committed here.
+                insert += self._commit(reset_input=False)
+            raw = (self.fsm.on_down(kind, key, now_ms) if down
+                   else self.fsm.on_up(kind, key, now_ms))
+            return insert + (self._ingest(raw) or "") or None
+        return self._then(due, chord_key)
+
+    def _then(self, text: str | None, rest: Callable[[], str | None]) -> str | None:
+        """Run the rest of a key event now, or after the awaited conversion resolves."""
+        if self._await is not None:
+            self._continuation = rest
+            return text
+        return ((text or "") + (rest() or "")) or None
+
+    def conversion_request(self) -> ConversionRequest | None:
+        """The LM work for converting now; None without a kana run."""
+        parts = self._parts()
+        if not any(isinstance(part, list) for part in parts):
+            return None
+        learning = self._learning.snapshot() if self._learning is not None else None
+        return ConversionRequest(
+            parts, self._lm_context, self._left_surface, learning,
+            (repr(parts), self._lm_context, self._left_surface,
+             learning.revision if learning is not None else None))
+
+    def finish_conversion(self, picks) -> str:
+        """Resolve the awaited conversion (picks None: the Viterbi 1-best).
+
+        Returns the text committed by the rest of the deferred key event.
+        """
+        assert self._await is not None
+        self._await = None
+        self.converted = True
+        if picks is not None:
+            self._refresh(picks=picks)  # rebuild the segments from the LM's picks
+        self._open_cands()
+        rest, self._continuation = self._continuation, None
+        text = (rest() if rest is not None else None) or ""
+        assert self._await is None
+        return text
 
     def on_timeout(self, now_ms: int) -> str | None:
         if self.direct:
@@ -460,6 +520,11 @@ class ImeSession:
                     if self.converted:
                         self._cycle(1)
                     else:
+                        request = self.conversion_request() if self.lm_deferred else None
+                        if request is not None:
+                            assert tok is raw[-1]  # the FSM emits at most one token per call
+                            self._await = request
+                            continue
                         self.converted = True
                         if self.lm is not None:
                             self._refresh(rescore=True)
@@ -497,27 +562,33 @@ class ImeSession:
             parts.append(run)
         return parts
 
-    def _refresh(self, *, rescore: bool = False) -> None:
-        """Rebuild segments from the 1-best; with rescore, from the LM's pick."""
+    def _refresh(self, *, rescore: bool = False, picks=None) -> None:
+        """Rebuild segments from the 1-best; with rescore or picks, from the LM's picks."""
         self.segments = []
         offset = 0
         learning = self._learning.snapshot() if self._learning is not None else None
         left_surface = self._left_surface
-        if rescore and self.lm is not None:
+        parts = self._parts()
+        if rescore and self.lm is not None and picks is None:
             self.lm.last = {}
-        for part in self._parts():
+            picks = conversion_picks(parts, self._lex, learning, self._left_surface,
+                                     self._lm_context, self.lm)
+        if picks is not None and len(picks) != sum(isinstance(p, list) for p in parts):
+            picks = None
+        kana_runs = 0
+        for part in parts:
             if isinstance(part, str):
                 self.segments.append(Segment(offset, offset + 1,
                     Candidate(part, part, 0, BOS_ID, BOS_ID, "literal"), literal=True))
                 offset += 1
                 left_surface = part
             elif self._lex is not None:
-                dec, _ = decode_tokens(part, self._lex, learning=learning,
-                                       left_surface=left_surface)
-                if rescore and self.lm is not None:
-                    context = self._lm_context + "".join(
-                        s.selected.surface for s in self.segments)
-                    dec = self.lm.rescore(context, dec, part, self._lex)
+                if picks is not None:
+                    dec = picks[kana_runs]
+                else:
+                    dec, _ = decode_tokens(part, self._lex, learning=learning,
+                                           left_surface=left_surface)
+                kana_runs += 1
                 self.segments.extend(segments_from(dec.pieces, offset, self._lex))
                 offset += len(part)
                 if self.segments:

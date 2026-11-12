@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import unittest
 
 from oyayubi.chord.fsm import AmbShift, Plain, ThumbTap
-from oyayubi.ime.lm_rescore import LmRescorer
+from oyayubi.ime.lm_rescore import LmRescorer, conversion_picks
 from oyayubi.ime.session import ImeSession
 from tools.wp0.decode import DecodeResult
 
@@ -158,6 +159,45 @@ class RealModelTest(unittest.TestCase):
             for v in variants:
                 for a, b in zip(v.nll(ctx, cands), ref):
                     self.assertAlmostEqual(a, b, delta=1e-3)
+
+    def test_conversion_picks_match_pinned_refresh(self):
+        """Pinned before the refactor from _refresh(rescore=True) at 75703b8."""
+        from tests.fixtures.make_lm_conversion_fixture import OUT, session_tokens
+        from tools.wp0.run_mozc_eval import reverse_table
+        from tools.wp0.table import load_table
+        rows = json.loads(OUT.read_text(encoding="utf-8"))
+        reverse = reverse_table(load_table())
+        sess = ImeSession(learning_path=None)
+        sess.load()
+        sess.lm = LmRescorer(self.make())
+        for row in rows:
+            expected = (row["composition"], row["segments"])
+            with self.subTest(input=row["input"]):
+                sess.reset()
+                sess._lm_context = row["context"]
+                sess.tokens = session_tokens(row["input"], reverse)
+                sess._refresh()
+                picks = conversion_picks(sess._parts(), sess._lex, None, sess._left_surface,
+                                         sess._lm_context, LmRescorer(sess.lm.scorer))
+                sess._refresh(picks=picks)  # the worker path
+                actual = (sess.composition,
+                          [[s.start, s.end, s.selected.surface] for s in sess.segments])
+                self.assertEqual(actual, expected)
+                sess._refresh()
+                sess._refresh(rescore=True)  # the synchronous path
+                actual = (sess.composition,
+                          [[s.start, s.end, s.selected.surface] for s in sess.segments])
+                self.assertEqual(actual, expected)
+
+    def test_prime_does_not_change_nll(self):
+        cands = ["記憶にない", "既読にない", "既読"]
+        cold = self.make()
+        primed = self.make()
+        for ctx in ("***REMOVED***", "***REMOVED***"):
+            primed.prime(ctx)
+            for a, b in zip(primed.nll(ctx, cands), cold.nll(ctx, cands)):
+                self.assertAlmostEqual(a, b, delta=1e-3)
+        self.assertEqual(primed.stats["ctx_extend"], 1)  # the second prime extended the first
 
     def test_window_is_deterministic(self):
         long = "これは長い上文の例です。" * 30

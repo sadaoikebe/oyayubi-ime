@@ -13,7 +13,9 @@ One JSON object per line:
   {"op":"forget_candidate"}  # also unmodified F6 while candidates are visible
   {"op":"undo_learning"}  # also unmodified F7; undo this session's last learning
   {"op":"context","text":"確定済み"}
-Reply: {"composition":"...","commit":"...","converted":false,"fsm":"S1"}
+  {"op":"stats"}  # resident only: counts since start, no text
+Reply: {"composition":"...","commit":"...","converted":false,"fsm":"S1","pending":false}
+pending: the conversion awaits the LM (resident); poll with timeout at "timer".
 """
 
 from __future__ import annotations
@@ -35,6 +37,14 @@ from oyayubi.ime.lm_rescore import CONTEXT_CHARS
 
 def dispatch(sess: ImeSession, msg: dict) -> dict:
     """Shared protocol path for stdio, resident connections and transcript tests."""
+    commit = apply_op(sess, msg)
+    reply = snapshot(sess, msg.get("op"))
+    reply["commit"] = commit
+    return reply
+
+
+def apply_op(sess: ImeSession, msg: dict) -> str:
+    """Apply one request to the session; return the committed text."""
     op = msg.get("op")
     commit = ""
     t = int(msg.get("t", 0))
@@ -56,11 +66,16 @@ def dispatch(sess: ImeSession, msg: dict) -> dict:
         sess.forget_candidate()
     elif op == "undo_learning":
         sess.undo_learning()
+    return commit
+
+
+def snapshot(sess: ImeSession, op) -> dict:
+    """The reply for the session's state; the caller fills in commit."""
     return {
         "direct": sess.direct,
         "pass_through": sess.direct and op in ("down", "up"),
         "composition": sess.composition,
-        "commit": commit,
+        "commit": "",
         "converted": sess.converted,
         "fsm": sess.fsm.state,
         "n_tokens": len(sess.tokens),
@@ -72,6 +87,7 @@ def dispatch(sess: ImeSession, msg: dict) -> dict:
         "candidate_page": sess.candidate_page,
         "candidate_kinds": sess.candidate_kinds,
         "has_next_page": sess.has_next_page,
+        "pending": False,
     }
 
 
@@ -98,24 +114,42 @@ def argument_parser() -> argparse.ArgumentParser:
     lm.add_argument("--lm-threads", type=int, default=None, help="torch CPU threads")
     lm.add_argument("--lm-timing", action="store_true",
                     help="log rescoring time per conversion to stderr (no text)")
+    lm.add_argument("--lm-prefetch", choices=("thumb", "typing", "off"), default="thumb",
+                    help="resident: start the LM early on thumb press (default), "
+                         "on every keystroke, or never")
+    lm.add_argument("--lm-deadline-ms", type=float, default=400,
+                    help="resident: fall back to the Viterbi 1-best after this wait")
+    lm.add_argument("--lm-grace-ms", type=float, default=30,
+                    help="resident: how long the converting request waits for the LM")
+    lm.add_argument("--lm-prefetch-delay-ms", type=float, default=30,
+                    help="resident: thumb press to prefetch start")
     return parser
 
 
-def load_session(args) -> ImeSession:
-    """Load expensive resources once, for stdio or a resident SessionFactory."""
+def build_rescorer(args):
+    """Import, construct and warm up the LM rescorer (raises without torch etc.)."""
+    from oyayubi.ime.lm_rescore import (DEFAULT_ALPHA, DEFAULT_K, DEFAULT_MODEL,
+                                        CausalLmScorer, LmRescorer)
+    rescorer = LmRescorer(
+        CausalLmScorer(args.lm_model or DEFAULT_MODEL, threads=args.lm_threads),
+        alpha=DEFAULT_ALPHA if args.lm_alpha is None else args.lm_alpha,
+        k=DEFAULT_K if args.lm_k is None else args.lm_k)
+    rescorer.scorer.nll("", ["あ", "い"])  # warm up before "ready"
+    return rescorer
+
+
+def load_session(args, with_lm: bool = True) -> ImeSession:
+    """Load expensive resources once, for stdio or a resident SessionFactory.
+
+    with_lm=False leaves sess.lm unset (the resident server loads it on a worker).
+    """
     sess = ImeSession(learning_path=None if args.no_learning else args.learning_file)
     sess.load()
-    if args.lm_rescore:
+    if with_lm and args.lm_rescore:
         # The LM is optional equipment: a machine without torch/transformers
         # (e.g. a fresh install) still gets a working IME, without rescoring.
         try:
-            from oyayubi.ime.lm_rescore import (DEFAULT_ALPHA, DEFAULT_K, DEFAULT_MODEL,
-                                                CausalLmScorer, LmRescorer)
-            sess.lm = LmRescorer(
-                CausalLmScorer(args.lm_model or DEFAULT_MODEL, threads=args.lm_threads),
-                alpha=DEFAULT_ALPHA if args.lm_alpha is None else args.lm_alpha,
-                k=DEFAULT_K if args.lm_k is None else args.lm_k)
-            sess.lm.scorer.nll("", ["あ", "い"])  # warm up before "ready"
+            sess.lm = build_rescorer(args)
         except Exception as exc:
             print(f"LM rescoring unavailable ({type(exc).__name__}); continuing without it",
                   file=sys.stderr, flush=True)

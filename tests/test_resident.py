@@ -15,6 +15,7 @@ from unittest.mock import Mock, patch
 import weakref
 
 from oyayubi.ime import client, resident, server
+from oyayubi.ime.lm_async import LmWorker
 from oyayubi.ime.lm_rescore import LmRescorer
 from oyayubi.ime.runtime_platform import process_lock, spawn_detached
 from oyayubi.ime.session import ImeSession
@@ -268,6 +269,115 @@ class ResidentTest(unittest.TestCase):
                 self.assertTrue(connection.stream.closed)
             finally:
                 release.set()
+
+
+class SlowScorer:
+    """Prefers 卯 over the Viterbi 宇; each call sleeps (a slow model)."""
+
+    def __init__(self, sleep=0.2):
+        self.sleep = sleep
+
+    def nll(self, context, candidates):
+        time.sleep(self.sleep)
+        return [0.0 if c.startswith("卯") else 10.0 for c in candidates]
+
+
+class AsyncLmResidentTest(unittest.TestCase):
+    """Design §7 tests 7-8: the resident pipeline over TCP."""
+    setUp = ResidentTest.setUp
+    running = ResidentTest.running
+    connect = ResidentTest.connect
+
+    def worker(self, loader):
+        return LmWorker(loader, loaded_session()._lex)
+
+    def wait_state(self, worker, state):
+        deadline = time.monotonic() + 5
+        while worker.state != state and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertEqual(worker.state, state)
+
+    def test_pending_reply_then_poll_then_replay(self):
+        worker = self.worker(lambda: LmRescorer(SlowScorer()))
+        self.wait_state(worker, "ready")
+        with self.running(worker=worker) as instance:
+            connection = self.connect()
+            type_a(connection)
+            connection.request({"op": "down", "vk": 32, "t": 100})
+            start = time.monotonic()
+            reply = connection.request({"op": "up", "vk": 32, "t": 130})
+            self.assertLess(time.monotonic() - start, 0.1)
+            self.assertEqual((reply["pending"], reply["converted"], reply["composition"],
+                              reply["candidates"], reply["timer"]), (True, False, "宇", [], 140))
+            t = 130
+            while reply["pending"]:
+                self.assertEqual(reply["timer"], t + 10)  # poll on the next timer tick
+                time.sleep(0.016)
+                t += 16
+                reply = connection.request({"op": "timeout", "t": t})
+            self.assertEqual((reply["converted"], reply["composition"]), (True, "卯"))
+            self.assertEqual(reply["candidates"][reply["cand_index"]], "卯")
+            # Enter commits it; the next conversion is typed into while pending.
+            self.assertEqual(connection.request({"op": "down", "vk": 13, "t": 900})["commit"], "卯")
+            type_a(connection, 1000)
+            connection.request({"op": "down", "vk": 32, "t": 1100})
+            self.assertTrue(connection.request({"op": "up", "vk": 32, "t": 1130})["pending"])
+            reply = type_a(connection, 1140)  # A again: queued behind the conversion
+            self.assertEqual((reply["pending"], reply["composition"], reply["commit"]),
+                             (True, "宇", ""))
+            t = 1200
+            while reply["pending"]:
+                time.sleep(0.016)
+                reply = connection.request({"op": "timeout", "t": t})
+                t += 16
+            self.assertEqual((reply["commit"], reply["composition"], reply["converted"]),
+                             ("卯", "宇", False))
+            stats = connection.request({"op": "stats"})["stats"]
+            self.assertEqual(stats["lm"], "ready")
+            self.assertEqual(stats["conversions"]["pending"], 2)
+            self.assertEqual(sum(stats["wait_ms"]["counts"]), 2)
+            self.assertGreater(sum(stats["request_ms"]["counts"]), 0)
+
+    def test_server_serves_while_loader_is_slow_or_fails(self):
+        release = threading.Event()
+
+        def slow():
+            release.wait(5)
+            return LmRescorer(SlowScorer(0))
+
+        def broken():
+            raise ImportError("no torch")
+
+        for name, loader in (("slow", slow), ("broken", broken)):
+            with self.subTest(loader=name), patch.object(server.sys, "stderr", io.StringIO()):
+                worker = self.worker(loader)
+                if name == "broken":
+                    self.wait_state(worker, "disabled")
+                with self.running(worker=worker):
+                    connection = self.connect()
+                    type_a(connection)
+                    connection.request({"op": "down", "vk": 32, "t": 100})
+                    reply = connection.request({"op": "up", "vk": 32, "t": 130})
+                    self.assertEqual((reply["pending"], reply["converted"], reply["composition"]),
+                                     (False, True, "宇"))
+                    stats = connection.request({"op": "stats"})["stats"]
+                    self.assertEqual(stats["lm"], "loading" if name == "slow" else "disabled")
+                    self.assertEqual(stats["conversions"]["bypass"], 1)
+                    if name == "slow":
+                        release.set()
+                        self.wait_state(worker, "ready")
+                        connection.request({"op": "down", "vk": 27, "t": 200})  # back to 宇
+                        connection.request({"op": "down", "vk": 32, "t": 300})
+                        reply = connection.request({"op": "up", "vk": 32, "t": 330})
+                        self.assertEqual(reply["composition"], "卯")
+
+    def test_stats_without_worker_and_client_flag(self):
+        with self.running():
+            with patch.object(client.sys, "argv", ["client", "--runtime-dir", str(self.directory),
+                                                    "--stats"]), \
+                 patch.object(client.sys, "stdout", io.StringIO()) as out:
+                client.main()
+            self.assertEqual(json.loads(out.getvalue())["lm"], "off")
 
 
 class LifecycleProcessTest(unittest.TestCase):

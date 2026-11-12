@@ -33,7 +33,9 @@ from typing import Protocol, Sequence
 
 from tools.wp0.decode import DecodeResult
 from tools.wp0.mozc_dict import MozcLex
-from tools.wp0.token_viterbi import nbest_tokens
+from tools.wp0.token_viterbi import decode_tokens, nbest_tokens
+
+from .bunsetsu import segments_from
 
 DEFAULT_MODEL = "rinna/japanese-gpt2-small"
 DEFAULT_ALPHA = 1.0
@@ -142,6 +144,11 @@ class CausalLmScorer:
         self._ctx_full, self._ctx_start = full, start
         self._ctx_past, self._ctx_logp = past, logp[0, -1]
         return self._ctx_past, self._ctx_logp
+
+    def prime(self, context: str) -> None:
+        """Build only the left-context KV cache (no candidate is scored)."""
+        with self.torch.no_grad():
+            self._context(context)
 
     # -- scoring ---------------------------------------------------------
     def nll(self, context: str, candidates: Sequence[str]) -> list[float]:
@@ -295,3 +302,29 @@ class LmRescorer:
         self.last["pool"] = self.last.get("pool", 0) + len(pool)
         self.last["changed"] = self.last.get("changed", 0) + (pick is not best)
         return pick
+
+
+def conversion_picks(parts, lex: MozcLex, learning, left_surface: str, lm_context: str,
+                     rescorer: LmRescorer, cancelled=lambda: False) -> list[DecodeResult] | None:
+    """The LM part of ImeSession._refresh(rescore=True): one pick per kana run.
+
+    Left context and left_surface follow _refresh's loop exactly, so the
+    synchronous and the worker paths pick the same results. None if cancelled.
+    """
+    picks: list[DecodeResult] = []
+    text = ""
+    for part in parts:
+        if isinstance(part, str):  # literal
+            text += part
+            left_surface = part
+            continue
+        if cancelled():
+            return None
+        dec, _ = decode_tokens(part, lex, learning=learning, left_surface=left_surface)
+        dec = rescorer.rescore(lm_context + text, dec, part, lex)
+        picks.append(dec)
+        segs = segments_from(dec.pieces, 0, lex)
+        text += "".join(s.selected.surface for s in segs)
+        if segs:
+            left_surface = segs[-1].selected.surface
+    return picks
