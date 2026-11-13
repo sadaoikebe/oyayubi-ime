@@ -30,6 +30,11 @@ if ($PSVersionTable.PSEdition -eq "Core") {
 }
 
 $ErrorActionPreference = "Stop"
+# この中で起動する Python は UTF-8 で入出力する。コンソールのコードページで
+# 表せない文字 (インストール先のパスなど) を pip が出力すると落ちるため。
+# このプロセスの中だけの設定で、システムには残らない。
+$env:PYTHONUTF8 = "1"
+$env:PYTHONIOENCODING = "utf-8"
 Set-Location $env:USERPROFILE   # 自分自身を含むフォルダを消すので、外に出ておく
 $AppDir = Join-Path $InstallRoot "app"
 $ManifestPath = Join-Path $InstallRoot "install-manifest.json"

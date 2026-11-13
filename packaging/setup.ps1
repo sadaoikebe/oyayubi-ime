@@ -34,6 +34,11 @@ if ($PSVersionTable.PSEdition -eq "Core") {
 }
 
 $ErrorActionPreference = "Stop"
+# この中で起動する Python は UTF-8 で入出力する。コンソールのコードページで
+# 表せない文字 (インストール先のパスなど) を pip が出力すると落ちるため。
+# このプロセスの中だけの設定で、システムには残らない。
+$env:PYTHONUTF8 = "1"
+$env:PYTHONIOENCODING = "utf-8"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $Repo = "sadaoikebe/oyayubi-ime"
 $ReleaseTag = "__TAG__"          # リリース時に workflow が実タグへ置換する
@@ -269,7 +274,7 @@ Invoke-Step "LM 依存の読み込み確認" {
 # ---------------------------------------------------------------- 辞書とモデル
 Say ""
 Invoke-Step "辞書の取得 (google/mozc 上流、約 93MB)" {
-    & $runtimePython -m tools.wp0.fetch_mozc_dict
+    Push-Location $AppDir; & $runtimePython -m tools.wp0.fetch_mozc_dict; Pop-Location
 }
 Invoke-Step "辞書マニフェストの照合 (SHA-256)" {
     Push-Location $AppDir; & $runtimePython -m oyayubi.ime.manage dict verify; Pop-Location
