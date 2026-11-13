@@ -1,5 +1,5 @@
-"""Looking after the learning history file (D2): list, forget, promote, pause,
-compact, clear.
+"""Looking after the learning history file (D2): list, forget, promote, the
+learning setting (on/paused/off), compact, clear.
 
 Everything here goes through LearningStore's replay, so what is listed is
 exactly what conversion uses. Rewrites (compact, clear) replace the file
@@ -14,7 +14,7 @@ import os
 from pathlib import Path
 
 from . import personal
-from .learning import Confirmation, LearningStore, pause_marker
+from .learning import LearningStore, write_history
 
 
 @dataclass(frozen=True)
@@ -30,7 +30,7 @@ def pairs(path: Path) -> list[LearnedPair]:
     """Surviving (reading, surface) pairs, most recent first."""
     store = LearningStore(path)
     out = []
-    for (reading, surface), rows in store._pairs.items():
+    for (reading, surface), rows in store.pair_rows():
         out.append(LearnedPair(reading, surface, len(rows), max(r.timestamp for r in rows),
                                any(r.user_word for r in rows)))
     return sorted(out, key=lambda p: -p.last)
@@ -43,13 +43,13 @@ def search(path: Path, query: str) -> list[LearnedPair]:
 def forget(path: Path, reading: str, surface: str) -> bool:
     """The same suppression as F6 on the candidate; False if nothing was learned."""
     store = LearningStore(path)
-    if (reading, surface) not in store._pairs:
+    if not store.has_pair(reading, surface):
         return False
     return store.suppress(reading, surface)
 
 
 def is_learned(path: Path, reading: str, surface: str) -> bool:
-    return (reading, surface) in LearningStore(path)._pairs
+    return LearningStore(path).has_pair(reading, surface)
 
 
 def promote(path: Path, personal_path: Path, reading: str, surface: str,
@@ -61,30 +61,21 @@ def promote(path: Path, personal_path: Path, reading: str, surface: str,
     return personal.add_word(personal_path, reading, surface, pos)
 
 
-def state(path: Path) -> str:
-    if not Path(path).exists():
-        return "off (no file)"
-    return "paused" if pause_marker(path).exists() else "on"
+def state(settings) -> str:
+    """on, paused or off (the learning setting, REDESIGN §6.7)."""
+    from .config import learning_mode
+    return learning_mode(settings)
 
 
-def set_paused(path: Path, paused: bool) -> None:
-    """Pause (history kept and used, nothing recorded) or resume learning."""
-    path = Path(path)
-    if not path.exists():
-        raise FileNotFoundError(path)
-    marker = pause_marker(path)
-    if paused:
-        marker.touch()
-    else:
-        marker.unlink(missing_ok=True)
+def set_mode(settings, mode: str) -> None:
+    """Write the learning setting; the running engine reads it when it starts."""
+    from .config import set_learning_mode
+    from .server import argument_parser
+    set_learning_mode(settings, argument_parser(), mode)
 
 
-def _rewrite(path: Path, rows: list[Confirmation]) -> None:
-    path = Path(path)
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text("".join(json.dumps(asdict(r), ensure_ascii=False) + "\n" for r in rows),
-                   encoding="utf-8")
-    os.replace(tmp, path)
+def _rewrite(path: Path, rows) -> None:
+    write_history(path, rows)
 
 
 def compact(path: Path) -> tuple[int, int]:
@@ -97,8 +88,8 @@ def compact(path: Path) -> tuple[int, int]:
     store = LearningStore(path)
     if not store.active:
         raise FileNotFoundError(path)
-    before = len(path.read_text(encoding="utf-8").splitlines())
-    rows = list(store._records.values())
+    before = store.lines
+    rows = store.records()
     _rewrite(path, rows)
     return before, len(rows)
 
@@ -114,7 +105,7 @@ def clear_history(path: Path, *, keep_user_words: bool = True) -> int:
         raise FileNotFoundError(path)
     kept = {}
     if keep_user_words:
-        for row in store._records.values():
+        for row in store.records():
             if row.user_word:
                 kept[(row.reading, row.surface)] = row  # file order: the latest wins
     _rewrite(path, list(kept.values()))

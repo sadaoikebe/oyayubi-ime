@@ -74,14 +74,12 @@ def cmd_learning(args, settings) -> int:
             print(f"{p.reading}\t{p.surface}\t{p.contexts}\t{_when(p.last)}{mark}")
         return 0
     if args.action in ("pause", "resume"):
-        if not path.exists():
-            print(f"learning is off (no {path}); nothing to {args.action}")
-            return 1
-        learning_admin.set_paused(path, args.action == "pause")
-        print(f"learning {learning_state(path)}")
+        learning_admin.set_mode(settings, "paused" if args.action == "pause" else "on")
+        print(f"learning {learning_state(server_settings(settings.runtime_dir, settings.config))}"
+              "; takes effect when the server restarts")
         return 0
     if not path.exists():
-        print(f"learning is off (no {path})")
+        print(f"no learning history ({path} is absent)")
         return 1
     if args.action == "forget":
         if not learning_admin.forget(path, args.reading, args.surface):
@@ -140,7 +138,7 @@ def cmd_config(args, settings) -> int:
 
 def status(settings) -> dict:
     learning_path = settings.learning_file
-    state = "off (--no-learning)" if settings.no_learning else learning_state(learning_path)
+    state = learning_state(settings)
     pairs = learning_admin.pairs(learning_path) if learning_path.exists() else []
     manifest = dict_manifest.MANIFEST
     if manifest.exists():

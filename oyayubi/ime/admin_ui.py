@@ -108,9 +108,7 @@ class AdminModel:
         return self.settings.learning_file
 
     def learning_state(self) -> str:
-        if self.settings.no_learning:
-            return "off (no_learning setting)"
-        return learning_admin.state(self.learning_file)
+        return learning_admin.state(self.settings)
 
     def learned(self, query: str = "") -> list[learning_admin.LearnedPair]:
         if not self.learning_file.exists():
@@ -133,30 +131,30 @@ class AdminModel:
                 f"{words} learned word(s) · {len(self.words())} registered word(s)")
 
     def can_toggle_pause(self) -> bool:
-        return self.learning_file.exists()
+        return self.learning_state() != "off"
 
     def pause_label(self) -> str:
-        return "Resume learning" if learning_admin.state(self.learning_file) == "paused" \
-            else "Pause learning"
+        return "Resume learning" if self.learning_state() == "paused" else "Pause learning"
 
     def toggle_pause(self) -> Outcome:
-        if not self.learning_file.exists():
-            return Outcome(False, f"learning is off (no {self.learning_file}); "
-                                  "nothing to pause")
-        paused = learning_admin.state(self.learning_file) == "paused"
-        learning_admin.set_paused(self.learning_file, not paused)
-        return Outcome(True, f"learning {learning_admin.state(self.learning_file)}")
+        """Pause or resume (the learning setting); off stays off."""
+        state = self.learning_state()
+        if state == "off":
+            return Outcome(False, "learning is off (the learning setting); nothing to pause")
+        learning_admin.set_mode(self.settings, "on" if state == "paused" else "paused")
+        self.reload()
+        return Outcome(True, f"learning {self.learning_state()}; {RESTART_NOTE}")
 
     def forget(self, reading: str, surface: str) -> Outcome:
         if not self.learning_file.exists():
-            return Outcome(False, f"learning is off (no {self.learning_file})")
+            return Outcome(False, f"no learning history ({self.learning_file} is absent)")
         if not learning_admin.forget(self.learning_file, reading, surface):
             return Outcome(False, f"not learned: {reading} → {surface}")
         return Outcome(True, f"forgot {reading} → {surface}")
 
     def promote(self, reading: str, surface: str, pos: str = "名詞") -> Outcome:
         if not self.learning_file.exists():
-            return Outcome(False, f"learning is off (no {self.learning_file})")
+            return Outcome(False, f"no learning history ({self.learning_file} is absent)")
         try:
             word = learning_admin.promote(self.learning_file, self.personal_file,
                                           reading, surface, pos)

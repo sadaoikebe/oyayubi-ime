@@ -129,12 +129,15 @@ class ManageTest(TempDir):
         self.assertEqual(self.run_manage("learning", "forget", "かた", "肩")[0], 1)
 
     def test_pause_and_resume(self):
-        self.assertEqual(self.run_manage("learning", "pause")[0], 1)  # off: nothing to pause
+        # REDESIGN §6.7: the learning setting in config.json, not a marker file.
         self.learn()
-        self.assertEqual(self.run_manage("learning", "pause"), (0, "learning paused\n"))
-        self.assertTrue(pause_marker(self.learning).exists())
-        self.assertEqual(self.run_manage("learning", "resume"), (0, "learning on\n"))
+        pause_marker(self.learning).touch()  # an older version's pause
+        code, out = self.run_manage("learning", "resume")
+        self.assertEqual((code, out.split(";")[0]), (0, "learning on"))
         self.assertFalse(pause_marker(self.learning).exists())
+        code, out = self.run_manage("learning", "pause")
+        self.assertEqual((code, out.split(";")[0]), (0, "learning paused"))
+        self.assertEqual(json.loads(self.config.read_text(encoding="utf-8"))["learning"], "paused")
 
     def test_status_and_config_show(self):
         self.learn()
@@ -213,11 +216,11 @@ class LiveEffectTest(TempDir):
         path = self.dir / "learning.jsonl"
         path.touch()
         s = self.session(path)
-        pause_marker(path).touch()
+        s._learning.recording = False  # learning "paused" (REDESIGN §6.7)
         self.convert(s, "かた")
         self.assertEqual(s._commit(), "肩")
         self.assertEqual(path.read_text(encoding="utf-8"), "")
-        pause_marker(path).unlink()
+        s._learning.recording = True
         self.convert(s, "かた")
         s._commit()
         self.assertEqual(len(path.read_text(encoding="utf-8").splitlines()), 1)

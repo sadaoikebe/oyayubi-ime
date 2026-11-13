@@ -84,8 +84,11 @@ class AdminModelTest(Base):
         self.assertEqual(len(self.model.words()), 1)
 
     def test_learning_off(self):
+        # REDESIGN §6.7: on/paused/off is the learning setting, not the file.
         self.assertEqual(self.model.learned(), [])
-        self.assertEqual(self.model.learning_state(), "off (no file)")
+        self.assertEqual(self.model.learning_state(), "on")  # no file yet: the engine makes it
+        self.assertTrue(self.model.set_setting("learning", "off").ok)
+        self.assertEqual(self.model.learning_state(), "off")
         self.assertFalse(self.model.can_toggle_pause())
         for outcome in (self.model.toggle_pause(), self.model.forget("かた", "肩"),
                         self.model.promote("かた", "肩")):
@@ -106,11 +109,20 @@ class AdminModelTest(Base):
     def test_pause_toggle(self):
         self.learn()
         self.assertEqual(self.model.pause_label(), "Pause learning")
-        self.assertEqual(self.model.toggle_pause().message, "learning paused")
-        self.assertTrue(pause_marker(self.learning).exists())
+        self.assertTrue(self.model.toggle_pause().message.startswith("learning paused"))
+        self.assertEqual(json.loads(self.config.read_text(encoding="utf-8"))["learning"], "paused")
         self.assertEqual(self.model.pause_label(), "Resume learning")
-        self.assertEqual(self.model.toggle_pause().message, "learning on")
+        self.assertTrue(self.model.toggle_pause().message.startswith("learning on"))
+        self.assertEqual(json.loads(self.config.read_text(encoding="utf-8"))["learning"], "on")
+
+    def test_old_pause_marker_reads_as_paused_until_the_setting_is_written(self):
+        self.learn()
+        pause_marker(self.learning).touch()
+        self.model.reload()
+        self.assertEqual(self.model.learning_state(), "paused")
+        self.model.toggle_pause()  # resume: the setting replaces the marker
         self.assertFalse(pause_marker(self.learning).exists())
+        self.assertEqual(self.model.learning_state(), "on")
 
     def test_forget_and_promote(self):
         self.learn()
@@ -125,7 +137,7 @@ class AdminModelTest(Base):
 
     def test_no_learning_setting_is_reported(self):
         self.assertTrue(self.model.set_setting("no_learning", "on").ok)
-        self.assertEqual(self.model.learning_state(), "off (no_learning setting)")
+        self.assertEqual(self.model.learning_state(), "off")
 
 
 class SettingsTest(Base):

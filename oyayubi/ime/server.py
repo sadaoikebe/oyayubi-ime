@@ -28,9 +28,10 @@ import sys
 from pathlib import Path
 
 from oyayubi.ime.session import ImeSession
-from oyayubi.ime.learning import DEFAULT_LEARNING_PATH
+from oyayubi.ime.learning import DEFAULT_LEARNING_PATH, LearningStore
 from oyayubi.ime.personal import DEFAULT_PERSONAL_PATH, PersonalLexicon
 from oyayubi.ime import config
+from oyayubi.ime.config import LEARNING_MODES
 from oyayubi.ime.lm_rescore import CONTEXT_CHARS
 from oyayubi.ime.predict import DEFAULT_MODE as DEFAULT_PREDICTION, MODES as PREDICTION_MODES
 
@@ -97,7 +98,10 @@ def argument_parser() -> argparse.ArgumentParser:
         "--log-text", action="store_true", help="log composition/commit text to stderr (private input)"
     )
     parser.add_argument("--learning-file", type=Path, default=DEFAULT_LEARNING_PATH,
-                        help="local UTF-8 JSONL history; missing file disables learning")
+                        help="local UTF-8 JSONL history (created when learning is on)")
+    parser.add_argument("--learning", choices=LEARNING_MODES, default=None,
+                        help="on (the default): learn from conversions; paused: use the "
+                             "history but record nothing; off: neither")
     parser.add_argument("--no-learning", action="store_true", help="disable confirmation learning")
     parser.add_argument("--personal-file", type=Path, default=DEFAULT_PERSONAL_PATH,
                         help="the user's word list (JSONL; edit with python -m oyayubi.ime.manage word)")
@@ -143,13 +147,25 @@ def build_rescorer(args):
     return rescorer
 
 
-def load_session(args, with_lm: bool = True) -> ImeSession:
+def load_session(args, with_lm: bool = True, *, lex=None, create_learning_file: bool = False,
+                 on_problem=None) -> ImeSession:
     """Load expensive resources once, for stdio or a resident SessionFactory.
 
     with_lm=False leaves sess.lm unset (the resident server loads it on a worker).
+    lex: an already loaded lexicon (the engine loads it itself, for its progress).
+    create_learning_file: learning on makes a missing history file (the engine).
+    on_problem: told once about a history that cannot be read or written.
     """
-    sess = ImeSession(learning_path=None if args.no_learning else args.learning_file,
-                      personal=PersonalLexicon(args.personal_file),
+    mode = config.learning_mode(args)
+    store = None
+    if mode != "off":
+        if mode == "on" and create_learning_file:
+            args.learning_file.parent.mkdir(parents=True, exist_ok=True)
+            args.learning_file.touch()  # REDESIGN §6.7: learning on makes the file
+        store = LearningStore(args.learning_file, recording=mode == "on",
+                              on_problem=on_problem)
+    sess = ImeSession(learning_path=None if mode == "off" else args.learning_file,
+                      _learning=store, _lex=lex, personal=PersonalLexicon(args.personal_file),
                       prediction=getattr(args, "prediction", DEFAULT_PREDICTION))
     sess.load()
     if sess.prediction != "off":

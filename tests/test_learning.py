@@ -538,18 +538,23 @@ class LearningTest(unittest.TestCase):
         store = self.store()
         c = Candidate("校正", "こうせい", 0, 1851, 1851, word_cost=5000)
         ids = store.confirm([(c, "")], self.lex)
+        # REDESIGN §6.7 rule 5: a line counts when it is JSON with the needed
+        # fields; anything else is skipped and counted, nothing more is checked.
         invalid = [
-            {"type": "suppress", "reading": c.reading, "surface": c.surface,
-             "timestamp": self.now, "version": 999},
-            {"type": "tombstone", "record_ids": ids, "timestamp": "bad"},
-            {"type": "tombstone", "record_ids": [42], "timestamp": self.now},
+            {"type": "suppress", "reading": c.reading, "timestamp": self.now},  # no surface
+            {"type": "tombstone", "timestamp": self.now},  # no record_ids
             {"type": "future", "timestamp": self.now},
+            {"type": "suppress", "reading": c.reading, "surface": c.surface,
+             "timestamp": self.now, "unknown_field": 1},
         ]
         with self.path.open("a", encoding="utf-8") as stream:
             for row in invalid:
                 stream.write(json.dumps(row) + "\n")
+            stream.write("not json\n")
             stream.write('{"type":"suppress",')
-        self.assertEqual(self.store().bonus(c.reading, c.surface, ""), 6000)
+        reread = self.store()
+        self.assertEqual(reread.bonus(c.reading, c.surface, ""), 6000)
+        self.assertEqual((reread.lines, reread.skipped), (7, 6))
         store.suppress(c.reading, c.surface)  # repairs the missing newline on append
         self.assertEqual(self.store().bonus(c.reading, c.surface, ""), 0)
 

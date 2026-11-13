@@ -25,6 +25,8 @@ import sys
 DEFAULT_RUNTIME_DIR = Path.home() / ".oyayubi-ime"  # endpoint, lock and config.json
 CONFIG_NAME = "config.json"
 
+LEARNING_MODES = ("on", "paused", "off")  # config.json "learning" (REDESIGN §6.7)
+
 # Options that only make sense per invocation, never from a file.
 NOT_IN_FILE = {"resident", "runtime_dir", "config", "help"}
 
@@ -33,8 +35,7 @@ OTHER_SETTINGS = {
     "tip.json toggle_vk": "TIP: the direct-input toggle key (default VK_OEM_3, C++ TipConfig)",
     "tip.json toggle_mods": "TIP: its modifiers, e.g. [\"alt\"] (the default)",
     "tip.json log_text": "TIP: log composition text (default off)",
-    "learning file present": "learning on/off: delete the file to turn learning off",
-    "<learning file>.paused present": "learning paused: history kept and used, nothing recorded",
+    "<learning file>.paused present": "before the learning setting: paused, when learning is unset",
     "ZERO_ROW_PENALTY (environment)": "evaluation knob of the dictionary loader, not a user setting",
 }
 
@@ -162,3 +163,25 @@ def unset_setting(path: Path, key: str) -> bool:
     del raw[key]
     _write_raw(path, raw)
     return True
+
+
+def learning_mode(settings: argparse.Namespace) -> str:
+    """on, paused or off: the learning setting (REDESIGN §6.7).
+
+    Unset, a pause marker left by an older version (<learning file>.paused)
+    still means paused; no_learning (an older option) means off.
+    """
+    from .learning import pause_marker
+    if settings.no_learning or settings.learning == "off":
+        return "off"
+    if settings.learning is None:
+        return "paused" if pause_marker(settings.learning_file).exists() else "on"
+    return settings.learning
+
+
+def set_learning_mode(settings: argparse.Namespace, parser: argparse.ArgumentParser,
+                      mode: str) -> None:
+    """Store the learning setting; the old pause marker is then no longer needed."""
+    from .learning import pause_marker
+    set_setting(settings.config, parser, "learning", mode)
+    pause_marker(settings.learning_file).unlink(missing_ok=True)
