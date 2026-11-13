@@ -7,7 +7,7 @@ import tempfile
 import unittest
 
 from oyayubi.ime.personal import (DEFAULT_COST, POS_IDS, PersonalLexicon, add_word,
-                                  read_words, remove_word)
+                                  read_words, remove_word, scan_words)
 from oyayubi.lattice.mozc_dict import Entry, MozcLex
 
 
@@ -51,6 +51,16 @@ class PersonalFileTest(TempFile):
                              '{"reading": "abc", "surface": "x"}\n', encoding="utf-8")
         self.assertEqual([(w.surface, w.cost) for w in read_words(self.path)],
                          [("亜", DEFAULT_COST)])
+
+    def test_skipped_lines_are_counted(self):
+        """REDESIGN §6.2: a broken line is skipped and counted (shown to the user)."""
+        self.path.write_bytes('{"reading": "あ", "surface": "亜"}\nnot json\n'
+                              '{"reading": "い"}\n'.encode("utf-8") + b"\xff\xfe broken\n")
+        words, skipped = scan_words(self.path)
+        self.assertEqual(([w.surface for w in words], skipped), (["亜"], 3))
+        overlay = PersonalLexicon(self.path)
+        overlay.sync(lex())
+        self.assertEqual((overlay.count, overlay.skipped), (1, 3))
 
 
 class OverlayTest(TempFile):

@@ -78,6 +78,31 @@ class ConfigTest(TempDir):
         self.assertIn("always", err.getvalue())
         self.assertIn("resident", err.getvalue())
 
+    def test_broken_file_never_stops_and_is_reported(self):
+        """REDESIGN §6.2: what can be read is used, the rest is the built-in default."""
+        cases = {
+            '{"lm_k": 4,, broken': ({}, "not readable as JSON"),
+            "[1, 2]": ({}, "does not hold a JSON object"),
+            b"\xff\xfe{}": ({}, "not readable as JSON"),
+            '{"lm_k": "four", "lm_alpha": 0.5}': ({"lm_alpha": 0.5}, "lm_k='four'"),
+            '{"no_learning": "yes", "lm_k": 3}': ({"lm_k": 3}, "no_learning='yes'"),
+            '{"learning": "sometimes"}': ({}, "learning='sometimes'"),
+        }
+        for text, (expected, problem) in cases.items():
+            with self.subTest(text=text):
+                if isinstance(text, bytes):
+                    self.config.write_bytes(text)
+                else:
+                    self.config.write_text(text, encoding="utf-8")
+                problems = []
+                with redirect_stderr(io.StringIO()):
+                    values = config.read_config(self.config, argument_parser(), problems)
+                    args = config.parse_args(argument_parser(), ["--runtime-dir", str(self.dir)])
+                self.assertEqual(values, expected)
+                self.assertEqual(len(problems), 1)
+                self.assertIn(problem, problems[0])
+                self.assertEqual(args.lm_k, expected.get("lm_k"))
+
     def test_explicit_config_path(self):
         other = self.dir / "other.json"
         other.write_text('{"lm_k": 4}', encoding="utf-8")

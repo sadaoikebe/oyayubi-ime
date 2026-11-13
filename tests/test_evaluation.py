@@ -38,6 +38,8 @@ class EvaluationTest(unittest.TestCase):
             root = Path(tmp)
             (root / "dictionary00.txt").write_text(
                 "".join(f"こうせい\t0\t0\t{i}\t候補{i}\n" for i in range(20)), encoding="utf-8")
+            # A missing file stops the parse (REDESIGN §6.2); this one has no entries.
+            (root / "suffix.txt").write_text("", encoding="utf-8")
             with patch.object(mozc_dict, "DICT_DIR", root):
                 entries, prefixes = mozc_dict._parse_dict_files()
             lex = MozcLex(entries, prefixes, [0] * 4, 2)

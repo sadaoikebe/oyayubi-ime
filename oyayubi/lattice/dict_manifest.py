@@ -21,10 +21,8 @@ from pathlib import Path
 import pickle
 import sys
 
-from .mozc_dict import (CACHE, DICT_DIR, ROOT, USER_LEX, _parse_connection,
-                        _parse_dict_files)
-
-MANIFEST = ROOT / "data" / "dictionary-manifest.json"
+from . import mozc_dict
+from .mozc_dict import MANIFEST, ROOT, USER_LEX, _parse_connection, _parse_dict_files
 FORMAT = 1
 # The loader's inputs (dictionary*, suffix, connection, id.def for POS names),
 # plus the evaluation set and the upstream notices that travel with them.
@@ -56,8 +54,8 @@ def build(label: str, upstream_commit: str = "unknown") -> dict:
         "format": FORMAT,
         "label": label,
         "upstream_commit": upstream_commit,
-        "dictionary_dir": str(DICT_DIR.relative_to(ROOT)),
-        "files": {name: describe(DICT_DIR / name) for name in REQUIRED},
+        "dictionary_dir": str(mozc_dict.DICT_DIR.relative_to(ROOT)),
+        "files": {name: describe(mozc_dict.DICT_DIR / name) for name in REQUIRED},
         # Hand-written corrections are applied separately (an evaluation
         # condition of their own), so they are recorded, not mixed in.
         "user_lexicon": {"path": str(USER_LEX.relative_to(ROOT)), **describe_text(USER_LEX)},
@@ -69,14 +67,15 @@ def build(label: str, upstream_commit: str = "unknown") -> dict:
 def verify(manifest: dict) -> list[str]:
     """Differences between the working set and the manifest; [] if it matches."""
     problems = []
+    directory = mozc_dict.DICT_DIR
     for name, want in manifest["files"].items():
-        path = DICT_DIR / name
+        path = directory / name
         if not path.exists():
             problems.append(f"missing {name}")
         elif describe(path) != want:
             problems.append(f"changed {name}")
     recorded = set(manifest["files"])
-    for path in sorted(DICT_DIR.glob("dictionary*.txt")):
+    for path in sorted(directory.glob("dictionary*.txt")):
         if path.name not in recorded:
             problems.append(f"unrecorded {path.name} (the loader would read it)")
     if describe_text(USER_LEX) != {k: manifest["user_lexicon"][k] for k in ("size", "sha256")}:
@@ -86,9 +85,10 @@ def verify(manifest: dict) -> list[str]:
 
 def cache_matches_text() -> list[str]:
     """Compare the pickle cache with a fresh parse of the text files."""
-    if not CACHE.exists():
-        return [f"no cache at {CACHE}"]
-    cached = pickle.loads(CACHE.read_bytes())
+    cache = mozc_dict.CACHE
+    if not cache.exists():
+        return [f"no cache at {cache}"]
+    cached = pickle.loads(cache.read_bytes())
     by_reading, prefixes = _parse_dict_files()
     connect, pos_size = _parse_connection()
     problems = []

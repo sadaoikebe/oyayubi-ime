@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import pickle
 import sys
@@ -10,10 +12,37 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DICT_DIR = ROOT / "third_party" / "mozc_oss_dict"
+MANIFEST = ROOT / "data" / "dictionary-manifest.json"
 # v1 caches discarded homonyms after the eighth entry; v2 pickles name the old
 # module path tools.wp0.mozc_dict. Each version bump rebuilds the cache once.
-CACHE = ROOT / "data" / "cache" / "mozc_lex_v3.pkl"
+CACHE_FORMAT = "mozc_lex_v3"
+
+
+def cache_name(manifest: Path = MANIFEST) -> str:
+    """The cache file's name: the format and the hash of the manifest's file list.
+
+    A cache is only ever read for the dictionary it was built from (REDESIGN
+    §6.2): another dictionary has another name, so a stale cache cannot be used.
+    """
+    files = json.loads(Path(manifest).read_text(encoding="utf-8"))["files"]
+    digest = hashlib.sha256(json.dumps(files, sort_keys=True).encode("ascii")).hexdigest()
+    return f"{CACHE_FORMAT}-{digest[:16]}.pkl"
+
+
+CACHE = ROOT / "data" / "cache" / cache_name()
 USER_LEX = ROOT / "data" / "user_lexicon.jsonl"
+
+
+class DictionaryFormatError(ValueError):
+    """A dictionary line that is not reading/lid/rid/cost/surface (REDESIGN §6.2).
+
+    The files are checked against the manifest's hashes, so this never happens
+    with an intact dictionary; when it does, loading stops instead of skipping.
+    """
+
+
+class CacheWriteError(OSError):
+    """The rebuilt dictionary cache could not be written (disk space etc.)."""
 DEFAULT_NOUN_ID = 1851  # 名詞,一般 in Mozc id.def
 
 BOS_ID = 0
@@ -75,24 +104,21 @@ def _parse_dict_files() -> tuple[dict[str, list[Entry]], set[str]]:
     prefixes: set[str] = set()
     files = list(DICT_DIR.glob("dictionary*.txt")) + [DICT_DIR / "suffix.txt"]
     for path in files:
-        if not path.exists():
-            continue
         with path.open(encoding="utf-8") as f:
-            for line in f:
+            for number, line in enumerate(f, 1):
                 line = line.rstrip("\n")
                 if not line or line.startswith("#"):
                     continue
                 parts = line.split("\t")
-                if len(parts) < 5:
-                    continue
-                reading, lid_s, rid_s, cost_s, surface = parts[:5]
-                if not reading or not surface:
-                    continue
-                # skip readings we cannot NICOLA-encode later; keep all kana-ish
                 try:
+                    reading, lid_s, rid_s, cost_s, surface = parts[:5]
                     lid, rid, cost = int(lid_s), int(rid_s), int(cost_s)
-                except ValueError:
-                    continue
+                except ValueError:  # fewer than five columns, or not numbers
+                    raise DictionaryFormatError(f"{path.name}:{number}: not a dictionary "
+                                                "line") from None
+                if not reading or not surface:
+                    raise DictionaryFormatError(f"{path.name}:{number}: empty reading "
+                                                "or surface")
                 e = Entry(surface, reading, lid, rid, cost)
                 bucket = by_reading.setdefault(reading, [])
                 bucket.append(e)
@@ -107,11 +133,14 @@ def _parse_dict_files() -> tuple[dict[str, list[Entry]], set[str]]:
 def _parse_connection() -> tuple[list[int], int]:
     path = DICT_DIR / "connection_single_column.txt"
     with path.open(encoding="utf-8") as f:
-        pos_size = int(f.readline().strip())
-        vals = [int(line) for line in f]
+        try:
+            pos_size = int(f.readline().strip())
+            vals = [int(line) for line in f]
+        except ValueError:
+            raise DictionaryFormatError(f"{path.name}: not a number") from None
     expected = pos_size * pos_size
     if len(vals) != expected:
-        raise ValueError(f"connection size {len(vals)} != {pos_size}^2")
+        raise DictionaryFormatError(f"connection size {len(vals)} != {pos_size}^2")
     return vals, pos_size
 
 
@@ -149,17 +178,62 @@ def apply_user_lex(lex: MozcLex, path: Path | None = None) -> int:
     return n
 
 
-def load_lex(force: bool = False, *, user_lexicon: bool = True) -> MozcLex:
-    if CACHE.exists() and not force:
-        lex = pickle.loads(CACHE.read_bytes())
-    else:
+def read_cache(cache: Path) -> MozcLex | None:
+    """The cached lexicon; None when there is none or it cannot be read.
+
+    Whatever is wrong with the file (written halfway, empty, from another
+    format), the answer is the same: build it again from the text (§6.2).
+    """
+    try:
+        data = cache.read_bytes()
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        print(f"dictionary cache unreadable ({type(exc).__name__}); rebuilding",
+              file=sys.stderr, flush=True)
+        return None
+    try:
+        lex = pickle.loads(data)
+        if not isinstance(lex, MozcLex):
+            raise TypeError(type(lex).__name__)
+    except Exception as exc:  # any unpickling failure: the cache is rebuilt
+        print(f"dictionary cache unreadable ({type(exc).__name__}); rebuilding",
+              file=sys.stderr, flush=True)
+        return None
+    return lex
+
+
+def write_cache(cache: Path, lex: MozcLex) -> None:
+    """Write beside the cache, then take its name: never a half-written cache."""
+    tmp = cache.with_name(f"{cache.name}.{os.getpid()}.tmp")
+    try:
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_bytes(pickle.dumps(lex, protocol=5))
+        os.replace(tmp, cache)
+    except OSError as exc:
+        try:
+            tmp.unlink(missing_ok=True)
+        finally:
+            raise CacheWriteError(exc.errno, f"cannot write the dictionary cache {cache}: "
+                                             f"{exc.strerror}") from exc
+
+
+def load_lex(force: bool = False, *, user_lexicon: bool = True,
+             on_rebuild=None) -> MozcLex:
+    """The lexicon from the cache, or parsed from the text and cached.
+
+    on_rebuild: called before a parse of the text (minutes on a slow PC).
+    """
+    lex = None if force else read_cache(CACHE)
+    if lex is None:
         require_dict_files(LOADER_FILES)
-        print("parsing Mozc OSS dictionary (first run)...", file=sys.stderr)
+        if on_rebuild is not None:
+            on_rebuild()
+        print("parsing Mozc OSS dictionary (first run)...", file=sys.stderr, flush=True)
         by_reading, prefixes = _parse_dict_files()
         connect, pos_size = _parse_connection()
         lex = MozcLex(by_reading, prefixes, connect, pos_size)
-        CACHE.parent.mkdir(parents=True, exist_ok=True)
-        CACHE.write_bytes(pickle.dumps(lex, protocol=5))
+        write_cache(CACHE, lex)
         print(
             f"  readings={len(by_reading)} prefixes={len(prefixes)} "
             f"pos={pos_size} cache={CACHE}",

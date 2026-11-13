@@ -49,28 +49,48 @@ def file_settings(parser: argparse.ArgumentParser) -> dict[str, argparse.Action]
     return actions
 
 
-def read_config(path: Path, parser: argparse.ArgumentParser) -> dict:
+def read_config(path: Path, parser: argparse.ArgumentParser, problems: list | None = None) -> dict:
     """The file's values, converted like the command line would; {} if absent.
 
-    A key the server does not know is reported and skipped, so a typo in the
-    file cannot keep the IME from starting.
+    A file the user edited by hand never stops the IME (REDESIGN §6.2): broken
+    JSON, a value of the wrong type, a value out of its choices or an unknown
+    key each leave that setting at its default. What was wrong is printed to
+    stderr and, when a list is given, appended to ``problems``.
     """
+    def problem(text: str) -> None:
+        print(f"{path}: {text}", file=sys.stderr)
+        if problems is not None:
+            problems.append(text)
+
     try:
         raw = json.loads(Path(path).read_text(encoding="utf-8-sig"))  # a BOM is fine
     except FileNotFoundError:
+        return {}
+    except (OSError, ValueError) as exc:  # UnicodeDecodeError is a ValueError
+        problem(f"not readable as JSON ({type(exc).__name__}); built-in defaults used")
+        return {}
+    if not isinstance(raw, dict):
+        problem("does not hold a JSON object; built-in defaults used")
         return {}
     known = file_settings(parser)
     values = {}
     for key, value in raw.items():
         action = known.get(key)
         if action is None:
-            print(f"{path}: unknown setting {key!r} ignored", file=sys.stderr)
+            problem(f"unknown setting {key!r} ignored")
             continue
-        if value is not None and action.type is not None:
-            value = action.type(value)
+        if is_switch(action):
+            if not isinstance(value, bool):
+                problem(f"{key}={value!r} is not true or false; ignored")
+                continue
+        elif value is not None and action.type is not None:
+            try:
+                value = action.type(value)
+            except (TypeError, ValueError):
+                problem(f"{key}={value!r} is not a valid value; ignored")
+                continue
         if action.choices is not None and value not in action.choices:
-            print(f"{path}: {key}={value!r} is not one of {list(action.choices)}; ignored",
-                  file=sys.stderr)
+            problem(f"{key}={value!r} is not one of {list(action.choices)}; ignored")
             continue
         values[key] = value
     return values
