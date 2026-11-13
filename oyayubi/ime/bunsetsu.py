@@ -9,7 +9,7 @@ from itertools import count
 from typing import Iterator
 
 from oyayubi.lattice.decode import Piece
-from oyayubi.lattice.mozc_dict import BOS_ID, DICT_DIR, UNK_COST, MozcLex
+from oyayubi.lattice.mozc_dict import BOS_ID, DICT_DIR, UNK_COST, MozcLex, require_dict_files
 from oyayubi.lattice.token_viterbi import BOUNDARY_RID, end_cost, spans_from, word_cost
 
 from .dates import date_spellings
@@ -22,6 +22,7 @@ PAGE_SIZE = 9
 
 @lru_cache(maxsize=1)
 def _pos_names() -> dict[int, str]:
+    require_dict_files(["id.def"], DICT_DIR)
     return {int(i): name.strip() for line in (DICT_DIR / "id.def").read_text(
         encoding="utf-8").splitlines() for i, name in [line.split(None, 1)]}
 

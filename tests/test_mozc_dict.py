@@ -53,5 +53,38 @@ class ZeroRowPenaltyTest(unittest.TestCase):
         self.assertEqual(pickle.loads(self.cache.read_bytes()).connect, self.raw.connect)
 
 
+class MissingFileTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        for name in mozc_dict.LOADER_FILES:
+            (self.root / name).write_text("", encoding="utf-8")
+        self.cache = self.root / "lex.pkl"
+        self.addCleanup(patch.stopall)
+        patch.object(mozc_dict, "DICT_DIR", self.root).start()
+        patch.object(mozc_dict, "CACHE", self.cache).start()
+
+    def test_missing_suffix_stops_the_build_and_names_the_fix(self):
+        (self.root / "suffix.txt").unlink()
+        (self.root / "dictionary03.txt").unlink()
+        with self.assertRaises(FileNotFoundError) as ctx:
+            mozc_dict.load_lex(user_lexicon=False)
+        message = str(ctx.exception)
+        self.assertIn("dictionary03.txt, suffix.txt", message)
+        self.assertIn("python -m tools.wp0.fetch_mozc_dict", message)
+        self.assertFalse(self.cache.exists())
+
+    def test_pos_names_names_missing_id_def(self):
+        from oyayubi.ime import bunsetsu
+        bunsetsu._pos_names.cache_clear()
+        self.addCleanup(bunsetsu._pos_names.cache_clear)
+        with patch.object(bunsetsu, "DICT_DIR", self.root):
+            with self.assertRaises(FileNotFoundError) as ctx:
+                bunsetsu._pos_names()
+        self.assertIn("id.def", str(ctx.exception))
+        self.assertIn("python -m tools.wp0.fetch_mozc_dict", str(ctx.exception))
+
+
 if __name__ == "__main__":
     unittest.main()

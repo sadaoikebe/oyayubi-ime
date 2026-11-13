@@ -54,6 +54,22 @@ def left_id_after(literal: str, lex: MozcLex) -> int:
     return NUMBER_ID if digit and NUMBER_ID < lex.pos_size else BOS_ID
 
 
+# What load_lex parses to build the cache. A missing one must stop the build:
+# skipping it would pickle an incomplete lexicon that is then trusted as is.
+LOADER_FILES = ([f"dictionary{i:02d}.txt" for i in range(10)]
+                + ["suffix.txt", "connection_single_column.txt"])
+FETCH_HINT = "Run: python -m tools.wp0.fetch_mozc_dict"
+
+
+def require_dict_files(names: list[str], directory: Path | None = None) -> None:
+    """Raise FileNotFoundError naming every missing file and how to fetch it."""
+    directory = DICT_DIR if directory is None else directory
+    missing = [name for name in names if not (directory / name).exists()]
+    if missing:
+        raise FileNotFoundError(
+            f"Mozc dict files missing in {directory}: {', '.join(missing)}. {FETCH_HINT}")
+
+
 def _parse_dict_files() -> tuple[dict[str, list[Entry]], set[str]]:
     by_reading: dict[str, list[Entry]] = {}
     prefixes: set[str] = set()
@@ -137,10 +153,7 @@ def load_lex(force: bool = False, *, user_lexicon: bool = True) -> MozcLex:
     if CACHE.exists() and not force:
         lex = pickle.loads(CACHE.read_bytes())
     else:
-        if not (DICT_DIR / "dictionary00.txt").exists():
-            raise FileNotFoundError(
-                f"Mozc dict missing in {DICT_DIR}. Run: python -m tools.wp0.fetch_mozc_dict"
-            )
+        require_dict_files(LOADER_FILES)
         print("parsing Mozc OSS dictionary (first run)...", file=sys.stderr)
         by_reading, prefixes = _parse_dict_files()
         connect, pos_size = _parse_connection()
