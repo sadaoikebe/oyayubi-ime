@@ -14,11 +14,12 @@ Latency work, all exact (no approximation of the E6 score):
   run (incremental extension). The window is the last ctx_tokens..ctx_max-1
   tokens with a start that moves in fixed steps, so scores are deterministic.
   ctx_max == ctx_tokens reproduces E6's fixed last-48 window.
-- Token trie: the candidates' token sequences are
-  merged into a trie and every internal node is run exactly once, in a single
-  forward call over the cached context, with an ancestor-only attention mask
-  and per-node position ids. No padding, no repeated prefixes, and a node that
-  ends every candidate through it (a leaf) is never run, only predicted.
+- Each candidate is scored by a plain model forward over its own tokens on
+  top of a fresh copy of the context cache (a forward appends the keys it
+  runs, so the shared context cache itself is never handed over). Only the
+  model/tokenizer/cache public API is used: hand-driving the transformer
+  blocks broke silently when transformers dropped GPT2Block's layer_past
+  argument (4.57) and the LM scored candidates with no left context at all.
 - Results are memoized per (context, candidate).
 """
 
@@ -54,6 +55,8 @@ class CausalLmScorer:
                  incremental: bool = True, memo_size: int = 4096) -> None:
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
+        from transformers.cache_utils import DynamicCache
+        self.DynamicCache = DynamicCache
 
         if threads:
             torch.set_num_threads(threads)
@@ -62,7 +65,7 @@ class CausalLmScorer:
         # local_files_only: the IME never goes to the network (REDESIGN §6.2);
         # the model is fetched at install (packaging/fetch_model.py).
         self.tok = AutoTokenizer.from_pretrained(model, use_fast=False, local_files_only=True)
-        # Eager attention: the trie forward passes a 4-D additive mask to the blocks.
+        # Eager attention: deterministic CPU numerics, matching the naive path.
         self.model = AutoModelForCausalLM.from_pretrained(
             model, attn_implementation="eager", local_files_only=True).eval()
         self.bos = (self.tok.bos_token_id if self.tok.bos_token_id is not None
@@ -154,48 +157,21 @@ class CausalLmScorer:
 
     def _kv(self, context: str, cands: list[str]) -> list[float]:
         past, logp = self._context(context)
-        return self._trie(past, logp, [self.encode(c) for c in cands])
-
-    def _trie(self, past, logp, ids: list[list[int]]) -> list[float]:
-        torch = self.torch
-        node_of: dict[tuple[int, ...], int] = {}
-        tokens: list[int] = []
-        parents: list[int] = []
-        depth: list[int] = []
-        for x in ids:  # internal nodes only: x[:j+1] for j < len(x) - 1
-            parent = -1
-            for j in range(len(x) - 1):
-                key = tuple(x[:j + 1])
-                node = node_of.get(key)
-                if node is None:
-                    node = node_of[key] = len(tokens)
-                    tokens.append(x[j])
-                    parents.append(parent)
-                    depth.append(j)
-                parent = node
-        out = [-float(logp[x[0]]) if x else 0.0 for x in ids]
-        if not tokens:
-            return out
-        n = len(tokens)
-        self.stats["cand_tokens_run"] += n
-        tr = self.model.transformer
-        plen = past[0][0].shape[-2]
-        allow = torch.zeros(n, n, dtype=torch.bool)
-        for a in range(n):
-            b = a
-            while b >= 0:
-                allow[a, b] = True
-                b = parents[b]
-        mask = torch.zeros(1, 1, n, plen + n)
-        mask[0, 0, :, plen:].masked_fill_(~allow, torch.finfo(mask.dtype).min)
-        pos = torch.tensor([[plen + d for d in depth]])
-        h = tr.wte(torch.tensor([tokens])) + tr.wpe(pos)
-        for block, layer_past in zip(tr.h, past):
-            h = block(h, layer_past=layer_past, attention_mask=mask)[0]
-        lp = torch.log_softmax(self.model.lm_head(tr.ln_f(h))[0].float(), -1)
-        for i, x in enumerate(ids):
-            for j in range(1, len(x)):
-                out[i] -= float(lp[node_of[tuple(x[:j])], x[j]])
+        legacy = past.to_legacy_cache()
+        out = []
+        for c in cands:
+            ids = self.encode(c)
+            if not ids:
+                out.append(0.0)
+                continue
+            total = -float(logp[ids[0]])
+            if len(ids) > 1:
+                self.stats["cand_tokens_run"] += len(ids) - 1
+                _, lp = self._run([ids[:-1]],
+                                  self.DynamicCache.from_legacy_cache(legacy))
+                total -= sum(float(lp[0, k, ids[k + 1]])
+                             for k in range(len(ids) - 1))
+            out.append(total)
         return out
 
     def _naive(self, context: str, cands: list[str]) -> list[float]:
