@@ -1,7 +1,7 @@
-# リリース作成 (docs/INSTALL.md): タグ v* を push すると、Windows ランナーで
-# TIP をビルドし、依存ピン留めを実地検証し、setup が取得するアセット
-# (DLL・ソース zip・各 SHA-256・タグ/ハッシュを刻んだ setup.ps1) を公開する。
-# 検証が1つでも失敗すればリリースは出ない。
+# リリース作成 (docs/INSTALL.md、REDESIGN §8): タグ v* を push すると、Windows ランナーで
+# TIP とブローカーをタグ入りの Release でビルド・試験し、依存ピン留めを実地検証し、setup が
+# 取得するアセット (DLL・ブローカー・ソース zip・各 SHA-256・タグ/ハッシュを刻んだ setup.ps1)
+# を公開する。検証が1つでも失敗すればリリースは出ない。
 name: release
 
 on:
@@ -17,11 +17,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: TIP DLL のビルドとテスト
+      - name: TIP とブローカーのビルドと試験 (Release、タグを埋め込む。登録はしない)
         shell: pwsh
-        run: ./src/tip/dev-build.ps1
+        run: ./src/tip/dev-build.ps1 -Tag "${{ github.ref_name }}"
 
-      # setup.ps1 が使う Python (同梱ランタイム 3.13、venv は 3.11〜3.13) で確かめる。
+      # setup.ps1 が使う Python (同梱ランタイム 3.13) で確かめる。
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
@@ -49,7 +49,8 @@ jobs:
         run: |
           git archive --format=zip -o oyayubi-ime-source.zip HEAD
           Copy-Item dist/NicolaIME3.dll .
-          foreach ($name in @("NicolaIME3.dll", "oyayubi-ime-source.zip")) {
+          Copy-Item dist/oyayubi-broker.exe .
+          foreach ($name in @("NicolaIME3.dll", "oyayubi-broker.exe", "oyayubi-ime-source.zip")) {
             (Get-FileHash $name -Algorithm SHA256).Hash.ToLower() | Set-Content "$name.sha256" -Encoding ASCII -NoNewline
           }
           # setup.ps1 にタグと、同梱 Python の公式ハッシュを刻む。
@@ -61,10 +62,10 @@ jobs:
           # 利用者が実行するのは Windows PowerShell 5.1。BOM が無いと ANSI として読まれる。
           $setup | Set-Content setup.ps1 -Encoding utf8BOM
 
-      - name: setup.ps1 の構文チェック (刻印後の実物も、利用者と同じ Windows PowerShell 5.1 で)
+      - name: スクリプトの構文チェック (刻印後の実物も、利用者と同じ Windows PowerShell 5.1 で)
         shell: powershell
         run: |
-          foreach ($f in @("packaging/setup.ps1", "packaging/uninstall.ps1", "setup.ps1")) {
+          foreach ($f in @("packaging/setup.ps1", "packaging/uninstall.ps1", "packaging/elevated.ps1", "setup.ps1")) {
             $head = [IO.File]::ReadAllBytes((Resolve-Path $f)) | Select-Object -First 3
             if (($head -join ",") -ne "239,187,191") { throw "$f : missing UTF-8 BOM (Windows PowerShell 5.1 would read it as ANSI)" }
             $tokens = $null; $errors = $null
@@ -85,90 +86,86 @@ jobs:
             setup.ps1
             NicolaIME3.dll
             NicolaIME3.dll.sha256
+            oyayubi-broker.exe
+            oyayubi-broker.exe.sha256
             oyayubi-ime-source.zip
             oyayubi-ime-source.zip.sha256
 
-  # 公開したプレリリースの setup.ps1 で、まっさらなランナーに実際に入れる。
-  # インストール → 更新 (学習データが残るか) → アンインストール (全部消えるか)。
+  # 公開したプレリリースの setup.ps1 で、まっさらなランナーに実際に入れる (経路は 1 本)。
+  # インストール → 動作 (ブローカーが ready) → 同じ版の入れ直し (学習データが残るか)
+  # → アンインストール (プログラムは全部消え、利用者のデータは残るか)。
   install-test:
     needs: build
     runs-on: windows-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: venv, Windows PowerShell 5.1
-            launcher: powershell
-            embedded: "false"
-            unicode_root: "false"
-            expect_route: "(venv)"
-          - name: embedded runtime, started from pwsh, non-ASCII path with spaces
-            launcher: pwsh
-            embedded: "true"
-            unicode_root: "true"
-            expect_route: "embeddable"
-    name: install (${{ matrix.name }})
     steps:
-      # ランナーの既定の Python は torch の対応範囲より新しいので、venv 経路には
-      # 対応範囲の Python を用意する (同梱経路はシステムの Python を使わない)。
-      - uses: actions/setup-python@v5
-        if: matrix.embedded == 'false'
-        with:
-          python-version: "3.12"
-
-      - name: install, update, uninstall
+      - name: install, reinstall, uninstall
         shell: powershell
         env:
           TAG: ${{ github.ref_name }}
           REPO: ${{ github.repository }}
-          LAUNCHER: ${{ matrix.launcher }}
-          EMBEDDED: ${{ matrix.embedded }}
-          UNICODE_ROOT: ${{ matrix.unicode_root }}
-          EXPECT_ROUTE: ${{ matrix.expect_route }}
         run: |
           # ASCII only: this step runs in Windows PowerShell 5.1.
           $ErrorActionPreference = "Stop"
           $setup = Join-Path $env:RUNNER_TEMP "oyayubi-setup.ps1"
           Invoke-WebRequest -UseBasicParsing "https://github.com/$env:REPO/releases/download/$env:TAG/setup.ps1" -OutFile $setup
-          $root = Join-Path $env:LOCALAPPDATA "oyayubi-ime"
-          if ($env:UNICODE_ROOT -eq "true") {
-            $jp = -join [char[]](0x30C6, 0x30B9, 0x30C8)
-            $root = Join-Path $env:RUNNER_TEMP "$jp user\oyayubi ime"
-          }
-          $setupArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $setup, "-Yes", "-InstallRoot", $root)
-          if ($env:EMBEDDED -eq "true") { $setupArgs += "-EmbeddedPython" }
-          $clsid = "Registry::HKEY_LOCAL_MACHINE\Software\Classes\CLSID\{A7C4E201-0B3A-4F11-9E61-0C1A0B7E0A01}"
+          $program = Join-Path $env:ProgramFiles "oyayubi-ime\$env:TAG"
+          $local = Join-Path $env:LOCALAPPDATA "oyayubi-ime"
+          $userData = Join-Path $env:USERPROFILE ".oyayubi-ime"
+          $inproc = "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Classes\CLSID\{A7C4E201-0B3A-4F11-9E61-0C1A0B7E0A01}\InprocServer32"
 
           function Invoke-Logged([string]$label, [string[]]$argv) {
             Write-Host "::group::$label"
-            # 5.1 turns a child's stderr into error records; do not stop on them.
             $ErrorActionPreference = "Continue"
-            $out = & $env:LAUNCHER @argv 2>&1 | ForEach-Object { "$_" }
+            $out = & powershell @argv 2>&1 | ForEach-Object { "$_" }
             $code = $LASTEXITCODE
             $ErrorActionPreference = "Stop"
             $out | ForEach-Object { Write-Host $_ }
             Write-Host "::endgroup::"
             if ($code -ne 0) { throw "$label failed with exit code $code" }
-            return ($out -join "`n")
+          }
+          function Get-BrokerState {
+            $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+            $session = (Get-Process -Id $PID).SessionId
+            $pipe = New-Object System.IO.Pipes.NamedPipeClientStream(".", "oyayubi-ime-$sid-$session", [IO.Pipes.PipeDirection]::InOut)
+            $pipe.Connect(5000)
+            $writer = New-Object IO.StreamWriter($pipe); $writer.AutoFlush = $true; $writer.NewLine = "`n"
+            $reader = New-Object IO.StreamReader($pipe)
+            $writer.WriteLine('{"op":"hello","proto":1,"tag":"ci","bits":64}')
+            $state = ($reader.ReadLine() | ConvertFrom-Json).state
+            $pipe.Dispose()
+            return $state
+          }
+          function Assert-Installed {
+            foreach ($f in @("NicolaIME3.dll", "oyayubi-broker.exe", "elevated.ps1")) {
+              if (-not (Test-Path (Join-Path $program $f))) { throw "missing $f in Program Files" }
+            }
+            if ((Get-ItemProperty $inproc).'(default)' -ne (Join-Path $program "NicolaIME3.dll")) { throw "TIP is not registered to Program Files" }
+            if ((Get-ItemProperty "HKCU:\Software\oyayubi-ime").Tag -ne $env:TAG) { throw "HKCU Tag is not $env:TAG" }
+            if (-not (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run")."oyayubi-ime") { throw "no Run key" }
+            if (-not (Test-Path (Join-Path $local "versions\$env:TAG\engine.json"))) { throw "no engine.json" }
+            $state = Get-BrokerState
+            if ($state -ne "ready") { throw "broker state is $state, not ready" }
           }
 
-          $first = Invoke-Logged "install" $setupArgs
-          if ($first -notmatch "PowerShell: 5\.1") { throw "setup did not run in Windows PowerShell 5.1" }
-          if (-not $first.Contains($env:EXPECT_ROUTE)) { throw "expected the $env:EXPECT_ROUTE Python route" }
-          if (-not (Test-Path $clsid)) { throw "TIP is not registered" }
-          $learning = Join-Path $root "app\data\learning.jsonl"
-          if (-not (Test-Path $learning)) { throw "learning file was not created" }
+          $setupArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $setup, "-Yes")
+          Invoke-Logged "install" $setupArgs
+          Assert-Installed
           Write-Host "install OK"
 
-          $marker = '{"ci":"learning survives an update"}'
+          $learning = Join-Path $userData "learning.jsonl"
+          $marker = '{"ci":"learning survives a reinstall"}'
           Set-Content $learning $marker -Encoding ASCII
-          $second = Invoke-Logged "update" $setupArgs
-          if ($second -notmatch "PowerShell: 5\.1") { throw "update did not run in Windows PowerShell 5.1" }
-          if ((Get-Content $learning -Raw).Trim() -ne $marker) { throw "learning data changed during the update" }
-          Write-Host "update OK (learning data kept)"
+          Invoke-Logged "reinstall (same tag)" $setupArgs
+          Assert-Installed
+          if ((Get-Content $learning -Raw).Trim() -ne $marker) { throw "learning data changed during the reinstall" }
+          Write-Host "reinstall OK (learning data kept)"
 
-          $uninstall = Join-Path $root "app\packaging\uninstall.ps1"
-          $null = Invoke-Logged "uninstall" @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $uninstall, "-InstallRoot", $root)
-          if (Test-Path $root) { throw "install root remains after uninstall" }
-          if (Test-Path $clsid) { throw "TIP registration remains after uninstall" }
-          Write-Host "uninstall OK"
+          $uninstall = Join-Path $local "versions\$env:TAG\app\packaging\uninstall.ps1"
+          Invoke-Logged "uninstall" @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $uninstall, "-Yes")
+          if (Test-Path $inproc) { throw "TIP registration remains after uninstall" }
+          if (Test-Path $local) { throw "$local remains after uninstall" }
+          if (Test-Path (Join-Path $env:ProgramFiles "oyayubi-ime")) { throw "Program Files\oyayubi-ime remains (nothing had the DLL loaded)" }
+          if ((Get-ItemProperty "HKCU:\Software\oyayubi-ime" -ErrorAction SilentlyContinue).Tag) { throw "HKCU Tag remains" }
+          if (Get-Process -Name "oyayubi-broker" -ErrorAction SilentlyContinue) { throw "a broker is still running" }
+          if (-not (Test-Path $learning)) { throw "uninstall removed the learning history (I-7)" }
+          Write-Host "uninstall OK (user data kept)"

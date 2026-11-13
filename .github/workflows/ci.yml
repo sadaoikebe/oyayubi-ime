@@ -47,8 +47,12 @@ jobs:
           cmake --build build/tip -j 4
           ctest --test-dir build/tip --output-on-failure
 
-      - name: Python の全試験 (ブローカーの §5.7 試験を含む)
-        run: python -m unittest $(ls tests/test_*.py | sed 's#/#.#;s#\.py$##')
+      # PyYAML: ワークフローの PowerShell の検査 (tests/test_installer_scripts.py)。
+      # pwsh はランナーに入っている。
+      - name: Python の全試験 (ブローカーの §5.7 試験、インストーラの脚本の検査を含む)
+        run: |
+          python -m pip install pyyaml
+          python -m unittest $(ls tests/test_*.py | sed 's#/#.#;s#\.py$##')
 
   windows:
     runs-on: windows-latest
