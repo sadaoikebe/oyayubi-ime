@@ -1,4 +1,5 @@
-# 毎回の push と PR で: Python の全試験、ブローカーの試験 (REDESIGN §5.7, §10)。
+# 毎回の push と PR で: Python の全試験、ブローカーの試験 (REDESIGN §5.7, §10)、
+# TIP の判断の試験 (§7.8)。
 # Linux ではブローカーを POSIX の層でビルドして偽エンジン・偽 TIP で動かし、
 # Windows では MSVC で本物の oyayubi-broker.exe を作って、名前付きパイプで同じ試験を
 # 回す (ウィンドウが 1 枚も出ないことも数える)。
@@ -40,7 +41,7 @@ jobs:
           cmake --build build/broker -j 4
           ctest --test-dir build/broker --output-on-failure
 
-      - name: TIP の JSON 試験 (CTest)
+      - name: TIP の判断と JSON の試験 (CTest)
         run: |
           cmake -S src/tip -B build/tip -DCMAKE_BUILD_TYPE=Release
           cmake --build build/tip -j 4
@@ -81,6 +82,16 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "broker build failed" }
           ctest --test-dir build/broker -C Release --output-on-failure
           if ($LASTEXITCODE -ne 0) { throw "broker core test failed" }
+
+      - name: TIP のビルド (MSVC, Release) と判断の試験 (tip_logic, tip_json)
+        shell: pwsh
+        run: |
+          cmake -S src/tip -B build/tip -A x64
+          if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }
+          cmake --build build/tip --config Release
+          if ($LASTEXITCODE -ne 0) { throw "TIP build failed" }
+          ctest --test-dir build/tip -C Release --output-on-failure
+          if ($LASTEXITCODE -ne 0) { throw "TIP tests failed" }
 
       - name: ブローカーの §5.7 試験 (名前付きパイプ・ジョブ・ウィンドウ 0 枚)
         shell: pwsh
