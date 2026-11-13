@@ -1,0 +1,8 @@
+# Pinned dependencies for the resident server (docs/INSTALL.md).
+# torch is NOT here: setup.ps1 installs it separately from the PyTorch
+# CPU index, because the default PyPI wheel bundles CUDA (gigabytes).
+# The release workflow installs these exact pins on a Windows runner
+# and imports them before publishing, so a pin that does not resolve
+# or import blocks the release instead of reaching a user's machine.
+transformers==4.57.1
+sentencepiece==0.2.0

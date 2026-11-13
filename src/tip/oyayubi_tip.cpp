@@ -487,13 +487,23 @@ struct Server {
     }
     bool SpawnResident() {
         wchar_t py[MAX_PATH];
-        // A release package (see packaging/) carries its own Python runtime
-        // next to the package root: prefer it, so the package needs no
-        // system Python on the machine it is installed on.
-        std::wstring bundled = RepoDir() + L"\\runtime\\python.exe";
-        if (GetFileAttributesW(bundled.c_str()) != INVALID_FILE_ATTRIBUTES) {
-            wcsncpy_s(py, MAX_PATH, bundled.c_str(), _TRUNCATE);
-        } else if (!FindPython(py, MAX_PATH)) { Log(L"python.exe not found"); return false; }
+        // An installed package (see docs/INSTALL.md) carries its own Python
+        // runtime under the package root: an embeddable runtime\python.exe
+        // or a venv at runtime\Scripts\python.exe. Prefer either over a
+        // system Python, so the install does not depend on one.
+        std::wstring root = RepoDir();
+        const wchar_t* bundled_paths[] = {
+            L"\\runtime\\python.exe", L"\\runtime\\Scripts\\python.exe"};
+        bool bundled_found = false;
+        for (auto suffix : bundled_paths) {
+            std::wstring bundled = root + suffix;
+            if (GetFileAttributesW(bundled.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                wcsncpy_s(py, MAX_PATH, bundled.c_str(), _TRUNCATE);
+                bundled_found = true;
+                break;
+            }
+        }
+        if (!bundled_found && !FindPython(py, MAX_PATH)) { Log(L"python.exe not found"); return false; }
         // Quote the runtime path according to Windows command-line rules.
         // Profile paths contain no quotes and this path has no trailing slash.
         std::wstring command = L"\"" + std::wstring(py) +

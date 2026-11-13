@@ -1,53 +1,87 @@
-﻿# Remove oyayubi-ime: unregister the TIP and delete the app folder.
-# User data (learning history, personal dictionary) is first moved to
-# %USERPROFILE%\.oyayubi-ime\userdata; -Purge deletes it too.
-param([switch]$Purge)
-$ErrorActionPreference = 'Stop'
+﻿# oyayubi-ime アンインストール (docs/INSTALL.md の実装)
+#
+# 使い方:
+#   powershell -ExecutionPolicy Bypass -File uninstall.ps1            (全部消す)
+#   powershell -ExecutionPolicy Bypass -File uninstall.ps1 -KeepData  (学習データ等を退避してから消す)
+#
+# 登録解除 → 常駐サーバ停止 → インストール先と実行時ディレクトリの削除。
+# 既定は完全に元に戻すこと。-KeepData のときだけ、学習履歴・個人辞書・
+# 設定を %USERPROFILE%\oyayubi-ime-userdata\<日時>\ に退避する。
 
-$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-$principal = New-Object Security.Principal.WindowsPrincipal($identity)
-if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    $quotedPath = "'" + $PSCommandPath.Replace("'", "''") + "'"
-    $quotedArgs = @($args | ForEach-Object { "'" + ([string]$_).Replace("'", "''") + "'" })
-    $command = '& ' + $quotedPath + ' ' + ($quotedArgs -join ' ')
-    $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
-    $process = Start-Process -FilePath powershell.exe -Verb RunAs -Wait -PassThru `
-        -ArgumentList "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $encoded"
-    exit $process.ExitCode
+param(
+    [string]$InstallRoot = "$env:LOCALAPPDATA\oyayubi-ime",
+    [switch]$KeepData
+)
+
+$ErrorActionPreference = "Stop"
+Set-Location $env:USERPROFILE   # 自分自身を含むフォルダを消すので、外に出ておく
+$AppDir = Join-Path $InstallRoot "app"
+$ManifestPath = Join-Path $InstallRoot "install-manifest.json"
+$RuntimeDir = "$env:USERPROFILE\.oyayubi-ime"
+
+$runtimePython = $null
+if (Test-Path $ManifestPath) {
+    $manifest = Get-Content $ManifestPath -Raw | ConvertFrom-Json
+    $runtimePython = $manifest.runtime_python
+}
+if (-not $runtimePython -or -not (Test-Path $runtimePython)) {
+    foreach ($cand in @((Join-Path $AppDir "runtime\Scripts\python.exe"), (Join-Path $AppDir "runtime\python.exe"))) {
+        if (Test-Path $cand) { $runtimePython = $cand; break }
+    }
 }
 
-$dest = Join-Path $env:LOCALAPPDATA 'oyayubi-ime\app'
-if (-not (Test-Path -LiteralPath $dest)) {
-    Write-Host "$dest はありません。アンインストール済みです。"
-    exit 0
-}
-
-$python = Join-Path $dest 'runtime\python.exe'
-$dll = Join-Path $dest 'NicolaIME3.dll'
-if (Test-Path -LiteralPath $python) {
-    & $python (Join-Path $dest 'unregister_admin.py') $dll
-}
-
-# Stop the resident server if it is running from the app folder.
-Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -like "$dest\*" } |
-    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-
-if (-not $Purge) {
-    $keep = Join-Path $env:USERPROFILE '.oyayubi-ime\userdata'
-    New-Item -ItemType Directory -Path $keep -Force | Out-Null
-    foreach ($f in 'learning.jsonl', 'personal_lexicon.jsonl') {
-        $p = Join-Path $dest "data\$f"
-        if (Test-Path -LiteralPath $p) {
-            Copy-Item -LiteralPath $p -Destination (Join-Path $keep $f) -Force
+# --- KeepData: 消す前にユーザーデータだけ退避する -------------------------
+if ($KeepData) {
+    $dest = Join-Path "$env:USERPROFILE\oyayubi-ime-userdata" (Get-Date -Format "yyyyMMdd-HHmmss")
+    $saved = @()
+    foreach ($f in @((Join-Path $AppDir "data\learning.jsonl"),
+                     (Join-Path $AppDir "data\personal_lexicon.jsonl"),
+                     (Join-Path $RuntimeDir "config.json"))) {
+        if (Test-Path $f) {
+            New-Item -ItemType Directory -Force $dest | Out-Null
+            Copy-Item $f $dest
+            $saved += (Split-Path $f -Leaf)
         }
     }
-    Write-Host "ユーザーデータ（学習・個人辞書）を $keep に残しました。"
+    if ($saved) { Write-Host "退避しました: $dest ($($saved -join ', '))" }
 }
 
-try {
-    Remove-Item -LiteralPath $dest -Recurse -Force
-} catch {
-    Write-Host '一部のファイルを削除できませんでした。使用中のアプリを閉じるか、サインアウトしてから再実行してください。'
-    throw
+# --- IME 登録の解除 (管理者) ----------------------------------------------
+$dll = Join-Path $AppDir "NicolaIME3.dll"
+$unregisterScript = Join-Path $AppDir "src\tip\unregister_admin.py"
+if ((Test-Path $dll) -and (Test-Path $unregisterScript) -and $runtimePython) {
+    $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
+        ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    if ($isAdmin) {
+        & $runtimePython $unregisterScript $dll
+        if ($LASTEXITCODE -ne 0) { Write-Host "登録解除に失敗しました。中止します。" -ForegroundColor Red; exit 1 }
+    } else {
+        Write-Host "IME の登録解除には管理者権限が必要です。昇格ダイアログが出ます。"
+        $proc = Start-Process $runtimePython -ArgumentList @($unregisterScript, $dll) -Verb RunAs -Wait -PassThru
+        if ($proc.ExitCode -ne 0) { Write-Host "登録解除に失敗しました。中止します。" -ForegroundColor Red; exit 1 }
+    }
+    Write-Host "IME の登録を解除しました。"
 }
-Write-Host 'アンインストールしました。DLL を読み込み済みのアプリには、サインアウトするまで残ります。'
+
+# --- 常駐サーバの停止 (インストール先の Python で動いているものだけ) ------
+$servers = Get-CimInstance Win32_Process -Filter "Name like 'python%'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($InstallRoot) -and $_.CommandLine -like "*oyayubi.ime.server*" }
+foreach ($s in $servers) {
+    Stop-Process -Id $s.ProcessId -Force -ErrorAction SilentlyContinue
+    Write-Host "常駐サーバを停止しました (PID $($s.ProcessId))。"
+}
+
+# --- ファイルの削除 ---------------------------------------------------------
+$failed = @()
+foreach ($target in @($InstallRoot, $RuntimeDir)) {
+    if (Test-Path $target) {
+        try { Remove-Item $target -Recurse -Force -ErrorAction Stop }
+        catch { $failed += $target }
+    }
+}
+if ($failed) {
+    Write-Host "次を削除できませんでした: $($failed -join ', ')" -ForegroundColor Red
+    Write-Host "DLL を読み込んでいるアプリがある可能性があります。サインアウトしてから再実行してください。"
+    exit 2
+}
+Write-Host "アンインストールが完了しました。"

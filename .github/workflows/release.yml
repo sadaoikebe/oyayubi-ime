@@ -1,0 +1,76 @@
+# リリース作成 (docs/INSTALL.md): タグ v* を push すると、Windows ランナーで
+# TIP をビルドし、依存ピン留めを実地検証し、setup が取得するアセット
+# (DLL・ソース zip・各 SHA-256・タグ/ハッシュを刻んだ setup.ps1) を公開する。
+# 検証が1つでも失敗すればリリースは出ない。
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: TIP DLL のビルドとテスト
+        shell: pwsh
+        run: ./src/tip/dev-build.ps1
+
+      - name: 依存ピン留めの実地検証 (torch CPU + requirements + import)
+        shell: pwsh
+        run: |
+          python -m venv .venv-verify
+          .\.venv-verify\Scripts\python -m pip install --index-url https://download.pytorch.org/whl/cpu torch==2.9.1
+          if ($LASTEXITCODE -ne 0) { throw "torch pin failed" }
+          .\.venv-verify\Scripts\python -m pip install -r packaging/requirements.txt
+          if ($LASTEXITCODE -ne 0) { throw "requirements pins failed" }
+          .\.venv-verify\Scripts\python -c "import torch, transformers, sentencepiece, huggingface_hub; print('pins OK')"
+
+      - name: モデルの固定リビジョンの存在確認
+        shell: pwsh
+        run: |
+          $rev = (Select-String -Path packaging/fetch_model.py -Pattern '^REVISION = "([0-9a-f]+)"').Matches[0].Groups[1].Value
+          $resp = Invoke-WebRequest -UseBasicParsing "https://huggingface.co/api/models/rinna/japanese-gpt2-small/revision/$rev"
+          if ($resp.StatusCode -ne 200) { throw "model revision not found: $rev" }
+          Write-Host "model revision OK: $rev"
+
+      - name: アセットの組み立て
+        shell: pwsh
+        run: |
+          git archive --format=zip -o oyayubi-ime-source.zip HEAD
+          Copy-Item src/tip/dist/NicolaIME3.dll .
+          foreach ($name in @("NicolaIME3.dll", "oyayubi-ime-source.zip")) {
+            (Get-FileHash $name -Algorithm SHA256).Hash.ToLower() | Set-Content "$name.sha256" -Encoding ASCII -NoNewline
+          }
+          # setup.ps1 にタグと、同梱 Python の公式ハッシュを刻む。
+          $embedName = "python-3.13.7-embed-amd64.zip"
+          Invoke-WebRequest -UseBasicParsing "https://www.python.org/ftp/python/3.13.7/$embedName" -OutFile $embedName
+          $embedHash = (Get-FileHash $embedName -Algorithm SHA256).Hash.ToLower()
+          $setup = Get-Content packaging/setup.ps1 -Raw
+          $setup = $setup -replace "__TAG__", $env:GITHUB_REF_NAME -replace "__EMBED_SHA256__", $embedHash
+          $setup | Set-Content setup.ps1 -Encoding UTF8
+
+      - name: setup.ps1 の構文チェック (刻印後の実物も)
+        shell: pwsh
+        run: |
+          foreach ($f in @("packaging/setup.ps1", "packaging/uninstall.ps1", "setup.ps1")) {
+            $tokens = $null; $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $f), [ref]$tokens, [ref]$errors)
+            if ($errors -and $errors.Count) { throw "$f : $($errors[0].Message)" }
+            Write-Host "parse OK: $f"
+          }
+
+      - name: リリースへ公開
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            setup.ps1
+            NicolaIME3.dll
+            NicolaIME3.dll.sha256
+            oyayubi-ime-source.zip
+            oyayubi-ime-source.zip.sha256

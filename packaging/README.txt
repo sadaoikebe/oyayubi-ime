@@ -1,57 +1,24 @@
-oyayubi-ime リリースパッケージ
-==============================
+oyayubi-ime のインストール (設計: docs/INSTALL.md)
 
-あいまい親指シフト IME（oyayubi-ime）を、Python も開発ツールも無い PC に
-入れるための一式です。DLL・同梱 Python・辞書が全部入っています。
+持ち込むのは setup.ps1 だけです。本体・辞書・LM・モデルは、
+setup.ps1 が対象 PC の側で公式の場所から取得して構築します。
 
-動作環境
---------
-- Windows 10 / 11（64bit）
-- 登録のときだけ管理者権限が要ります（初回インストールと更新時）
+インストール:
+  1. GitHub Releases から setup.ps1 をダウンロードする
+  2. PowerShell で実行する:
+       powershell -ExecutionPolicy Bypass -File setup.ps1
+  環境チェック (Python の有無とバージョン、空き容量、取得先への接続) を
+  先に行い、足りないものは「入れますか？」と聞いてから入れます。
+  完了まで: 登録 → スモークテスト (実辞書で変換を1回確認) を自動で行います。
 
-インストール
-------------
-1. zip をどこかに展開する
-2. 展開したフォルダで PowerShell を開いて実行:
-     powershell -ExecutionPolicy Bypass -File .\install.ps1
-   管理者への昇格ダイアログが出たら承認してください
-3. 本体は %LOCALAPPDATA%\oyayubi-ime\app にコピーされ、IME が登録されます
-4. Win+Space で「NicolaIME」に切り替えて使います
-   サーバは初回使用時に自動で起動します
+アンインストール:
+  インストール先 (%LOCALAPPDATA%\oyayubi-ime\app\packaging) の
+  uninstall.ps1 を実行すると、登録解除からファイル削除まで行い、
+  完全に元に戻ります。学習履歴・個人辞書・設定を残したいときだけ
+  -KeepData を付けます (退避先が表示されます)。
 
-「DLL が使用中」と言われたら、サインアウト→サインインしてから
-install.ps1 をもう一度実行してください。
-
-管理ウィンドウ（単語登録・学習・設定）
-------------------------------------
-インストール先のフォルダで:
-  .\runtime\python.exe -m oyayubi.ime.admin_ui
-
-入っていないもの
-----------------
-- LM（言語モデル）による再スコアリング。変換は LM なしの経路で動き、
-  個人 PC 版との違いはそこだけです
-
-更新
-----
-新しい zip を持ってきて、install.ps1 を再実行するだけです。
-
-アンインストール
-----------------
-インストール先のフォルダで:
-  powershell -ExecutionPolicy Bypass -File .\uninstall.ps1
-学習履歴と個人辞書は %USERPROFILE%\.oyayubi-ime\userdata に残ります。
-一緒に消すときは .\uninstall.ps1 -Purge を使ってください。
-
-動かないとき
-------------
-このパッケージは署名されていないため、Smart App Control や
-ウイルス対策ソフトが DLL の読み込みを止めることがあります。
-「IME の一覧には出るが入力できない」場合はその可能性が高く、
-その PC では使えません。
-
-データの場所
-------------
-- アプリ本体: %LOCALAPPDATA%\oyayubi-ime\app
-  （学習は app\data\learning.jsonl、個人辞書は app\data\personal_lexicon.jsonl）
-- 実行時ファイル・設定: %USERPROFILE%\.oyayubi-ime
+前提:
+  - Windows 10 以降 64bit
+  - インストール時に管理者権限 (IME 登録のため。全 IME 共通)
+  - 取得先 (GitHub / PyPI / PyTorch / HuggingFace / python.org) への接続
+  - Python は無くても構いません (公式の同梱ランタイムを承認制で入れます)
