@@ -15,8 +15,9 @@
 
 The files are the ones the server uses: its settings file (config.json in the
 runtime directory) decides the paths, as for the server itself. A running
-server picks up word changes at the next conversion and learning-file changes
-at the next keystroke; no restart is needed.
+engine picks up word changes at the next conversion and learning-file changes
+at the next keystroke; settings need "server restart" (the broker starts the
+engine again).
 """
 from __future__ import annotations
 
@@ -137,55 +138,55 @@ def cmd_config(args, settings) -> int:
 
 
 def status(settings) -> dict:
+    """What the management window's status tab shows (REDESIGN §9.4)."""
+    from . import broker_client
+    from .learning import LearningStore
     learning_path = settings.learning_file
     state = learning_state(settings)
-    pairs = learning_admin.pairs(learning_path) if learning_path.exists() else []
+    learning = {"file": str(learning_path), "state": state}
+    if learning_path.exists():
+        store = LearningStore(learning_path)
+        pairs = learning_admin.pairs(learning_path)
+        learning.update(pairs=len(pairs), learned_words=sum(p.user_word for p in pairs),
+                        lines=store.lines, skipped_lines=store.skipped)
+    else:
+        learning.update(pairs=0, learned_words=0, lines=0, skipped_lines=0)
+    words, skipped = personal.scan_words(settings.personal_file)
     manifest = dict_manifest.MANIFEST
     if manifest.exists():
         problems = dict_manifest.verify(json.loads(manifest.read_text(encoding="utf-8")))
         dictionary = "matches the manifest" if not problems else "; ".join(problems)
     else:
         dictionary = f"no manifest ({manifest.name}); write one with: dict write"
-    from .client import connect
     runtime_dir = settings.runtime_dir or config.DEFAULT_RUNTIME_DIR
-    try:
-        with connect(runtime_dir) as client:
-            resident = client.request({"op": "stats"}).get("stats")
-    except (OSError, ValueError, KeyError, EOFError):
-        resident = None
+    broker = broker_client.status()
+    stop = broker_client.last_stop(runtime_dir / "logs")
     return {
         "config": str(settings.config) + ("" if settings.config.exists() else " (absent)"),
-        "learning": {"file": str(learning_path), "state": state, "pairs": len(pairs),
-                     "learned_words": sum(p.user_word for p in pairs)},
-        "personal_lexicon": {"file": str(settings.personal_file),
-                             "words": len(personal.read_words(settings.personal_file))},
+        "broker": broker if broker is not None else "not running",
+        "last_stop": f"{stop['stopped']} ({stop['time']})" if stop else "none",
+        "learning": learning,
+        "personal_lexicon": {"file": str(settings.personal_file), "words": len(words),
+                             "skipped_lines": skipped},
         "dictionary": dictionary,
-        "resident_server": resident if resident is not None else "not running",
     }
 
 
 def restart_server(settings) -> bool:
-    """Ask the resident server to exit; True when it answered.
+    """Ask the broker to start the engine again; True when a broker answered.
 
-    Settings are read when the server starts, so this is how a settings
-    change takes effect: the TIP respawns the server, with the new
-    settings, on the next keystroke.
+    Settings are read when the engine starts, so this is how a settings
+    change takes effect (REDESIGN §9.4: the same "retry" as the TIP's menu).
     """
-    from .client import connect
-    runtime_dir = settings.runtime_dir or config.DEFAULT_RUNTIME_DIR
-    try:
-        with connect(runtime_dir) as client:
-            return bool(client.request({"op": "shutdown"}).get("ok"))
-    except (OSError, ValueError, KeyError, EOFError):
-        return False
+    from . import broker_client
+    return broker_client.retry()
 
 
 def cmd_server(args, settings) -> int:
     if restart_server(settings):
-        print("resident server stopped; it restarts with the new settings "
-              "on the next keystroke")
+        print("the engine restarts with the new settings")
     else:
-        print("resident server is not running")
+        print("the broker is not running")
     return 0
 
 
@@ -247,10 +248,10 @@ def argument_parser() -> argparse.ArgumentParser:
     set_cmd.add_argument("value")
     settings_cmd.add_parser("unset", help="drop a setting (back to the default)"
                             ).add_argument("key")
-    sub.add_parser("status", help="learning, words, dictionary, resident server")
-    server_cmd = sub.add_parser("server", help="the resident server").add_subparsers(
+    sub.add_parser("status", help="broker, last stop, learning, words, dictionary")
+    server_cmd = sub.add_parser("server", help="the conversion engine").add_subparsers(
         dest="action", required=True)
-    server_cmd.add_parser("restart", help="stop it; it restarts with fresh settings")
+    server_cmd.add_parser("restart", help="the broker starts the engine again (new settings)")
     return parser
 
 

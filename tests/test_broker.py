@@ -472,6 +472,21 @@ class ProcessTest(BrokerCase):
         tip.send({"op": "open_admin"})
         wait_until(marker.exists, timeout=10)
 
+    @unittest.skipIf(WINDOWS, "the management tools find the real pipe by the user's SID")
+    def test_management_tools_reach_the_broker(self):
+        from oyayubi.ime import broker_client
+        self.assertIsNone(broker_client.status(self.address))  # nothing listening yet
+        self.plan({"warnings": ["lm"]}, "normal")
+        self.start()
+        tip = self.tip()
+        tip.hello()
+        tip.wait_state("ready")
+        self.assertEqual(broker_client.status(self.address), {"state": "ready", "warnings": ["lm"]})
+        self.assertTrue(broker_client.retry(self.address))  # §9.4: restart with new settings
+        tip.wait_state("starting")
+        tip.wait_state("ready")
+        self.assertEqual(self.starts(), 2)
+
     def test_quit_ends_broker_and_engine(self):
         self.plan("normal")
         proc = self.start()

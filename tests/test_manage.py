@@ -48,6 +48,17 @@ class ServerTest(TempDir):
         self.assertEqual(code, 0)
         self.assertIn("not running", out)
 
+    def test_last_stop_comes_from_the_notices(self):
+        from oyayubi.ime import broker_client
+        logs = self.dir / "logs"
+        logs.mkdir()
+        (logs / "notices.log").write_text(
+            '{"time":"t1","stopped":"repeated"}\n{"time":"t2","warning":"lm"}\n'
+            '{"time":"t3","stopped":"dictionary"}\n{"time":"t4","warning":"config"}\n',
+            encoding="utf-8")
+        self.assertEqual(broker_client.last_stop(logs), {"time": "t3", "stopped": "dictionary"})
+        self.assertIsNone(broker_client.last_stop(self.dir / "none"))
+
 
 class ConfigTest(TempDir):
     def test_absent_file_is_the_built_in_defaults(self):
@@ -73,7 +84,8 @@ class ConfigTest(TempDir):
         err = io.StringIO()
         with redirect_stderr(err):
             args = config.parse_args(argument_parser(), ["--runtime-dir", str(self.dir)])
-        self.assertEqual((args.lm_prefetch, args.resident), ("thumb", False))
+        self.assertEqual(args.lm_prefetch, "thumb")
+        self.assertFalse(hasattr(args, "resident"))  # the resident server is gone
         self.assertIn("lm_deadlin_ms", err.getvalue())
         self.assertIn("always", err.getvalue())
         self.assertIn("resident", err.getvalue())
@@ -170,9 +182,11 @@ class ManageTest(TempDir):
         self.run_manage("learning", "pause")
         status = json.loads(self.run_manage("status")[1])
         self.assertEqual(status["learning"], {"file": str(self.learning), "state": "paused",
-                                              "pairs": 2, "learned_words": 1})
+                                              "pairs": 2, "learned_words": 1, "lines": 2,
+                                              "skipped_lines": 0})
         self.assertEqual(status["personal_lexicon"]["words"], 1)
-        self.assertEqual(status["resident_server"], "not running")
+        self.assertEqual(status["broker"], "not running")
+        self.assertEqual(status["last_stop"], "none")
         out = self.run_manage("config", "show")[1]
         self.assertIn(f"learning_file = {json.dumps(str(self.learning), ensure_ascii=False)}\t[file]", out)
         self.assertIn("lm_deadline_ms = 400\t[default]", out)
@@ -232,10 +246,12 @@ class LiveEffectTest(TempDir):
         self.assertEqual(s.composition, "型")
         self.assertIn("肩", s.candidates)
 
-    def test_resident_connections_share_the_word_list(self):
-        from oyayubi.ime.resident import SessionFactory
-        loaded = self.session()
-        self.assertIs(SessionFactory(loaded)().personal, loaded.personal)
+    def test_engine_sessions_share_the_word_list(self):
+        from argparse import Namespace
+        from oyayubi.engine import Engine
+        engine = Engine(channel=None, args=Namespace(test_hooks=False))
+        engine.loaded = self.session()
+        self.assertIs(engine.new_session().personal, engine.loaded.personal)
 
     def test_paused_learning_records_nothing(self):
         path = self.dir / "learning.jsonl"

@@ -218,9 +218,8 @@ class AdminModel:
 
     def restart_server(self) -> Outcome:
         if manage.restart_server(self.settings):
-            return Outcome(True, "サーバを停止しました。次のキー入力で、"
-                                 "新しい設定で起動します")
-        return Outcome(False, "サーバは動いていません")
+            return Outcome(True, "変換エンジンを新しい設定で起動し直します")
+        return Outcome(False, "ブローカーが動いていません")
 
 
 class AdminWindow:

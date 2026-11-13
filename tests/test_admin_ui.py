@@ -49,21 +49,13 @@ class AdminModelTest(Base):
         self.assertFalse(outcome.ok)
 
     def test_restart_server_when_running(self):
-        from contextlib import contextmanager
+        # REDESIGN §9.4: a settings restart is the broker's "retry".
         from unittest.mock import patch
-        from oyayubi.ime import client as client_module
-
-        @contextmanager
-        def fake_connect(directory, **kwargs):
-            class FakeClient:
-                def request(self, msg):
-                    assert msg == {"op": "shutdown"}
-                    return {"ok": True}
-            yield FakeClient()
-
-        with patch.object(client_module, "connect", fake_connect):
+        from oyayubi.ime import broker_client
+        with patch.object(broker_client, "retry", return_value=True) as retry:
             outcome = self.model.restart_server()
         self.assertTrue(outcome.ok)
+        retry.assert_called_once_with()
 
     def test_files_come_from_the_config(self):
         self.assertEqual((self.model.config_file, self.model.learning_file,
@@ -222,7 +214,11 @@ class StatusTest(Base):
         self.assertEqual(rows["learning.pairs"], "2")
         self.assertEqual(rows["learning.learned_words"], "1")
         self.assertEqual(rows["personal_lexicon.words"], "1")
-        self.assertEqual(rows["resident_server"], "not running")
+        self.assertEqual(rows["learning.lines"], "2")
+        self.assertEqual(rows["learning.skipped_lines"], "0")
+        self.assertEqual(rows["personal_lexicon.skipped_lines"], "0")
+        self.assertEqual(rows["broker"], "not running")
+        self.assertEqual(rows["last_stop"], "none")
 
     def test_flatten(self):
         self.assertEqual(flatten({"a": {"b": 1, "c": "x"}, "d": [1, "い"]}),
