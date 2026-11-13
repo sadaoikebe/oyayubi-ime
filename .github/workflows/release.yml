@@ -104,6 +104,13 @@ jobs:
             expect_route: "embeddable"
     name: install (${{ matrix.name }})
     steps:
+      # ランナーの既定の Python は torch の対応範囲より新しいので、venv 経路には
+      # 対応範囲の Python を用意する (同梱経路はシステムの Python を使わない)。
+      - uses: actions/setup-python@v5
+        if: matrix.embedded == 'false'
+        with:
+          python-version: "3.12"
+
       - name: install, update, uninstall
         shell: powershell
         env:

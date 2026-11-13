@@ -41,6 +41,8 @@ $EmbedPythonVersion = "3.13.7"
 $EmbedPythonSha256 = "__EMBED_SHA256__"  # 同上 (python.org の公式 zip の SHA-256)
 $TorchVersion = "2.9.1"
 $MinPython = [version]"3.11"
+# torch $TorchVersion の配布物がある範囲。これより新しい Python には torch が入らない。
+$MaxPython = [version]"3.13"
 $AppDir = Join-Path $InstallRoot "app"
 $ManifestPath = Join-Path $InstallRoot "install-manifest.json"
 $RuntimeDir = "$env:USERPROFILE\.oyayubi-ime"
@@ -82,7 +84,12 @@ function Get-PythonInfo([string]$exe, [string[]]$prefix) {
 function Find-Python {
     $candidates = @()
     $py = Get-Command py -ErrorAction SilentlyContinue
-    if ($py) { $candidates += ,@($py.Source, @("-3")) }
+    if ($py) {
+        # "py -3" は一番新しい版を選ぶので、対応範囲の版を新しい順に名指しする。
+        for ($minor = $MaxPython.Minor; $minor -ge $MinPython.Minor; $minor--) {
+            $candidates += ,@($py.Source, @("-3.$minor"))
+        }
+    }
     $python = Get-Command python -ErrorAction SilentlyContinue
     if ($python) { $candidates += ,@($python.Source, @()) }
     foreach ($base in @("HKLM:\SOFTWARE\Python\PythonCore", "HKCU:\SOFTWARE\Python\PythonCore")) {
@@ -95,7 +102,9 @@ function Find-Python {
     }
     foreach ($cand in $candidates) {
         $info = Get-PythonInfo $cand[0] $cand[1]
-        if ($info -and $info.Version -ge $MinPython) { return $info }
+        if (-not $info) { continue }
+        $minorVersion = [version]("{0}.{1}" -f $info.Version.Major, $info.Version.Minor)
+        if ($minorVersion -ge $MinPython -and $minorVersion -le $MaxPython) { return $info }
     }
     return $null
 }
@@ -157,7 +166,7 @@ if ($EmbeddedPython) {
         $useEmbed = $true
     }
 } else {
-    Say "  Python: 3.11 以上が見つかりませんでした。"
+    Say "  Python: 対応する版 ($MinPython〜$MaxPython) が見つかりませんでした。"
     $useEmbed = $true
 }
 if ($useEmbed) {
@@ -165,7 +174,7 @@ if ($useEmbed) {
     Say "公式の同梱ランタイム (python.org の embeddable Python $EmbedPythonVersion、約 30MB) を"
     Say "インストール先の中にだけ入れます。システムの Python や PATH は変わりません。"
     if (-not (Ask "同梱ランタイムを入れますか？")) {
-        Fail "Python 3.11 以上を用意してから再実行してください。"
+        Fail "Python $MinPython〜$MaxPython を用意してから再実行してください。"
     }
 }
 
@@ -237,7 +246,8 @@ if (-not $useEmbed) {
     Expand-Archive $embedZip -DestinationPath $runtimeDirPath -Force
     # app 本体 (oyayubi パッケージ) と site-packages を import 経路に入れる。
     $pthPath = Get-ChildItem $runtimeDirPath -Filter "python*._pth" | Select-Object -First 1 -ExpandProperty FullName
-    @("python" + $EmbedPythonVersion.Substring(0, 4).Replace(".", "") + ".zip", ".", "..", "Lib\site-packages", "import site") |
+    # 先頭要素は括弧が要る (PowerShell では , が + より先に結合し、全部が1行になる)。
+    @(("python" + $EmbedPythonVersion.Substring(0, 4).Replace(".", "") + ".zip"), ".", "..", "Lib\site-packages", "import site") |
         Set-Content $pthPath -Encoding ASCII
     $runtimePython = Join-Path $runtimeDirPath "python.exe"
     $getPip = Join-Path $tmp "get-pip.py"
