@@ -499,6 +499,20 @@ class SelfTestTest(BrokerCase):
         self.assertIn("selftest passed", result.stdout)
         self.assertIn("selftest: converted", self.log())
 
+    def test_real_engine_through_the_installers_bootstrap(self):
+        """engine.json as setup.ps1 writes it: "-c <$Boot> oyayubi.engine ...", with
+        Python isolated (-I) as the bundled runtime's ._pth makes it."""
+        from tests.test_installer_scripts import boot_string
+        from oyayubi.lattice import mozc_dict
+        data = self.dir / "user data"
+        data.mkdir()
+        (data / "config.json").write_text('{"lm_rescore": false}', encoding="utf-8")
+        self.write_engine_json(["-I", "-c", boot_string(), "oyayubi.engine", "--data-dir", str(data),
+                                "--dict-dir", str(mozc_dict.DICT_DIR),
+                                "--cache-dir", str(mozc_dict.CACHE.parent)], app=ROOT)
+        result = self.selftest()
+        self.assertEqual(result.returncode, 0, result.stdout + self.log())
+
     def test_engine_that_cannot_start_fails_the_selftest(self):
         self.plan({"exit": 21})
         result = self.selftest()

@@ -1,355 +1,444 @@
-﻿# oyayubi-ime セットアップ (docs/INSTALL.md の実装)
+﻿# oyayubi-ime のインストールと更新 (REDESIGN §8.2、docs/INSTALL.md)
 #
-# 使い方:
-#   powershell -ExecutionPolicy Bypass -File setup.ps1
+#   powershell -ExecutionPolicy Bypass -File setup.ps1 [-Yes]
 #
-# やること: 環境チェック → 取得元の予告 → リリースから本体と DLL を取得
-# (SHA-256 照合) → 専用 Python 環境の構築 → LM 依存とモデルの取得 →
-# 辞書キャッシュ構築 → IME 登録 → スモークテスト → インストール記録。
-# 足りない前提は、公式の方法で入れられるものは承認を取ってから入れる。
-# システム側 (PATH・システムの Python・レジストリの IME 登録以外) は触らない。
+# インストールも更新も同じ手順。アプリを開いたままでよい。どこで失敗しても
+# 「前の版が動く」か「新しい版が動く」のどちらか (I-5)。
+#   1 保守中の印を立てる (Local\oyayubi-ime-maintenance。この PowerShell が終われば消える)
+#   2 staging\<tag> に取得・照合・展開。足りない共有物 (ランタイム・辞書・モデル) だけ作る
+#   3 本物のブローカーで試運転 (--selftest)
+#   4 staging\<tag> を versions\<tag> へ
+#   5 管理者権限 (UAC 1 回): Program Files への配置、登録、読み返し、旧版の削除
+#   6 旧ブローカーに quit、HKCU の Tag と Run キー、言語一覧、利用者データの移動 (初回のみ)
+#   7 印を下ろし、新ブローカーを起動して ready を確認
+#   8 使われていないものの片付け (失敗しても次回また試す)
+# 利用者のデータ (%USERPROFILE%\.oyayubi-ime) は移すだけで、消さない (I-7)。
 
 param(
-    [string]$Tag = "",
-    [string]$InstallRoot = "$env:LOCALAPPDATA\oyayubi-ime",
-    [switch]$Yes,
-    # システムの Python があっても使わず、同梱ランタイムを入れる。
-    [switch]$EmbeddedPython
+    [switch]$Yes
 )
 
 # PowerShell 7 (pwsh) から起動されたら、Windows PowerShell 5.1 で起動し直す。
-# 実行と検証は、Windows に必ず入っている 5.1 の一経路だけにしてある。
 if ($PSVersionTable.PSEdition -eq "Core") {
     $relaunch = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $PSCommandPath)
-    foreach ($kv in $PSBoundParameters.GetEnumerator()) {
-        if ($kv.Value -is [System.Management.Automation.SwitchParameter]) {
-            if ($kv.Value.IsPresent) { $relaunch += "-$($kv.Key)" }
-        } else {
-            $relaunch += "-$($kv.Key)"
-            $relaunch += [string]$kv.Value
-        }
-    }
+    if ($Yes) { $relaunch += "-Yes" }
     & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" @relaunch
     exit $LASTEXITCODE
 }
 
 $ErrorActionPreference = "Stop"
-# この中で起動する Python は UTF-8 で入出力する。コンソールのコードページで
-# 表せない文字 (インストール先のパスなど) を pip が出力すると落ちるため。
-# このプロセスの中だけの設定で、システムには残らない。
+# この中で動かす Python は UTF-8 で入出力する (このプロセスの中だけ)。
 $env:PYTHONUTF8 = "1"
 $env:PYTHONIOENCODING = "utf-8"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
 $Repo = "sadaoikebe/oyayubi-ime"
-$ReleaseTag = "__TAG__"          # リリース時に workflow が実タグへ置換する
+$Tag = "__TAG__"                         # リリース時に workflow が刻む
 $EmbedPythonVersion = "3.13.7"
 $EmbedPythonSha256 = "__EMBED_SHA256__"  # 同上 (python.org の公式 zip の SHA-256)
 $TorchVersion = "2.9.1"
-$MinPython = [version]"3.11"
-# torch $TorchVersion の配布物がある範囲。これより新しい Python には torch が入らない。
-$MaxPython = [version]"3.13"
-$AppDir = Join-Path $InstallRoot "app"
-$ManifestPath = Join-Path $InstallRoot "install-manifest.json"
-$RuntimeDir = "$env:USERPROFILE\.oyayubi-ime"
+$Local = Join-Path $env:LOCALAPPDATA "oyayubi-ime"
+$Shared = Join-Path $Local "shared"
+$Versions = Join-Path $Local "versions"
+$StagingRoot = Join-Path $Local "staging"
+$ProgramRoot = Join-Path $env:ProgramFiles "oyayubi-ime"
+$UserData = Join-Path $env:USERPROFILE ".oyayubi-ime"
+$Clsid = "{A7C4E201-0B3A-4F11-9E61-0C1A0B7E0A01}"
+$Layout = "0x0411:$Clsid{A7C4E202-0B3A-4F11-9E61-0C1A0B7E0A01}"
+$ProductKey = "HKCU:\Software\oyayubi-ime"
+$RunKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+# python -m の代わり: 同梱ランタイムは ._pth があるので作業フォルダを import 経路に入れない。
+$Boot = "import os,sys,runpy; sys.path.insert(0, os.getcwd()); m = sys.argv.pop(1); runpy.run_module(m, run_name='__main__', alter_sys=True)"
+$Utf8NoBom = New-Object Text.UTF8Encoding($false)
 
 function Say([string]$msg) { Write-Host $msg }
-function Fail([string]$msg) { Write-Host "中止: $msg" -ForegroundColor Red; exit 1 }
-
+function Fail([string]$msg) {
+    Write-Host "中止: $msg" -ForegroundColor Red
+    Write-Host "動いている版はそのままです。やり直すと続きから進みます。"
+    exit 1
+}
 function Ask([string]$question) {
     if ($Yes) { Say "$question -> はい (-Yes)"; return $true }
     $ans = Read-Host "$question [Y/n]"
     return ($ans -eq "" -or $ans -match "^[Yy]")
 }
-
-function Test-Tcp443([string]$hostName) {
-    try {
-        $client = New-Object System.Net.Sockets.TcpClient
-        $async = $client.BeginConnect($hostName, 443, $null, $null)
-        $ok = $async.AsyncWaitHandle.WaitOne(4000)
-        if ($ok) { $client.EndConnect($async) }
-        $client.Close()
-        return $ok
-    } catch { return $false }
-}
-
-function Get-PythonInfo([string]$exe, [string[]]$prefix) {
-    try {
-        $out = & $exe @prefix --version 2>&1
-        if ($out -match "Python (\d+)\.(\d+)\.(\d+)") {
-            $ver = [version]("{0}.{1}.{2}" -f $Matches[1], $Matches[2], $Matches[3])
-            $venvOk = $false
-            & $exe @prefix -c "import venv, ensurepip" 2>$null
-            if ($LASTEXITCODE -eq 0) { $venvOk = $true }
-            return [pscustomobject]@{ Exe = $exe; Prefix = $prefix; Version = $ver; VenvOk = $venvOk }
-        }
-    } catch { }
-    return $null
-}
-
-function Find-Python {
-    $candidates = @()
-    $py = Get-Command py -ErrorAction SilentlyContinue
-    if ($py) {
-        # "py -3" は一番新しい版を選ぶので、対応範囲の版を新しい順に名指しする。
-        for ($minor = $MaxPython.Minor; $minor -ge $MinPython.Minor; $minor--) {
-            $candidates += ,@($py.Source, @("-3.$minor"))
-        }
-    }
-    $python = Get-Command python -ErrorAction SilentlyContinue
-    if ($python) { $candidates += ,@($python.Source, @()) }
-    foreach ($base in @("HKLM:\SOFTWARE\Python\PythonCore", "HKCU:\SOFTWARE\Python\PythonCore")) {
-        if (Test-Path $base) {
-            foreach ($verKey in Get-ChildItem $base) {
-                $installPath = (Get-ItemProperty "$($verKey.PSPath)\InstallPath" -ErrorAction SilentlyContinue)."(default)"
-                if ($installPath) { $candidates += ,@((Join-Path $installPath "python.exe"), @()) }
-            }
-        }
-    }
-    foreach ($cand in $candidates) {
-        $info = Get-PythonInfo $cand[0] $cand[1]
-        if (-not $info) { continue }
-        $minorVersion = [version]("{0}.{1}" -f $info.Version.Major, $info.Version.Minor)
-        if ($minorVersion -ge $MinPython -and $minorVersion -le $MaxPython) { return $info }
-    }
-    return $null
-}
-
-function Invoke-Step([string]$name, [scriptblock]$body) {
+function Invoke-Checked([string]$name, [scriptblock]$body) {
     Say "== $name"
     & $body
     if ($LASTEXITCODE -ne 0) { Fail "$name に失敗しました (終了コード $LASTEXITCODE)。" }
 }
 
-# ---------------------------------------------------------------- チェック
-Say "oyayubi-ime セットアップ"
-Say "インストール先: $InstallRoot"
+# ---------------------------------------------------------------- 1 保守中の印
+if ($Tag -like "__*" -or $EmbedPythonSha256 -like "__*") {
+    Fail "この setup.ps1 にはリリースの刻印がありません。リリースページの setup.ps1 を使ってください。"
+}
+$createdNew = $false
+$maintenance = New-Object System.Threading.Mutex($true, "Local\oyayubi-ime-maintenance", [ref]$createdNew)
+if (-not $createdNew) { Fail "別のインストールかアンインストールが動いています。終わってから実行してください。" }
+
+Say "oyayubi-ime $Tag のインストール"
 Say ""
-
-# 再実行はそのまま更新になる (専用オプションは無い)。学習データ・
-# 個人辞書・設定は保持される。下の各段階は冪等に作ってある。
-$Updating = $false
-$OldTag = $null
-if (Test-Path $ManifestPath) {
-    $Updating = $true
-    try { $OldTag = (Get-Content $ManifestPath -Raw | ConvertFrom-Json).tag } catch { }
-    Say "インストール済み (タグ: $OldTag) を検出しました。更新として実行します。"
-    Say "学習データ・個人辞書・設定は保持されます。"
-    Say ""
-}
-if (-not $Updating -and (Test-Path $AppDir) -and (Get-ChildItem $AppDir -Force | Select-Object -First 1)) {
-    Fail "$AppDir に未知の内容があります。上書きしません。空にしてから再実行してください。"
-}
-
 Say "== 環境チェック"
+$arch = $env:PROCESSOR_ARCHITECTURE
+if ($env:PROCESSOR_ARCHITEW6432) { $arch = $env:PROCESSOR_ARCHITEW6432 }
+if ($arch -eq "ARM64") { Fail "ARM 版の Windows には、まだ対応していません。" }
 if (-not [Environment]::Is64BitOperatingSystem) { Fail "64bit 版 Windows が必要です。" }
 $os = [Environment]::OSVersion.Version
 if ($os.Major -lt 10) { Fail "Windows 10 以降が必要です (検出: $os)。" }
-Say "  OS: Windows $($os.Major).$($os.Minor) 64bit OK"
-Say "  PowerShell: $($PSVersionTable.PSVersion) ($($PSVersionTable.PSEdition))"
-
-$drive = Split-Path $InstallRoot -Qualifier
-$free = (Get-PSDrive ($drive.TrimEnd(':'))).Free
-if ($free -lt 3GB) { Fail "空き容量が不足しています (必要 3GB、現在 $([math]::Round($free / 1GB, 1))GB)。" }
-Say "  空き容量: $([math]::Round($free / 1GB, 1))GB OK"
-
-$hosts = @("github.com", "raw.githubusercontent.com", "pypi.org", "download.pytorch.org", "huggingface.co", "python.org")
-$unreachable = @($hosts | Where-Object { -not (Test-Tcp443 $_) })
-if ($unreachable.Count) {
-    Fail "次の取得先に届きません: $($unreachable -join ', ')。回線やプロキシを確認して再実行してください。"
-}
-Say "  ネット接続: 取得先 $($hosts.Count) 件すべて到達 OK"
-
-$python = if ($EmbeddedPython) { $null } else { Find-Python }
-$useEmbed = $false
-if ($EmbeddedPython) {
-    Say "  Python: -EmbeddedPython の指定により、システムの Python は使いません。"
-    $useEmbed = $true
-} elseif ($python) {
-    Say "  Python: $($python.Version) ($($python.Exe)) を検出"
-    if (-not $python.VenvOk) {
-        Say "  venv が使えません。同梱ランタイム経路に切り替えます。"
-        $useEmbed = $true
-    }
-} else {
-    Say "  Python: 対応する版 ($MinPython〜$MaxPython) が見つかりませんでした。"
-    $useEmbed = $true
-}
-if ($useEmbed) {
-    Say ""
-    Say "公式の同梱ランタイム (python.org の embeddable Python $EmbedPythonVersion、約 30MB) を"
-    Say "インストール先の中にだけ入れます。システムの Python や PATH は変わりません。"
-    if (-not (Ask "同梱ランタイムを入れますか？")) {
-        Fail "Python $MinPython〜$MaxPython を用意してから再実行してください。"
-    }
-}
-
-# ---------------------------------------------------------------- 取得
-if (-not $Tag) {
-    if ($ReleaseTag -notmatch "^__") { $Tag = $ReleaseTag }
-    else {
-        $latest = Invoke-RestMethod "https://api.github.com/repos/$Repo/releases/latest"
-        $Tag = $latest.tag_name
-    }
-}
+$free = (Get-PSDrive ($env:LOCALAPPDATA.Substring(0, 1))).Free
+if ($free -lt 3GB) { Fail "空き容量が足りません (必要 3GB、現在 $([math]::Round($free / 1GB, 1))GB)。" }
+Say "  Windows $($os.Major).$($os.Minor) 64bit、空き $([math]::Round($free / 1GB, 1))GB OK"
 Say ""
-Say "== 取得 (リリース $Tag)"
-Say "  本体ソース (約 30MB)・TIP DLL・torch CPU 版 (約 200MB)・transformers・"
-Say "  LM モデル (約 500MB) を、GitHub Releases / PyTorch 公式 / PyPI / HuggingFace から取得します。"
-New-Item -ItemType Directory -Force $AppDir | Out-Null
-$tmp = Join-Path $InstallRoot "download"
-New-Item -ItemType Directory -Force $tmp | Out-Null
-$baseUrl = "https://github.com/$Repo/releases/download/$Tag"
+Say "次を取得します (足りないものだけ。2 回目からは大半を取り直しません):"
+Say "  GitHub Releases: 本体 (約 30MB)、TIP とブローカー"
+Say "  python.org: Python $EmbedPythonVersion 埋め込み版 (約 30MB) / PyTorch 公式: torch CPU 版 (約 200MB) / PyPI: 依存"
+Say "  github.com (google/mozc): 辞書 (約 93MB) / HuggingFace: LM モデル (約 500MB)"
+if (-not (Ask "続けますか？")) { Fail "取り消しました。" }
 
 function Get-Verified([string]$url, [string]$dest) {
     Invoke-WebRequest -UseBasicParsing $url -OutFile $dest
-    $shaFile = "$dest.sha256"
-    Invoke-WebRequest -UseBasicParsing "$url.sha256" -OutFile $shaFile
-    $expected = (Get-Content $shaFile -Raw).Trim().ToLower()
-    $actual = (Get-FileHash $dest -Algorithm SHA256).Hash.ToLower()
-    if ($actual -ne $expected) { Fail "SHA-256 が一致しません: $dest" }
+    $expected = (Invoke-WebRequest -UseBasicParsing "$url.sha256").Content
+    if ($expected -is [byte[]]) { $expected = [Text.Encoding]::ASCII.GetString($expected) }
+    $expected = $expected.Trim().ToLower()
+    $actual = (Get-FileHash -LiteralPath $dest -Algorithm SHA256).Hash.ToLower()
+    if ($actual -ne $expected) { Fail "SHA-256 が一致しません: $(Split-Path $dest -Leaf)" }
     Say "  照合 OK: $(Split-Path $dest -Leaf)"
+    return $expected
 }
 
-if ($Updating) {
-    $servers = Get-CimInstance Win32_Process -Filter "Name like 'python%'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($InstallRoot) -and $_.CommandLine -like "*oyayubi.ime.server*" }
-    foreach ($s in $servers) {
-        Stop-Process -Id $s.ProcessId -Force -ErrorAction SilentlyContinue
-        Say "  更新のため常駐サーバを停止しました (PID $($s.ProcessId))。"
+# 共有物は「作りかけの名前で作って、完成したら改名」。完成したものは取り直さない。
+function New-Shared([string]$final, [scriptblock]$build) {
+    if (Test-Path -LiteralPath $final) { return }
+    $partial = "$final.partial"
+    if (Test-Path -LiteralPath $partial) { Remove-Item -LiteralPath $partial -Recurse -Force }
+    New-Item -ItemType Directory -Force $partial | Out-Null
+    & $build $partial
+    Rename-Item -LiteralPath $partial -NewName (Split-Path $final -Leaf)
+}
+
+function Invoke-App([string]$python, [string]$app, [string[]]$moduleAndArgs) {
+    Push-Location -LiteralPath $app
+    try { & $python -c $Boot @moduleAndArgs } finally { Pop-Location }
+}
+
+function Write-EngineJson([string]$path, [string]$app, [string[]]$extra) {
+    $engine = [ordered]@{
+        format = 1
+        python = $script:Python
+        pythonw = (Join-Path (Split-Path $script:Python) "pythonw.exe")
+        app = $app
+        args = @("-c", $Boot, "oyayubi.engine", "--dict-dir", $script:Dict,
+                 "--cache-dir", $script:Cache, "--lm-model", $script:Model) + $extra
+        admin_args = @("-c", $Boot, "oyayubi.ime.admin_ui")
     }
-}
-$sourceZip = Join-Path $tmp "oyayubi-ime-source.zip"
-$dllPath = Join-Path $tmp "NicolaIME3.dll"
-Get-Verified "$baseUrl/oyayubi-ime-source.zip" $sourceZip
-Get-Verified "$baseUrl/NicolaIME3.dll" $dllPath
-Expand-Archive $sourceZip -DestinationPath $AppDir -Force
-try {
-    Copy-Item $dllPath (Join-Path $AppDir "NicolaIME3.dll") -Force -ErrorAction Stop
-} catch {
-    Fail "DLL を置き換えられませんでした。IME を使っているアプリを全部閉じて (またはサインアウトして) から、setup.ps1 を再実行してください。再実行は更新として続きから動きます。"
+    [IO.File]::WriteAllText($path, ($engine | ConvertTo-Json -Depth 4), $Utf8NoBom)
 }
 
-# ---------------------------------------------------------------- 実行環境
+# ---------------------------------------------------------------- 2 staging
 Say ""
-$runtimePython = $null
-if (-not $useEmbed) {
-    Invoke-Step "専用 Python 環境 (venv) の作成" {
-        & $python.Exe @($python.Prefix) -m venv (Join-Path $AppDir "runtime")
-    }
-    $runtimePython = Join-Path $AppDir "runtime\Scripts\python.exe"
-} else {
-    $embedZip = Join-Path $tmp "python-$EmbedPythonVersion-embed-amd64.zip"
+Say "== 取得と照合 (staging)"
+$Stage = Join-Path $StagingRoot $Tag
+# staging は自分の作業場: 前回の途中のものがあれば消して作り直す (A-16)。
+if (Test-Path -LiteralPath $Stage) { Remove-Item -LiteralPath $Stage -Recurse -Force }
+$Download = Join-Path $Stage "download"
+New-Item -ItemType Directory -Force $Download | Out-Null
+$baseUrl = "https://github.com/$Repo/releases/download/$Tag"
+$sourceZip = Join-Path $Download "oyayubi-ime-source.zip"
+$dllPath = Join-Path $Download "NicolaIME3.dll"
+$brokerPath = Join-Path $Download "oyayubi-broker.exe"
+[void](Get-Verified "$baseUrl/oyayubi-ime-source.zip" $sourceZip)
+$DllSha = Get-Verified "$baseUrl/NicolaIME3.dll" $dllPath
+$BrokerSha = Get-Verified "$baseUrl/oyayubi-broker.exe" $brokerPath
+$StageApp = Join-Path $Stage "app"
+Expand-Archive -LiteralPath $sourceZip -DestinationPath $StageApp
+
+# 同梱ランタイム: Python の版・依存の固定・torch の版で名前が決まる。中身が同じなら共有する。
+$requirements = Join-Path $StageApp "packaging\requirements.txt"
+$reqHash = (Get-FileHash -LiteralPath $requirements -Algorithm SHA256).Hash.Substring(0, 12).ToLower()
+$runtimeId = "py$EmbedPythonVersion-torch$TorchVersion-$reqHash"
+$Runtime = Join-Path $Shared "runtime\$runtimeId"
+New-Shared $Runtime {
+    param($dir)
+    Say "== 同梱ランタイム ($runtimeId)"
+    $embedZip = Join-Path $Download "python-embed.zip"
     Invoke-WebRequest -UseBasicParsing "https://www.python.org/ftp/python/$EmbedPythonVersion/python-$EmbedPythonVersion-embed-amd64.zip" -OutFile $embedZip
-    if ($EmbedPythonSha256 -notmatch "^__") {
-        $actual = (Get-FileHash $embedZip -Algorithm SHA256).Hash.ToLower()
-        if ($actual -ne $EmbedPythonSha256.ToLower()) { Fail "同梱ランタイムの SHA-256 が一致しません。" }
-        Say "  照合 OK: python embeddable"
-    } else {
-        Say "  注意: この setup は開発用 (ハッシュ未記録) のため、同梱ランタイムは HTTPS とバージョン固定のみで取得します。"
+    if ((Get-FileHash -LiteralPath $embedZip -Algorithm SHA256).Hash.ToLower() -ne $EmbedPythonSha256.ToLower()) {
+        Fail "Python 埋め込み版の SHA-256 が一致しません。"
     }
-    $runtimeDirPath = Join-Path $AppDir "runtime"
-    Expand-Archive $embedZip -DestinationPath $runtimeDirPath -Force
-    # app 本体 (oyayubi パッケージ) と site-packages を import 経路に入れる。
-    $pthPath = Get-ChildItem $runtimeDirPath -Filter "python*._pth" | Select-Object -First 1 -ExpandProperty FullName
-    # 先頭要素は括弧が要る (PowerShell では , が + より先に結合し、全部が1行になる)。
-    @(("python" + $EmbedPythonVersion.Substring(0, 4).Replace(".", "") + ".zip"), ".", "..", "Lib\site-packages", "import site") |
-        Set-Content $pthPath -Encoding ASCII
-    $runtimePython = Join-Path $runtimeDirPath "python.exe"
-    $getPip = Join-Path $tmp "get-pip.py"
+    Expand-Archive -LiteralPath $embedZip -DestinationPath $dir
+    $pth = Get-ChildItem -LiteralPath $dir -Filter "python*._pth" | Select-Object -First 1 -ExpandProperty FullName
+    @(("python" + $EmbedPythonVersion.Substring(0, 4).Replace(".", "") + ".zip"), ".", "Lib\site-packages", "import site") |
+        Set-Content -LiteralPath $pth -Encoding ASCII
+    $py = Join-Path $dir "python.exe"
+    $getPip = Join-Path $Download "get-pip.py"
     Invoke-WebRequest -UseBasicParsing "https://bootstrap.pypa.io/get-pip.py" -OutFile $getPip
-    Invoke-Step "pip のブートストラップ (公式 get-pip.py)" { & $runtimePython $getPip --no-warn-script-location }
+    Invoke-Checked "pip (公式 get-pip.py)" { & $py $getPip --no-warn-script-location }
+    Invoke-Checked "torch CPU 版 (PyTorch 公式インデックス)" {
+        & $py -m pip install --no-warn-script-location --index-url https://download.pytorch.org/whl/cpu "torch==$TorchVersion"
+    }
+    Invoke-Checked "依存パッケージ (PyPI、バージョン固定)" {
+        & $py -m pip install --no-warn-script-location -r $requirements
+    }
+    Invoke-Checked "依存の読み込み確認" { & $py -c "import torch, transformers, sentencepiece, huggingface_hub" }
+}
+$script:Python = Join-Path $Runtime "python.exe"
+
+$manifest = Get-Content -LiteralPath (Join-Path $StageApp "data\dictionary-manifest.json") -Raw | ConvertFrom-Json
+$script:Dict = Join-Path $Shared "dict\$($manifest.upstream_commit)"
+New-Shared $script:Dict {
+    param($dir)
+    Invoke-Checked "辞書の取得 (google/mozc、上流コミット固定)" {
+        Invoke-App $script:Python $StageApp @("tools.wp0.fetch_mozc_dict", "--out", $dir)
+    }
+    Invoke-Checked "辞書の照合 (SHA-256)" {
+        Invoke-App $script:Python $StageApp @("oyayubi.lattice.dict_manifest", "verify", "--dict-dir", $dir)
+    }
+}
+$revision = (Select-String -LiteralPath (Join-Path $StageApp "packaging\fetch_model.py") -Pattern '^REVISION = "([0-9a-f]+)"').Matches[0].Groups[1].Value
+$script:Model = Join-Path $Shared "model\$revision"
+New-Shared $script:Model {
+    param($dir)
+    Invoke-Checked "LM モデルの取得 (HuggingFace、リビジョン固定)" {
+        & $script:Python (Join-Path $StageApp "packaging\fetch_model.py") $dir
+    }
+}
+$script:Cache = Join-Path $Shared "cache"
+New-Item -ItemType Directory -Force $script:Cache | Out-Null
+
+# ---------------------------------------------------------------- 3 試運転
+# 利用者のデータには触らない: 試運転のエンジンは staging の中のフォルダを使う。
+$selftestData = Join-Path $Stage "selftest-data"
+New-Item -ItemType Directory -Force $selftestData | Out-Null
+$stageEngine = Join-Path $Stage "engine.json"
+Write-EngineJson $stageEngine $StageApp @("--data-dir", $selftestData)
+Say ""
+Say "== 試運転 (本物のブローカーでエンジンを起動し、1 回変換。初回は辞書の準備に数分)"
+$selftestOut = Join-Path $Stage "selftest.txt"
+$proc = Start-Process -FilePath $brokerPath -ArgumentList @("--selftest", "`"$stageEngine`"", "--data-dir", "`"$selftestData`"") `
+    -Wait -PassThru -RedirectStandardOutput $selftestOut
+if ($proc.ExitCode -ne 0) {
+    Fail "試運転に失敗しました (終了コード $($proc.ExitCode))。記録: $(Join-Path $selftestData 'logs')"
+}
+Say "  試運転 OK"
+
+# ---------------------------------------------------------------- 旧ブローカー
+function Connect-Broker([int]$timeoutMs) {
+    $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    $session = (Get-Process -Id $PID).SessionId
+    $pipe = New-Object System.IO.Pipes.NamedPipeClientStream(".", "oyayubi-ime-$sid-$session", [IO.Pipes.PipeDirection]::InOut)
+    try { $pipe.Connect($timeoutMs) } catch { $pipe.Dispose(); return $null }
+    $writer = New-Object IO.StreamWriter($pipe, $Utf8NoBom)
+    $writer.AutoFlush = $true
+    $writer.NewLine = "`n"
+    $reader = New-Object IO.StreamReader($pipe, $Utf8NoBom)
+    $writer.WriteLine('{"op":"hello","proto":1,"tag":"setup","bits":64}')
+    return @{ Pipe = $pipe; Reader = $reader; Writer = $writer }
+}
+function Read-BrokerLine($conn, [int]$timeoutMs) {
+    $task = $conn.Reader.ReadLineAsync()
+    if ($task.Wait($timeoutMs)) { return $task.Result }
+    return $null
+}
+function Stop-Broker {
+    $conn = Connect-Broker 1000
+    if ($conn) {
+        [void](Read-BrokerLine $conn 2000)
+        try { $conn.Writer.WriteLine('{"op":"quit"}') } catch { }
+        $conn.Pipe.Dispose()
+    }
+    $session = (Get-Process -Id $PID).SessionId
+    $brokers = @(Get-Process -Name "oyayubi-broker" -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq $session })
+    foreach ($b in $brokers) {
+        if (-not $b.WaitForExit(15000)) {
+            Say "  ブローカーが終わらないので終了させます (PID $($b.Id))。"
+            Stop-Process -Id $b.Id -Force
+            if (-not $b.WaitForExit(5000)) { Fail "ブローカー (PID $($b.Id)) を終了できませんでした。" }
+        }
+    }
+}
+
+# ---------------------------------------------------------------- 4 versions へ
+$Version = Join-Path $Versions $Tag
+New-Item -ItemType Directory -Force $Versions | Out-Null
+if (Test-Path -LiteralPath $Version) {
+    # 同じ版の入れ直し: その版のエンジンが作業フォルダを使っているので先に止める。
+    Say "  同じ版 ($Tag) を入れ直します。"
+    Stop-Broker
+    $aside = "$Version.old-" + [Guid]::NewGuid().ToString("N").Substring(0, 8)
+    Rename-Item -LiteralPath $Version -NewName (Split-Path $aside -Leaf)
+}
+Move-Item -LiteralPath $Stage -Destination $Version
+Remove-Item -LiteralPath (Join-Path $Version "selftest-data") -Recurse -Force -ErrorAction SilentlyContinue
+$App = Join-Path $Version "app"
+Write-EngineJson (Join-Path $Version "engine.json") $App @()
+
+# ---------------------------------------------------------------- 5 管理者権限
+# v0.1.0 の旧配置 (%LOCALAPPDATA%\oyayubi-ime\app) は、その DLL を読み込んだアプリが
+# 残っていれば、次の Windows 起動時に消す (今消すと旧 DLL が壊れたサーバーを起動し続ける)。
+$OldApp = Join-Path $Local "app"
+$leftover = ""
+if (Test-Path -LiteralPath $OldApp) { $leftover = $OldApp }
+
+# 管理者用スクリプトの中身と引数を 1 つのコマンドにして -EncodedCommand 用に符号化する。
+# 引数は単一引用符で囲む (中の ' は '' に)。
+function New-ElevatedCommand([string]$script, [string[]]$arguments) {
+    $quoted = @($arguments | ForEach-Object {
+        if ($_ -like "-*") { $_ } else { "'" + $_.Replace("'", "''") + "'" } })
+    $command = "& {`n$script`n} " + ($quoted -join " ")
+    return [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+}
+$ElevatedPath = Join-Path $App "packaging\elevated.ps1"   # from the verified source zip
+$ElevatedSha = (Get-FileHash -LiteralPath $ElevatedPath -Algorithm SHA256).Hash.ToLower()
+function Invoke-Elevated([string[]]$arguments) {
+    $script = [IO.File]::ReadAllText($ElevatedPath)
+    $resultFile = Join-Path $env:TEMP ("oyayubi-elevated-" + [Guid]::NewGuid().ToString("N") + ".json")
+    $encoded = New-ElevatedCommand $script ($arguments + @("-ResultFile", $resultFile))
+    try {
+        $p = Start-Process "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Verb RunAs -Wait -PassThru `
+            -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", $encoded)
+    } catch {
+        Fail "管理者権限での作業が取り消されました。"
+    }
+    if (-not (Test-Path -LiteralPath $resultFile)) { Fail "管理者権限での作業の結果がありません (終了コード $($p.ExitCode))。" }
+    $result = Get-Content -LiteralPath $resultFile -Raw | ConvertFrom-Json
+    Remove-Item -LiteralPath $resultFile -Force
+    return $result
 }
 
 Say ""
-Invoke-Step "torch CPU 版のインストール (PyTorch 公式インデックス)" {
-    & $runtimePython -m pip install --no-warn-script-location --index-url https://download.pytorch.org/whl/cpu "torch==$TorchVersion"
-}
-Invoke-Step "依存パッケージのインストール (PyPI、バージョン固定)" {
-    & $runtimePython -m pip install --no-warn-script-location -r (Join-Path $AppDir "packaging\requirements.txt")
-}
-Invoke-Step "LM 依存の読み込み確認" {
-    & $runtimePython -c "import torch, transformers, sentencepiece, huggingface_hub; print('LM deps OK')"
-}
+Say "== 配置と登録 (管理者権限の確認が 1 回出ます)"
+$result = Invoke-Elevated @("-Action", "install", "-Tag", $Tag, "-DllSource", (Join-Path $Version "download\NicolaIME3.dll"),
+    "-DllSha256", $DllSha, "-BrokerSource", (Join-Path $Version "download\oyayubi-broker.exe"),
+    "-BrokerSha256", $BrokerSha, "-ScriptSource", $ElevatedPath, "-ScriptSha256", $ElevatedSha,
+    "-Leftover", $leftover)
+if (-not $result.ok) { Fail "配置と登録に失敗しました: $($result.message)" }
+$DllFinal = Join-Path $ProgramRoot "$Tag\NicolaIME3.dll"
+$BrokerFinal = Join-Path $ProgramRoot "$Tag\oyayubi-broker.exe"
+# I-6: 「登録した」と言うのは、読み返して確かめてから。
+$registered = (Get-ItemProperty -LiteralPath "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Classes\CLSID\$Clsid\InprocServer32" -ErrorAction SilentlyContinue).'(default)'
+if ($registered -ne $DllFinal) { Fail "登録を読み返すと $registered でした ($DllFinal のはず)。" }
+Say "  登録 OK: $DllFinal"
+$pendingDelete = @($result.pending_delete)
 
-# ---------------------------------------------------------------- 辞書とモデル
+# ---------------------------------------------------------------- 6 切り替え
 Say ""
-Invoke-Step "辞書の取得 (google/mozc 上流、約 93MB)" {
-    Push-Location $AppDir; & $runtimePython -m tools.wp0.fetch_mozc_dict; Pop-Location
-}
-Invoke-Step "辞書マニフェストの照合 (SHA-256)" {
-    Push-Location $AppDir; & $runtimePython -m oyayubi.ime.manage dict verify; Pop-Location
-}
-if ($Updating) {
-    Remove-Item (Join-Path $AppDir "data\cache") -Recurse -Force -ErrorAction SilentlyContinue
-}
-Invoke-Step "辞書キャッシュの構築 (初回と辞書更新時のみ数分かかります)" {
-    Push-Location $AppDir; & $runtimePython -c "from oyayubi.lattice.mozc_dict import load_lex; load_lex()"; Pop-Location
-}
-Invoke-Step "LM モデルの取得 (HuggingFace、リビジョン固定)" {
-    & $runtimePython (Join-Path $AppDir "packaging\fetch_model.py") (Join-Path $AppDir "model")
+Say "== 切り替え"
+Stop-Broker
+New-Item -Force $ProductKey | Out-Null
+Set-ItemProperty -LiteralPath $ProductKey -Name "Tag" -Value $Tag
+Set-ItemProperty -LiteralPath $RunKey -Name "oyayubi-ime" -Value "`"$BrokerFinal`""
+if ((Get-ItemProperty -LiteralPath $ProductKey).Tag -ne $Tag) { Fail "HKCU の Tag を書けませんでした。" }
+# 旧版 (v0.1.0) が利用者側に書いた COM 登録は、HKLM の登録より優先されるので消す。
+$oldUserClsid = "HKCU:\Software\Classes\CLSID\$Clsid"
+if (Test-Path -LiteralPath $oldUserClsid) { Remove-Item -LiteralPath $oldUserClsid -Recurse -Force }
+Add-Type -Namespace OyayubiSetup -Name Input -MemberDefinition @'
+[DllImport("input.dll", CharSet = CharSet.Unicode)]
+public static extern bool InstallLayoutOrTip(string profile, uint flags);
+'@
+if (-not [OyayubiSetup.Input]::InstallLayoutOrTip($Layout, 0)) { Fail "言語一覧に追加できませんでした。" }
+
+# 学習履歴と個人辞書は %USERPROFILE%\.oyayubi-ime へ (A-15、§4.2)。移すだけで消さない。
+New-Item -ItemType Directory -Force $UserData | Out-Null
+$configPath = Join-Path $UserData "config.json"
+$oldData = Join-Path $OldApp "data"
+$migrationNotes = @()
+if (Test-Path -LiteralPath $oldData) {
+    $config = [pscustomobject]@{}
+    if (Test-Path -LiteralPath $configPath) {
+        try { $config = [IO.File]::ReadAllText($configPath) | ConvertFrom-Json } catch { $config = $null }
+    }
+    foreach ($name in @("learning.jsonl", "personal_lexicon.jsonl")) {
+        $from = Join-Path $oldData $name
+        $to = Join-Path $UserData $name
+        if ((Test-Path -LiteralPath $from) -and -not (Test-Path -LiteralPath $to)) {
+            Move-Item -LiteralPath $from -Destination $to
+            $migrationNotes += "$name を $UserData へ移しました"
+        } elseif (Test-Path -LiteralPath $from) {
+            $migrationNotes += "$name は両方にあるので、旧い方 ($from) を残しました"
+        }
+    }
+    if ($config -ne $null) {
+        $names = $config.PSObject.Properties.Name
+        # 旧版の学習の入/切は「ファイルがあるか」と「.paused」だった (§6.7)。
+        if (-not ($names -contains "learning")) {
+            $state = $null
+            if (Test-Path -LiteralPath (Join-Path $oldData "learning.jsonl.paused")) { $state = "paused" }
+            elseif (-not (Test-Path -LiteralPath (Join-Path $UserData "learning.jsonl"))) { $state = "off" }
+            if ($state) { $config | Add-Member -NotePropertyName "learning" -NotePropertyValue $state; $migrationNotes += "学習: $state (旧版の設定を引き継ぎ)" }
+        }
+        # 旧版の setup が書いたモデルの場所は旧配置の中: 新しい版は engine.json で渡す。
+        if (($names -contains "lm_model") -and ([string]$config.lm_model).StartsWith($OldApp)) {
+            $config.PSObject.Properties.Remove("lm_model")
+        }
+        [IO.File]::WriteAllText($configPath, ($config | ConvertTo-Json -Depth 4), $Utf8NoBom)
+    } else {
+        $migrationNotes += "config.json を読めなかったので変えていません"
+    }
 }
 
-# config.json にモデルのローカルパスを書く (既存の設定は保持する)。
-New-Item -ItemType Directory -Force $RuntimeDir | Out-Null
-$configPath = Join-Path $RuntimeDir "config.json"
-$config = [pscustomobject]@{}
-if (Test-Path $configPath) { $config = Get-Content $configPath -Raw | ConvertFrom-Json }
-$modelPath = Join-Path $AppDir "model"
-if ($config.PSObject.Properties.Name -contains "lm_model") { $config.lm_model = $modelPath }
-else { $config | Add-Member -NotePropertyName "lm_model" -NotePropertyValue $modelPath }
-# BOM なしで書く (5.1 の Set-Content -Encoding UTF8 は BOM を付け、Python の json が読めない)。
-$utf8NoBom = New-Object Text.UTF8Encoding($false)
-[IO.File]::WriteAllText($configPath, ($config | ConvertTo-Json -Depth 4), $utf8NoBom)
-
-# 学習はファイルがあるときだけ有効になる。新規インストールでは空のファイルを
-# 作って最初から学習を有効にする。更新では触れない (利用者が消して無効に
-# していれば、そのまま無効)。
-$learningPath = Join-Path $AppDir "data\learning.jsonl"
-if (-not $Updating -and -not (Test-Path $learningPath)) {
-    New-Item -ItemType Directory -Force (Split-Path $learningPath) | Out-Null
-    New-Item -ItemType File $learningPath | Out-Null
-}
-
-# ---------------------------------------------------------------- 登録とスモーク
+# ---------------------------------------------------------------- 7 起動と確認
+$maintenance.ReleaseMutex()
+$maintenance.Dispose()
 Say ""
-Say "== IME の登録 (管理者権限が必要です)"
-$dllFinal = Join-Path $AppDir "NicolaIME3.dll"
-$registerScript = Join-Path $AppDir "src\tip\register_admin.py"
-$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
-    ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-if ($isAdmin) {
-    & $runtimePython $registerScript $dllFinal
-    if ($LASTEXITCODE -ne 0) { Fail "TIP の登録に失敗しました。" }
-} else {
-    $proc = Start-Process $runtimePython -ArgumentList @($registerScript, $dllFinal) -Verb RunAs -Wait -PassThru
-    if ($proc.ExitCode -ne 0) { Fail "TIP の登録に失敗しました (終了コード $($proc.ExitCode))。" }
+Say "== 起動の確認 (最大 60 秒)"
+Start-Process -FilePath $BrokerFinal
+$deadline = (Get-Date).AddSeconds(60)
+$state = ""
+$conn = $null
+while ((Get-Date) -lt $deadline -and -not $conn) { $conn = Connect-Broker 1000 }
+if ($conn) {
+    while ((Get-Date) -lt $deadline) {
+        $line = Read-BrokerLine $conn ([Math]::Max(0, [int]($deadline - (Get-Date)).TotalMilliseconds))
+        if ($null -eq $line) { break }
+        $msg = $line | ConvertFrom-Json
+        if ($msg.state) { $state = $msg.state }
+        if ($state -eq "ready" -or $state -eq "down" -or $state -eq "not-installed") { break }
+    }
+    $conn.Pipe.Dispose()
 }
-Say "  登録 OK"
+if ($state -ne "ready") {
+    Write-Host "変換エンジンが起動しませんでした (状態: $(if ($state) { $state } else { '応答なし' }))。" -ForegroundColor Red
+    Write-Host "記録: $(Join-Path $UserData 'logs')。次のサインインでも起動を試みます。"
+    exit 1
+}
+Say "  起動 OK"
+
+# ---------------------------------------------------------------- 8 片付け
+# 失敗はインストールの失敗にしない。次回の setup がまた試す。
+$keep = @($Runtime, $script:Dict, $script:Model)
+$cacheName = ""
+try {
+    Push-Location -LiteralPath $App
+    $cacheName = (& $script:Python -c "import os,sys; sys.path.insert(0, os.getcwd()); from oyayubi.lattice.mozc_dict import cache_name; print(cache_name())").Trim()
+    Pop-Location
+} catch { Pop-Location }
+$cleanup = @()
+$cleanup += @(Get-ChildItem -LiteralPath $Versions -Directory | Where-Object { $_.Name -ne $Tag })
+foreach ($kind in @("runtime", "dict", "model")) {
+    $dir = Join-Path $Shared $kind
+    if (Test-Path -LiteralPath $dir) { $cleanup += @(Get-ChildItem -LiteralPath $dir -Directory | Where-Object { $keep -notcontains $_.FullName }) }
+}
+if ($cacheName) { $cleanup += @(Get-ChildItem -LiteralPath $script:Cache -File | Where-Object { $_.Name -ne $cacheName }) }
+if (Test-Path -LiteralPath $StagingRoot) { $cleanup += @(Get-Item -LiteralPath $StagingRoot) }
+$left = @()
+foreach ($item in $cleanup) {
+    try { Remove-Item -LiteralPath $item.FullName -Recurse -Force -ErrorAction Stop } catch { $left += $item.FullName }
+}
+foreach ($old in @("install-manifest.json")) {
+    $path = Join-Path $Local $old
+    if ((Test-Path -LiteralPath $path) -and -not (Test-Path -LiteralPath $OldApp)) { Remove-Item -LiteralPath $path -Force }
+}
 
 Say ""
-Invoke-Step "スモークテスト (実辞書での変換)" {
-    Push-Location $AppDir; & $runtimePython (Join-Path $AppDir "packaging\smoke.py"); Pop-Location
+Say "完了しました ($Tag)。"
+foreach ($note in $migrationNotes) { Say "  $note" }
+if ($pendingDelete.Count) {
+    Say "  旧版のファイルが $($pendingDelete.Count) 個、使用中のため残っています。次に Windows を起動したとき自動で消えます。"
 }
-
-# ---------------------------------------------------------------- 記録
-$manifest = [ordered]@{
-    tag = $Tag
-    installed_at = (Get-Date).ToString("o")
-    install_root = $InstallRoot
-    app_dir = $AppDir
-    runtime_python = $runtimePython
-    python_route = $(if ($useEmbed) { "embeddable" } else { "venv" })
-    runtime_dir = $RuntimeDir
-}
-[IO.File]::WriteAllText($ManifestPath, ($manifest | ConvertTo-Json -Depth 4), $utf8NoBom)
-Remove-Item $tmp -Recurse -Force
-
-Say ""
-if ($Updating) { Say "更新が完了しました (タグ: $Tag)。" } else { Say "完了しました。" }
-Say "入力切替 (Win+Space) で oyayubi-ime を選んでください。タスクバーに「あ」が出ます。"
-Say "管理ウィンドウ: タスクバーの「あ」を右クリック →「管理ウィンドウを開く」"
-if (Test-Path $learningPath) { Say "学習: 有効 (無効にするには $learningPath を削除)" }
-else { Say "学習: 無効 ($learningPath を作ると有効になります)" }
-Say "更新: このインストールと同じコマンドをもう一度実行してください。"
-Say "アンインストール: powershell -ExecutionPolicy Bypass -File `"$(Join-Path $AppDir 'packaging\uninstall.ps1')`""
-Say "  (全部消えます。学習データを残すときは末尾に -KeepData)"
+if ($left.Count) { Say "  片付けられなかったもの ($($left.Count) 件) は、次の setup でまた片付けます。" }
+Say "入力切替 (Win+Space) で oyayubi-ime を選ぶと、タスクバーに「あ」が出ます。"
+Say "開いていたアプリもそのまま使えます。"
+Say "更新: このコマンドをもう一度実行してください。"
+Say "アンインストール: powershell -ExecutionPolicy Bypass -File `"$(Join-Path $App 'packaging\uninstall.ps1')`""
+Say "  学習した内容・登録した単語・設定 ($UserData) は残ります。"
+exit 0

@@ -1,108 +1,176 @@
-﻿# oyayubi-ime アンインストール (docs/INSTALL.md の実装)
+﻿# oyayubi-ime のアンインストール (REDESIGN §8.3、docs/INSTALL.md)
 #
-# 使い方:
-#   powershell -ExecutionPolicy Bypass -File uninstall.ps1            (全部消す)
-#   powershell -ExecutionPolicy Bypass -File uninstall.ps1 -KeepData  (学習データ等を退避してから消す)
+#   powershell -ExecutionPolicy Bypass -File uninstall.ps1 [-RemoveData] [-Yes]
 #
-# 登録解除 → 常駐サーバ停止 → インストール先と実行時ディレクトリの削除。
-# 既定は完全に元に戻すこと。-KeepData のときだけ、学習履歴・個人辞書・
-# 設定を %USERPROFILE%\oyayubi-ime-userdata\<日時>\ に退避する。
+# アプリを開いたままでよい。サインアウトや再起動は求めない。
+#   1 保守中の印
+#   2 HKCU の Tag と Run キーを消す (最初に: 残った DLL はこれで何も起動しなくなる)、言語一覧から外す
+#   3 ブローカーに quit (エンジンも終わる)
+#   4 管理者権限: 登録解除、読み返し、Program Files\oyayubi-ime の削除 (使用中の DLL は次の起動時)
+#   5 %LOCALAPPDATA%\oyayubi-ime を削除
+#   6 結果
+# 学習した内容・登録した単語・設定 (%USERPROFILE%\.oyayubi-ime) は残す。
+# -RemoveData を付けたときだけ、場所と大きさを見せて確かめてから消す (I-7)。
 
 param(
-    [string]$InstallRoot = "$env:LOCALAPPDATA\oyayubi-ime",
-    [switch]$KeepData
+    [switch]$RemoveData,
+    [switch]$Yes
 )
 
-# PowerShell 7 (pwsh) から起動されたら、Windows PowerShell 5.1 で起動し直す。
-# 実行と検証は、Windows に必ず入っている 5.1 の一経路だけにしてある。
 if ($PSVersionTable.PSEdition -eq "Core") {
     $relaunch = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $PSCommandPath)
-    foreach ($kv in $PSBoundParameters.GetEnumerator()) {
-        if ($kv.Value -is [System.Management.Automation.SwitchParameter]) {
-            if ($kv.Value.IsPresent) { $relaunch += "-$($kv.Key)" }
-        } else {
-            $relaunch += "-$($kv.Key)"
-            $relaunch += [string]$kv.Value
-        }
-    }
+    if ($RemoveData) { $relaunch += "-RemoveData" }
+    if ($Yes) { $relaunch += "-Yes" }
     & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" @relaunch
     exit $LASTEXITCODE
 }
 
 $ErrorActionPreference = "Stop"
-# この中で起動する Python は UTF-8 で入出力する。コンソールのコードページで
-# 表せない文字 (インストール先のパスなど) を pip が出力すると落ちるため。
-# このプロセスの中だけの設定で、システムには残らない。
-$env:PYTHONUTF8 = "1"
-$env:PYTHONIOENCODING = "utf-8"
-Set-Location $env:USERPROFILE   # 自分自身を含むフォルダを消すので、外に出ておく
-$AppDir = Join-Path $InstallRoot "app"
-$ManifestPath = Join-Path $InstallRoot "install-manifest.json"
-$RuntimeDir = "$env:USERPROFILE\.oyayubi-ime"
+$Local = Join-Path $env:LOCALAPPDATA "oyayubi-ime"
+$UserData = Join-Path $env:USERPROFILE ".oyayubi-ime"
+$Clsid = "{A7C4E201-0B3A-4F11-9E61-0C1A0B7E0A01}"
+$Layout = "0x0411:$Clsid{A7C4E202-0B3A-4F11-9E61-0C1A0B7E0A01}"
+$ProductKey = "HKCU:\Software\oyayubi-ime"
+$RunKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+$Utf8NoBom = New-Object Text.UTF8Encoding($false)
+$InprocKey = "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Classes\CLSID\$Clsid\InprocServer32"
+Set-Location $env:USERPROFILE   # 自分を含むフォルダを消すので外に出る
 
-$runtimePython = $null
-if (Test-Path $ManifestPath) {
-    $manifest = Get-Content $ManifestPath -Raw | ConvertFrom-Json
-    $runtimePython = $manifest.runtime_python
+# 管理者権限で動かすのは、登録されている DLL と同じフォルダ (Program Files。
+# 管理者しか書けない) にインストール時に置いた elevated.ps1 だけ。
+$ElevatedScript = $null
+$registeredDll = (Get-ItemProperty -LiteralPath $InprocKey -ErrorAction SilentlyContinue).'(default)'
+if ($registeredDll) {
+    $elevatedPath = Join-Path (Split-Path $registeredDll) "elevated.ps1"
+    if (-not (Test-Path -LiteralPath $elevatedPath)) {
+        Write-Host "中止: $elevatedPath がありません (この版の setup で入れたものではありません)。" -ForegroundColor Red
+        exit 1
+    }
+    $ElevatedScript = [IO.File]::ReadAllText($elevatedPath)
 }
-if (-not $runtimePython -or -not (Test-Path $runtimePython)) {
-    foreach ($cand in @((Join-Path $AppDir "runtime\Scripts\python.exe"), (Join-Path $AppDir "runtime\python.exe"))) {
-        if (Test-Path $cand) { $runtimePython = $cand; break }
+
+# 管理者用スクリプトの中身と引数を 1 つのコマンドにして -EncodedCommand 用に符号化する。
+# 引数は単一引用符で囲む (中の ' は '' に)。
+function New-ElevatedCommand([string]$script, [string[]]$arguments) {
+    $quoted = @($arguments | ForEach-Object {
+        if ($_ -like "-*") { $_ } else { "'" + $_.Replace("'", "''") + "'" } })
+    $command = "& {`n$script`n} " + ($quoted -join " ")
+    return [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+}
+function Say([string]$msg) { Write-Host $msg }
+function Fail([string]$msg) { Write-Host "中止: $msg" -ForegroundColor Red; exit 1 }
+
+# ---------------------------------------------------------------- 1
+$createdNew = $false
+$maintenance = New-Object System.Threading.Mutex($true, "Local\oyayubi-ime-maintenance", [ref]$createdNew)
+if (-not $createdNew) { Fail "別のインストールかアンインストールが動いています。終わってから実行してください。" }
+
+# -RemoveData の確認は最初に (途中で止まらないように)。
+if ($RemoveData -and (Test-Path -LiteralPath $UserData)) {
+    $size = (Get-ChildItem -LiteralPath $UserData -Recurse -Force -File | Measure-Object -Property Length -Sum).Sum
+    Say "学習した内容・登録した単語・設定も消します: $UserData ($([math]::Round($size / 1KB)) KB)"
+    if (-not $Yes) {
+        $ans = Read-Host "本当に消しますか？ 元に戻せません [y/N]"
+        if ($ans -notmatch "^[Yy]") { Fail "取り消しました。何も変えていません。" }
     }
 }
 
-# --- KeepData: 消す前にユーザーデータだけ退避する -------------------------
-if ($KeepData) {
-    $dest = Join-Path "$env:USERPROFILE\oyayubi-ime-userdata" (Get-Date -Format "yyyyMMdd-HHmmss")
-    $saved = @()
-    foreach ($f in @((Join-Path $AppDir "data\learning.jsonl"),
-                     (Join-Path $AppDir "data\personal_lexicon.jsonl"),
-                     (Join-Path $RuntimeDir "config.json"))) {
-        if (Test-Path $f) {
-            New-Item -ItemType Directory -Force $dest | Out-Null
-            Copy-Item $f $dest
-            $saved += (Split-Path $f -Leaf)
+# ---------------------------------------------------------------- 2
+Say "== 登録の取り消し (この利用者)"
+if (Test-Path -LiteralPath $ProductKey) { Remove-ItemProperty -LiteralPath $ProductKey -Name "Tag" -ErrorAction SilentlyContinue }
+Remove-ItemProperty -LiteralPath $RunKey -Name "oyayubi-ime" -ErrorAction SilentlyContinue
+if ((Test-Path -LiteralPath $ProductKey) -and (Get-ItemProperty -LiteralPath $ProductKey).Tag) { Fail "HKCU の Tag を消せませんでした。" }
+$oldUserClsid = "HKCU:\Software\Classes\CLSID\$Clsid"   # v0.1.0 が書いたもの
+if (Test-Path -LiteralPath $oldUserClsid) { Remove-Item -LiteralPath $oldUserClsid -Recurse -Force }
+Add-Type -Namespace OyayubiUninstall -Name Input -MemberDefinition @'
+[DllImport("input.dll", CharSet = CharSet.Unicode)]
+public static extern bool InstallLayoutOrTip(string profile, uint flags);
+'@
+# ILOT_UNINSTALL
+if (-not [OyayubiUninstall.Input]::InstallLayoutOrTip($Layout, 1)) { Say "  言語一覧には入っていませんでした。" }
+
+# ---------------------------------------------------------------- 3
+Say "== ブローカーの終了"
+$sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+$session = (Get-Process -Id $PID).SessionId
+$pipe = New-Object System.IO.Pipes.NamedPipeClientStream(".", "oyayubi-ime-$sid-$session", [IO.Pipes.PipeDirection]::InOut)
+try {
+    $pipe.Connect(1000)
+    $writer = New-Object IO.StreamWriter($pipe, $Utf8NoBom)
+    $writer.AutoFlush = $true
+    $writer.NewLine = "`n"
+    $writer.WriteLine('{"op":"hello","proto":1,"tag":"uninstall","bits":64}')
+    $writer.WriteLine('{"op":"quit"}')
+} catch { } finally { $pipe.Dispose() }
+foreach ($b in @(Get-Process -Name "oyayubi-broker" -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq $session })) {
+    if (-not $b.WaitForExit(15000)) {
+        Stop-Process -Id $b.Id -Force
+        if (-not $b.WaitForExit(5000)) { Fail "ブローカー (PID $($b.Id)) を終了できませんでした。" }
+    }
+}
+Say "  終了 OK"
+
+# ---------------------------------------------------------------- 4
+$leftover = ""
+$oldApp = Join-Path $Local "app"   # v0.1.0 の配置: DLL が使用中なら次の起動時に消す
+if (Test-Path -LiteralPath $oldApp) { $leftover = $oldApp }
+$result = [pscustomobject]@{ ok = $true; message = "not registered"; pending_delete = @() }
+if ($ElevatedScript) {
+Say "== 登録解除と削除 (管理者権限の確認が 1 回出ます)"
+$resultFile = Join-Path $env:TEMP ("oyayubi-elevated-" + [Guid]::NewGuid().ToString("N") + ".json")
+$encoded = New-ElevatedCommand $ElevatedScript @("-Action", "uninstall", "-ResultFile", $resultFile, "-Leftover", $leftover)
+try {
+    $p = Start-Process "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Verb RunAs -Wait -PassThru `
+        -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", $encoded)
+} catch { Fail "管理者権限での作業が取り消されました。この利用者ではもう起動しません。もう一度実行すると続きから進みます。" }
+if (-not (Test-Path -LiteralPath $resultFile)) { Fail "管理者権限での作業の結果がありません (終了コード $($p.ExitCode))。" }
+$result = Get-Content -LiteralPath $resultFile -Raw | ConvertFrom-Json
+Remove-Item -LiteralPath $resultFile -Force
+if (-not $result.ok) { Fail "登録解除に失敗しました: $($result.message)" }
+$registered = Get-ItemProperty -LiteralPath $InprocKey -ErrorAction SilentlyContinue
+if ($registered) { Fail "登録が残っています ($($registered.'(default)'))。" }
+Say "  登録解除 OK"
+} else {
+    Say "== この PC には登録されていませんでした (登録解除は不要)。"
+    if ($leftover) {
+        # 管理者権限なしでは予約削除ができない: 旧 DLL が使用中なら丸ごと残す
+        # (半分だけ消すと、旧 DLL が壊れたサーバーを起動し続ける。A-4)。
+        $oldDll = Join-Path $leftover "NicolaIME3.dll"
+        $free = $true
+        if (Test-Path -LiteralPath $oldDll) {
+            try { [IO.File]::Move($oldDll, "$oldDll.unused"); [IO.File]::Move("$oldDll.unused", $oldDll) } catch { $free = $false }
         }
-    }
-    if ($saved) { Write-Host "退避しました: $dest ($($saved -join ', '))" }
-}
-
-# --- IME 登録の解除 (管理者) ----------------------------------------------
-$dll = Join-Path $AppDir "NicolaIME3.dll"
-$unregisterScript = Join-Path $AppDir "src\tip\unregister_admin.py"
-if ((Test-Path $dll) -and (Test-Path $unregisterScript) -and $runtimePython) {
-    $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
-        ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-    if ($isAdmin) {
-        & $runtimePython $unregisterScript $dll
-        if ($LASTEXITCODE -ne 0) { Write-Host "登録解除に失敗しました。中止します。" -ForegroundColor Red; exit 1 }
-    } else {
-        Write-Host "IME の登録解除には管理者権限が必要です。昇格ダイアログが出ます。"
-        $proc = Start-Process $runtimePython -ArgumentList @($unregisterScript, $dll) -Verb RunAs -Wait -PassThru
-        if ($proc.ExitCode -ne 0) { Write-Host "登録解除に失敗しました。中止します。" -ForegroundColor Red; exit 1 }
-    }
-    Write-Host "IME の登録を解除しました。"
-}
-
-# --- 常駐サーバの停止 (インストール先の Python で動いているものだけ) ------
-$servers = Get-CimInstance Win32_Process -Filter "Name like 'python%'" -ErrorAction SilentlyContinue |
-    Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($InstallRoot) -and $_.CommandLine -like "*oyayubi.ime.server*" }
-foreach ($s in $servers) {
-    Stop-Process -Id $s.ProcessId -Force -ErrorAction SilentlyContinue
-    Write-Host "常駐サーバを停止しました (PID $($s.ProcessId))。"
-}
-
-# --- ファイルの削除 ---------------------------------------------------------
-$failed = @()
-foreach ($target in @($InstallRoot, $RuntimeDir)) {
-    if (Test-Path $target) {
-        try { Remove-Item $target -Recurse -Force -ErrorAction Stop }
-        catch { $failed += $target }
+        if ($free) { Remove-Item -LiteralPath $leftover -Recurse -Force }
+        else { Say "  旧版 ($leftover) の DLL が使用中なので、旧版のフォルダを残しました。アプリを閉じてからもう一度実行すると消えます。" }
     }
 }
-if ($failed) {
-    Write-Host "次を削除できませんでした: $($failed -join ', ')" -ForegroundColor Red
-    Write-Host "DLL を読み込んでいるアプリがある可能性があります。サインアウトしてから再実行してください。"
-    exit 2
+
+# ---------------------------------------------------------------- 5
+$maintenance.ReleaseMutex()
+$maintenance.Dispose()
+$left = @()
+if (Test-Path -LiteralPath $Local) {
+    foreach ($item in @(Get-ChildItem -LiteralPath $Local -Force)) {
+        # 旧版 (v0.1.0) の配置は管理者権限の側で消した (使用中なら次の起動時に消える)。
+        if ($leftover -and $item.FullName -eq $leftover) { continue }
+        try { Remove-Item -LiteralPath $item.FullName -Recurse -Force -ErrorAction Stop } catch { $left += $item.FullName }
+    }
+    if (-not $left.Count) { Remove-Item -LiteralPath $Local -Recurse -Force -ErrorAction SilentlyContinue }
 }
-Write-Host "アンインストールが完了しました。"
+if ($RemoveData -and (Test-Path -LiteralPath $UserData)) {
+    Remove-Item -LiteralPath $UserData -Recurse -Force
+    Say "  $UserData を消しました。"
+}
+
+# ---------------------------------------------------------------- 6
+Say ""
+Say "アンインストールが完了しました。"
+if (@($result.pending_delete).Count) {
+    Say "アプリを開いたままでも問題ありません。残り $(@($result.pending_delete).Count) 個のファイルは、次に Windows を起動したとき自動で消えます。"
+}
+if ($left.Count) { Say "消せなかったもの: $($left -join ', ')" }
+if (-not $RemoveData) {
+    Say "学習した内容・登録した単語・設定は残っています: $UserData"
+    Say "  (消すときは -RemoveData を付けて実行してください)"
+}
+exit 0
