@@ -487,7 +487,13 @@ struct Server {
     }
     bool SpawnResident() {
         wchar_t py[MAX_PATH];
-        if (!FindPython(py, MAX_PATH)) { Log(L"python.exe not found"); return false; }
+        // A release package (see packaging/) carries its own Python runtime
+        // next to the package root: prefer it, so the package needs no
+        // system Python on the machine it is installed on.
+        std::wstring bundled = RepoDir() + L"\\runtime\\python.exe";
+        if (GetFileAttributesW(bundled.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            wcsncpy_s(py, MAX_PATH, bundled.c_str(), _TRUNCATE);
+        } else if (!FindPython(py, MAX_PATH)) { Log(L"python.exe not found"); return false; }
         // Quote the runtime path according to Windows command-line rules.
         // Profile paths contain no quotes and this path has no trailing slash.
         std::wstring command = L"\"" + std::wstring(py) +

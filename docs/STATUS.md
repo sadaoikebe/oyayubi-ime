@@ -31,6 +31,7 @@
 | TSF | Notepad で NicolaIME として打てる。`かえる`（W 単独→Space+W→Space+I）で「か」が残る |
 | 常駐サーバ | ユーザーごとに 1 プロセス（`python -m oyayubi.ime.server --resident`）を全アプリで共有。TIP が loopback TCP＋トークン認証で接続し、不在なら起動する。詳細は [STAGE3.md](STAGE3.md) と `src/tip/README.md` |
 | 管理 | 単語登録・学習の管理・設定・状態を、管理ウィンドウ（`python -m oyayubi.ime.admin_ui`）と端末（`python -m oyayubi.ime.manage`）の両方から扱える。両者は同じ関数で同じファイルを触る |
+| 配布パッケージ | Python もビルド環境も無い PC 向けに、DLL・同梱 Python・辞書一式と install/uninstall を zip 化する仕組みが `packaging/` にある（`build-package.ps1` で組み立て）。TIP はパッケージ同梱の `runtime\python.exe` を優先して使う。実機での組み立てと導入は未実施 |
 | 登録 | `ITfInputProcessorProfileMgr` のみ。日本語の第 2 IME。Alt+Shift は言語巡回なので Microsoft IME が当たる。切替は Win+Space かトレイ |
 
 試験窓: `python -m oyayubi.ime.host_win32`（TSF を通さない）。
