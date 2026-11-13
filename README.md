@@ -2,6 +2,26 @@
 
 横長スペースバーの一般キーボード（作者の常用は US ANSI + NICOLA-A）で、左右あいまいな親指シフトを、普通の Windows IME として使う個人プロジェクトです。
 
+## インストール・更新
+
+Windows 10/11（64bit）の PowerShell で、次の1行を実行します。更新も同じ1行です（学習データ・個人辞書・設定は残ります）。
+
+```powershell
+iwr -UseBasicParsing https://github.com/sadaoikebe/oyayubi-ime/releases/latest/download/setup.ps1 -OutFile $env:TEMP\oyayubi-setup.ps1; powershell -ExecutionPolicy Bypass -File $env:TEMP\oyayubi-setup.ps1
+```
+
+- 足りないもの（Python など）は確認してから入れます。途中で `[Y/n]` の確認と、IME 登録の管理者確認が出ます。
+- 終わったら Win+Space で oyayubi-ime を選びます。タスクバーの「あ/A」をクリックで直接入力と切り替え、右クリックで管理ウィンドウ。
+- 入れるのは `%LOCALAPPDATA%\oyayubi-ime` の中だけです。設計は [docs/INSTALL.md](docs/INSTALL.md)。
+
+アンインストール（全部消えます。学習データを残すときは末尾に `-KeepData`）:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File $env:LOCALAPPDATA\oyayubi-ime\app\packaging\uninstall.ps1
+```
+
+## 開発
+
 方針の正本:
 
 - [docs/STATUS.md](docs/STATUS.md) — いまできていること、やめたこと

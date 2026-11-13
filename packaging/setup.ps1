@@ -262,6 +262,15 @@ if ($config.PSObject.Properties.Name -contains "lm_model") { $config.lm_model = 
 else { $config | Add-Member -NotePropertyName "lm_model" -NotePropertyValue $modelPath }
 $config | ConvertTo-Json -Depth 4 | Set-Content $configPath -Encoding UTF8
 
+# 学習はファイルがあるときだけ有効になる。新規インストールでは空のファイルを
+# 作って最初から学習を有効にする。更新では触れない (利用者が消して無効に
+# していれば、そのまま無効)。
+$learningPath = Join-Path $AppDir "data\learning.jsonl"
+if (-not $Updating -and -not (Test-Path $learningPath)) {
+    New-Item -ItemType Directory -Force (Split-Path $learningPath) | Out-Null
+    New-Item -ItemType File $learningPath | Out-Null
+}
+
 # ---------------------------------------------------------------- 登録とスモーク
 Say ""
 Say "== IME の登録 (管理者権限が必要です)"
@@ -298,7 +307,10 @@ Remove-Item $tmp -Recurse -Force
 
 Say ""
 if ($Updating) { Say "更新が完了しました (タグ: $Tag)。" } else { Say "完了しました。" }
-Say "入力切替 (Win+Space) で oyayubi-ime を選んでください。"
-Say "状態確認: `"$runtimePython`" -m oyayubi.ime.manage status (場所: $AppDir)"
-Say "管理ウィンドウ: `"$runtimePython`" -m oyayubi.ime.admin_ui"
-Say "アンインストール: uninstall.ps1 (全部消えます。学習データを残すときは -KeepData)"
+Say "入力切替 (Win+Space) で oyayubi-ime を選んでください。タスクバーに「あ」が出ます。"
+Say "管理ウィンドウ: タスクバーの「あ」を右クリック →「管理ウィンドウを開く」"
+if (Test-Path $learningPath) { Say "学習: 有効 (無効にするには $learningPath を削除)" }
+else { Say "学習: 無効 ($learningPath を作ると有効になります)" }
+Say "更新: このインストールと同じコマンドをもう一度実行してください。"
+Say "アンインストール: powershell -ExecutionPolicy Bypass -File `"$(Join-Path $AppDir 'packaging\uninstall.ps1')`""
+Say "  (全部消えます。学習データを残すときは末尾に -KeepData)"
