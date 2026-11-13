@@ -111,7 +111,7 @@ $free = (Get-PSDrive ($drive.TrimEnd(':'))).Free
 if ($free -lt 3GB) { Fail "空き容量が不足しています (必要 3GB、現在 $([math]::Round($free / 1GB, 1))GB)。" }
 Say "  空き容量: $([math]::Round($free / 1GB, 1))GB OK"
 
-$hosts = @("github.com", "pypi.org", "download.pytorch.org", "huggingface.co", "python.org")
+$hosts = @("github.com", "raw.githubusercontent.com", "pypi.org", "download.pytorch.org", "huggingface.co", "python.org")
 $unreachable = @($hosts | Where-Object { -not (Test-Tcp443 $_) })
 if ($unreachable.Count) {
     Fail "次の取得先に届きません: $($unreachable -join ', ')。回線やプロキシを確認して再実行してください。"
@@ -216,7 +216,10 @@ Invoke-Step "LM 依存の読み込み確認" {
 
 # ---------------------------------------------------------------- 辞書とモデル
 Say ""
-Invoke-Step "辞書マニフェストの照合" {
+Invoke-Step "辞書の取得 (google/mozc 上流、約 93MB)" {
+    & $runtimePython -m tools.wp0.fetch_mozc_dict
+}
+Invoke-Step "辞書マニフェストの照合 (SHA-256)" {
     Push-Location $AppDir; & $runtimePython -m oyayubi.ime.manage dict verify; Pop-Location
 }
 Invoke-Step "辞書キャッシュの構築 (初回のみ数分かかります)" {

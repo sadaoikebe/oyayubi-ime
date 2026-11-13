@@ -40,7 +40,7 @@
 | OS | OS バージョンと 64bit 判定 | Windows 10 以降 64bit | 入れる方法が無いので、理由を表示して終了 |
 | 管理者権限 | 現在のトークンで判定（必要なのは登録時だけ） | 昇格できる | 登録の段で昇格ダイアログ。できなければ終了 |
 | 空き容量 | インストール先ドライブの空き | 3 GB 以上（LM・モデル込みの実測見込み＋余裕） | 入れる方法が無いので終了（不足分を表示） |
-| ネット接続 | 取得先ホスト（github.com、pypi.org、download.pytorch.org、huggingface.co、python.org）への到達性 | 全部届く | 届かないホストを名指しして終了（利用者が回線側を直して再実行） |
+| ネット接続 | 取得先ホスト（github.com、raw.githubusercontent.com、pypi.org、download.pytorch.org、huggingface.co、python.org）への到達性 | 全部届く | 届かないホストを名指しして終了（利用者が回線側を直して再実行） |
 | Python | `py` ランチャ → PATH 上の `python` → レジストリの PythonCore キーの順に探し、`--version` を実測 | 3.11 以上 | 「公式の同梱ランタイムをインストール先の中にだけ入れますか？」と聞き、承認されたら同梱経路へ（下記）。断られたら終了 |
 | pip / venv | 発見した Python で `venv` モジュールと pip の有無を確認 | venv が作れる | pip が無ければ公式ブートストラップ（get-pip.py）で入れるか聞く。venv が使えなければ同梱経路を聞く |
 | VS C++ ツール | vswhere（公式の検索ツール）で VC ツールの有無 | 無くてもよい | DLL は Releases から取得するので必須ではない |
@@ -61,7 +61,7 @@ venv の代わりにそのまま使う。
 | torch（CPU 版） | PyTorch 公式 CPU インデックス | requirements.txt でピン留め | venv 内 |
 | transformers / sentencepiece | PyPI | 同上 | venv 内 |
 | LM モデル（rinna/japanese-gpt2-small） | HuggingFace | コミットハッシュで固定して取得 | `app\model\` |
-| Mozc 辞書 | リリースのソース zip に含まれる固定スナップショット（リポジトリにコミット済み、マニフェストで照合） | リリースタグ＋マニフェスト | `app\third_party\mozc_oss_dict\` |
+| Mozc 辞書 | google/mozc 上流から取得（辞書本体はリポジトリに入っていない）し、マニフェストの SHA-256 で照合 | マニフェストのハッシュ | `app\third_party\mozc_oss_dict\` |
 | 辞書キャッシュ | 現場で構築（load_lex の初回構築） | — | `app\data\cache\` |
 
 DLL のローカルビルド（VS がある開発機向け）は従来の dev-build.ps1 が
@@ -76,7 +76,7 @@ DLL のローカルビルド（VS がある開発機向け）は従来の dev-bu
    `app\` に展開する。
 4. 実行環境：venv（または同梱 Python）を `app\runtime\` に作り、
    requirements を入れる。
-5. 辞書：マニフェスト照合をして、キャッシュを構築する。
+5. 辞書：上流から取得し、マニフェストで照合して、キャッシュを構築する。照合に失敗したらそこで止まる（上流が変わっていた場合は、辞書の更新として別途扱う）。
 6. モデル：固定リビジョンを取得し、`config.json` の `lm_model` に
    ローカルのパスを書く。
 7. 登録：TIP を登録する（管理者）。
