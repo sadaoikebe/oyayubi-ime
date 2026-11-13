@@ -10,8 +10,9 @@ Win11 の `TextInputHost` は共有なので、ActivateEx では接続ワーカ�
 | IPC 失敗 | 応答上限はキー・タイマーとも `kKeyBudgetMs` = 250ms。失敗した接続を閉じ、そのキーを渡す。キーの再送・常駐サーバの kill は行わない |
 | LM 待ち | 返信の `pending: true` は変換が LM の結果待ち。表示は変えず候補窓も出さない。返信の `timer` で16msタイマーが `timeout` を送って取りに来る。保留中のキーは「変換済み・候補あり」と同じ基準で食べる（サーバが順番に溜めて再生する）。`pending` が無い返信は `false` 扱い |
 | 入力除外 | disabled / empty / keyboard closed、`IS_PASSWORD` / `IS_NUMERIC_PASSWORD`。パスワード欄ではトグルも扱わない |
-| キー | 文字・親指、編集中のBS/Enter/Esc、文節左右・Shift左右、候補上下・PgUp/PgDn・数字、F6/F7（Shift併用含む）。消費したdownのupだけサーバへ送る |
+| キー | 文字・親指、編集中のBS/Enter/Esc、文節左右・Shift左右、候補上下・PgUp/PgDn・数字、F6/F7（Shift併用含む）、F8/F9/F10（無修飾のみ、編集中）、編集中のTab（推測候補があるときだけ消費）。消費したdownのupだけサーバへ送る |
 | モード | Alt＋VK_OEM_3（US配列の Alt＋バッククォート）で direct 切替。repeatで再反転しない。未確定入力は破棄 |
+| 言語バー | 管理ボタン1個。クリックで管理ウィンドウ（`oyayubi.ime.admin_ui`）を開く。Python は常駐サーバと同じ解決規則で探し、pythonw.exe を優先する（コンソール窓を出さない）。DLL にアイコンリソースが無いのでボタンは説明文で表示される |
 | フォーカス | 両方のOnSetFocus、context push/pop、composition外部終了でreset。候補・タイマー・down状態・確定上文を破棄 |
 | 編集 | SYNCが拒否されたらASYNC。世代を無効化して旧編集を破棄。commitと次compositionを順番に適用 |
 | 表示 | 未変換は点線、変換済みは実線、注目文節は太い実線。UTF-16オフセット、末尾キャレット、TSF GetTextExtのscreen座標で候補配置。位置取得失敗・不可視の空矩形では非表示にして再試行 |

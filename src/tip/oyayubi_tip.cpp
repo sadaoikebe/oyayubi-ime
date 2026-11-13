@@ -42,6 +42,9 @@ static const GUID GUID_OyayubiProfile = {
 // {A7C4E206-0B3A-4F11-9E61-0C1A0B7E0A01}
 static const GUID GUID_OyayubiToggle = {
     0xa7c4e206, 0x0b3a, 0x4f11, {0x9e, 0x61, 0x0c, 0x1a, 0x0b, 0x7e, 0x0a, 0x01}};
+// {A7C4E203-0B3A-4F11-9E61-0C1A0B7E0A01}
+static const GUID GUID_OyayubiLangBar = {
+    0xa7c4e203, 0x0b3a, 0x4f11, {0x9e, 0x61, 0x0c, 0x1a, 0x0b, 0x7e, 0x0a, 0x01}};
 
 static const GUID kCats[] = {
     GUID_TFCAT_TIP_KEYBOARD,
@@ -121,6 +124,8 @@ static bool WantVk(UINT vk, bool composing, bool converted, bool candidates) {
     if (vk == VK_RETURN || vk == VK_BACK || vk == VK_ESCAPE) return composing;
     if (vk == VK_F7) return true;
     if (vk == VK_F6) return composing;
+    if (vk == VK_F8 || vk == VK_F9 || vk == VK_F10) return composing && !shift;  // one-shot spellings
+    if (vk == VK_TAB) return composing && !shift;  // predictions; eaten only if any
     if (converted) {
         if (vk == VK_LEFT || vk == VK_RIGHT) return true;
         if (!shift && (vk == VK_UP || vk == VK_DOWN || vk == VK_PRIOR || vk == VK_NEXT)) return true;
@@ -243,6 +248,7 @@ struct ServerReply {
     std::wstring composition, commit;
     bool direct = false, pass_through = false, converted = false;
     bool pending = false;  // the conversion awaits the LM; poll with the timer
+    bool predicting = false;  // Tab opened (or advanced) predictions
     int n_tokens = 0, focus = -1, page = 0;
     bool has_next_page = false, has_timer = false;
     ULONGLONG timer = 0;
@@ -273,7 +279,8 @@ static bool ParseReply(const std::string& s, ServerReply& r) {
         !JsonInt(v, "focus", r.focus) || !JsonInt(v, "candidate_page", r.page) ||
         !JsonInt(v, "cand_index", r.cand_index) ||
         !JsonBool(v, "has_next_page", r.has_next_page) ||
-        !tip_json::OptionalBool(v, "pending", r.pending)) return false;
+        !tip_json::OptionalBool(v, "pending", r.pending) ||
+        !tip_json::OptionalBool(v, "predicting", r.predicting)) return false;
     r.composition = Utf8ToWide(v.Get("composition").text);
     r.commit = Utf8ToWide(v.Get("commit").text);
     const auto& timer = v.Get("timer");
@@ -485,25 +492,48 @@ struct Server {
         }
         return s;
     }
-    bool SpawnResident() {
-        wchar_t py[MAX_PATH];
-        // An installed package (see docs/INSTALL.md) carries its own Python
-        // runtime under the package root: an embeddable runtime\python.exe
-        // or a venv at runtime\Scripts\python.exe. Prefer either over a
-        // system Python, so the install does not depend on one.
+    // The Python that runs the IME's Python side. An installed package
+    // (see docs/INSTALL.md) carries its own runtime under the package
+    // root: an embeddable runtime\python.exe or a venv at
+    // runtime\Scripts\python.exe. Prefer either over a system Python,
+    // so the install does not depend on one.
+    bool ResolvePython(wchar_t* py) {
         std::wstring root = RepoDir();
         const wchar_t* bundled_paths[] = {
             L"\\runtime\\python.exe", L"\\runtime\\Scripts\\python.exe"};
-        bool bundled_found = false;
         for (auto suffix : bundled_paths) {
             std::wstring bundled = root + suffix;
             if (GetFileAttributesW(bundled.c_str()) != INVALID_FILE_ATTRIBUTES) {
                 wcsncpy_s(py, MAX_PATH, bundled.c_str(), _TRUNCATE);
-                bundled_found = true;
-                break;
+                return true;
             }
         }
-        if (!bundled_found && !FindPython(py, MAX_PATH)) { Log(L"python.exe not found"); return false; }
+        return FindPython(py, MAX_PATH);
+    }
+    // The management window (oyayubi.ime.admin_ui), opened from the
+    // language-bar button. Prefer pythonw.exe beside the resolved
+    // python.exe (venv, embeddable and system installs all ship one),
+    // so no console window flashes up.
+    bool SpawnAdminUi() {
+        wchar_t py[MAX_PATH];
+        if (!ResolvePython(py)) { Log(L"admin ui: python.exe not found"); return false; }
+        std::wstring exe = py;
+        std::wstring pythonw = exe.substr(0, exe.find_last_of(L'\\') + 1) + L"pythonw.exe";
+        if (GetFileAttributesW(pythonw.c_str()) != INVALID_FILE_ATTRIBUTES) exe = pythonw;
+        std::wstring command = L"\"" + exe + L"\" -m oyayubi.ime.admin_ui";
+        STARTUPINFOW si{}; si.cb = sizeof(si);
+        PROCESS_INFORMATION pi{};
+        std::wstring cwd = RepoDir();
+        BOOL made = CreateProcessW(nullptr, &command[0], nullptr, nullptr, FALSE,
+            DETACHED_PROCESS, nullptr, cwd.c_str(), &si, &pi);
+        if (!made) { Log(L"admin ui spawn failed err=%lu", GetLastError()); return false; }
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+        return true;
+    }
+    bool SpawnResident() {
+        wchar_t py[MAX_PATH];
+        if (!ResolvePython(py)) { Log(L"python.exe not found"); return false; }
         // Quote the runtime path according to Windows command-line rules.
         // Profile paths contain no quotes and this path has no trailing slash.
         std::wstring command = L"\"" + std::wstring(py) +
@@ -1002,7 +1032,8 @@ class Tip : public ITfTextInputProcessorEx,
             public ITfKeyEventSink,
             public ITfThreadMgrEventSink,
             public ITfCompositionSink,
-            public ITfDisplayAttributeProvider {
+            public ITfDisplayAttributeProvider,
+            public ITfLangBarItemButton {
 public:
     LONG refs_ = 1;
     ITfThreadMgr* tm_ = nullptr;
@@ -1019,6 +1050,7 @@ public:
     TF_PRESERVEDKEY preserved_toggle_{};
     unsigned preserved_mods_ = 0;
     bool preserve_attempted_ = false, toggle_preserved_ = false;
+    bool langbar_ = false;
     bool test_alt_logged_ = false, down_alt_logged_ = false;
     int n_tokens_ = 0, focus_ = -1, page_ = 0;
     bool has_next_page_ = false;
@@ -1370,6 +1402,8 @@ public:
             else if (vk == VK_BACK || vk == VK_RETURN || vk == VK_ESCAPE) eat = before_composing && state_mask;
             else if (vk == VK_F7) eat = true;
             else if (vk == VK_F6) eat = before_composing || before_converted;
+            else if (vk == VK_F8 || vk == VK_F9 || vk == VK_F10) eat = before_composing || before_converted;
+            else if (vk == VK_TAB) eat = r.predicting;
             else eat = before_converted && WantVk(vk, before_composing, before_converted, before_candidates);
         }
         bool was_pending = NoteReply(r);
@@ -1435,6 +1469,8 @@ public:
             *pp = static_cast<ITfCompositionSink*>(this);
         } else if (riid == IID_ITfDisplayAttributeProvider) {
             *pp = static_cast<ITfDisplayAttributeProvider*>(this);
+        } else if (riid == IID_ITfLangBarItem || riid == IID_ITfLangBarItemButton) {
+            *pp = static_cast<ITfLangBarItemButton*>(this);
         } else {
             *pp = nullptr;
             return E_NOINTERFACE;
@@ -1467,6 +1503,14 @@ public:
         composing_ = false;
         pending_timer_ = false;
         if (tm_) {
+            if (langbar_) {
+                ITfLangBarItemMgr* lbm = nullptr;
+                if (SUCCEEDED(tm_->QueryInterface(IID_ITfLangBarItemMgr, (void**)&lbm))) {
+                    lbm->RemoveItem(this);
+                    lbm->Release();
+                }
+                langbar_ = false;
+            }
             ITfKeystrokeMgr* km = nullptr;
             if (SUCCEEDED(tm_->QueryInterface(IID_ITfKeystrokeMgr, (void**)&km))) {
                 UnpreserveToggle(km);
@@ -1488,6 +1532,42 @@ public:
         test_alt_logged_ = down_alt_logged_ = false;
         return S_OK;
     }
+    // ITfLangBarItemButton: one language-bar button that opens the
+    // management window. The DLL carries no icon resource, so GetIcon
+    // hands back none and the bar shows the item's description.
+    HRESULT STDMETHODCALLTYPE GetInfo(TF_LANGBARITEMINFO* info) override {
+        if (!info) return E_INVALIDARG;
+        info->clsidService = CLSID_OyayubiTip;
+        info->guidItem = GUID_OyayubiLangBar;
+        info->dwStyle = TF_LBI_STYLE_BTN_BUTTON | TF_LBI_STYLE_SHOWNINTRAY;
+        info->ulSort = 0;
+        wcsncpy_s(info->szDescription, ARRAYSIZE(info->szDescription),
+                  L"oyayubi-ime 管理", _TRUNCATE);
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GetStatus(DWORD* status) override {
+        if (!status) return E_INVALIDARG;
+        *status = 0;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE Show(BOOL) override { return E_NOTIMPL; }
+    HRESULT STDMETHODCALLTYPE GetTooltipString(BSTR* tip) override {
+        if (!tip) return E_INVALIDARG;
+        *tip = SysAllocString(L"oyayubi-ime の管理ウィンドウを開く");
+        return *tip ? S_OK : E_OUTOFMEMORY;
+    }
+    HRESULT STDMETHODCALLTYPE OnClick(TfLBIClick, POINT, const RECT*) override {
+        server_.SpawnAdminUi();
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE InitMenu(ITfMenu*) override { return S_OK; }
+    HRESULT STDMETHODCALLTYPE OnMenuSelect(UINT) override { return S_OK; }
+    HRESULT STDMETHODCALLTYPE GetIcon(HICON* icon) override {
+        if (!icon) return E_INVALIDARG;
+        *icon = nullptr;
+        return S_OK;
+    }
+
     HRESULT STDMETHODCALLTYPE ActivateEx(ITfThreadMgr* ptim, TfClientId tid, DWORD) override {
         tm_ = ptim;
         tm_->AddRef();
@@ -1513,6 +1593,11 @@ public:
         Log(L"ActivateEx client=%u (connector worker, no wait)", (unsigned)tid);
         if (!server_.Start()) Log(L"connector start failed — keys pass through");
         UpdatePreservedKey();
+        ITfLangBarItemMgr* lbm = nullptr;
+        if (SUCCEEDED(tm_->QueryInterface(IID_ITfLangBarItemMgr, (void**)&lbm))) {
+            if (SUCCEEDED(lbm->AddItem(this))) langbar_ = true;
+            lbm->Release();
+        }
         return S_OK;
     }
 
