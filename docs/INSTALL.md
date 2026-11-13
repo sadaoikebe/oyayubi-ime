@@ -1,113 +1,96 @@
-# インストール設計（setup / uninstall）
+# インストール・更新・アンインストール（setup / uninstall）
 
-対象: Python や開発ツールの有無が分からない Windows PC に、oyayubi-ime を
-完全な状態（LM 込み）で入れ、不要になったら完全に元に戻すための設計。
-旧 `packaging/` の「全部同梱 zip」方式はこの設計に置き換える（重い物を
-配らず、対象 PC の側で公式の場所から取得して構築する）。
+設計の正本は [REDESIGN.md](REDESIGN.md) の §4（置き場所）と §8（手順）。この文書は、利用者と
+開発者がそれを使うための説明。
 
-## 原則
+## 約束
 
-1. **前提を仮定しない。** Python・VS・管理者権限・空き容量・ネット接続は
-   すべてチェックしてから使う。あるはず、で進めない。足りないものは
-   ただ止まるのではなく、公式の方法で入れられるものは「何を・どこから・
-   どれくらいの大きさか」を表示して承認を取り、承認されたら入れる。
-   入れる方法が無いもの（OS・空き容量・ネット接続）だけが、
-   理由を表示して止まる理由になる。
-2. **取得は公式の場所からだけ。** Python は python.org、パッケージは
-   PyPI と PyTorch 公式インデックス、辞書は google/mozc の GitHub、
-   モデルは HuggingFace、DLL とインストーラは本リポジトリの GitHub
-   Releases。素性の知れないミラーや再配布物は使わない。
-3. **バージョンは固定し、検査する。** 取得物はバージョンをピン留めし、
-   ハッシュが公開されているもの（python.org の zip、Releases の DLL）は
-   SHA-256 を照合してから使う。ピン留めの正しさはリリース CI が
-   Windows ランナーで実際にインストールして検証してから公開する。
-4. **システムを汚さない。** インストール先は
-   `%LOCALAPPDATA%\oyayubi-ime` 配下だけ。PATH やシステム環境変数は
-   触らない。システムの Python には何も入れない（専用 venv を作る）。
-   レジストリに書くのは IME の登録に必要な分だけ。
-5. **壊れた中間状態を残さない。** 各段階は「済んだ／まだ」を
-   インストール記録（install-manifest.json）に残し、失敗したら
-   理由を表示して止まる。再実行は続きからではなく、記録を見て
-   安全にやり直せる側に倒す。
-6. **アンインストールは完全に戻すのが既定。** 登録解除＋配置した
-   ファイル全部＋実行時ディレクトリを消す。学習データ等を残すのは
-   利用者が明示したときだけ（-KeepData）。
+1. **アプリを開いたまま、入れる・上げる・消すが終わる。** サインアウトや再起動を求めない。
+2. **どこで失敗しても、前の版か新しい版のどちらかが動く。** 途中の状態で止まらない。
+   やり直せば続きから進む（手で何かを消す必要は無い）。
+3. **利用者のデータは消さない。** 学習した内容・登録した単語・設定は `%USERPROFILE%\.oyayubi-ime\`
+   にあり、更新でもアンインストールでも触らない。消すのは `-RemoveData` を付けたときだけ。
+4. **管理者権限で動くのは小さな PowerShell だけ（UAC は 1 回）。** Python は管理者権限で動かさない。
+5. **取得は公式の場所からだけ、版は固定し、ハッシュを照合する。** 照合は、置き場所に置いたあとでも行う。
 
-## 環境チェック（setup の第1段階、何も書き込む前に全部行う）
+## 置き場所
 
-| 項目 | チェック方法 | 合格条件 | 不合格のとき |
-|---|---|---|---|
-| OS | OS バージョンと 64bit 判定 | Windows 10 以降 64bit | 入れる方法が無いので、理由を表示して終了 |
-| 管理者権限 | 現在のトークンで判定（必要なのは登録時だけ） | 昇格できる | 登録の段で昇格ダイアログ。できなければ終了 |
-| 空き容量 | インストール先ドライブの空き | 3 GB 以上（LM・モデル込みの実測見込み＋余裕） | 入れる方法が無いので終了（不足分を表示） |
-| ネット接続 | 取得先ホスト（github.com、raw.githubusercontent.com、pypi.org、download.pytorch.org、huggingface.co、python.org）への到達性 | 全部届く | 届かないホストを名指しして終了（利用者が回線側を直して再実行） |
-| Python | `py` ランチャ → PATH 上の `python` → レジストリの PythonCore キーの順に探し、`--version` を実測 | 3.11 以上 | 「公式の同梱ランタイムをインストール先の中にだけ入れますか？」と聞き、承認されたら同梱経路へ（下記）。断られたら終了 |
-| pip / venv | 発見した Python で `venv` モジュールと pip の有無を確認 | venv が作れる | pip が無ければ公式ブートストラップ（get-pip.py）で入れるか聞く。venv が使えなければ同梱経路を聞く |
-| VS C++ ツール | vswhere（公式の検索ツール）で VC ツールの有無 | 無くてもよい | DLL は Releases から取得するので必須ではない |
+```
+%ProgramFiles%\oyayubi-ime\<tag>\           管理者だけが書ける。全アプリに読み込まれるものはここ
+    NicolaIME3.dll  oyayubi-broker.exe  elevated.ps1
 
-Python が無い／古い場合の経路（承認を取ってから）: python.org の
-公式 embeddable zip を SHA-256 照合つきで取得し、インストール先の中に
-だけ展開して使う（システムには入れない）。この Python には pip を
-公式ブートストラップ（bootstrap.pypa.io の get-pip.py）で入れ、
-venv の代わりにそのまま使う。
+%LOCALAPPDATA%\oyayubi-ime\                 利用者の権限で動くものだけ
+    versions\<tag>\app\                     Python のソース
+    versions\<tag>\engine.json              ブローカーがエンジンを起動するための道順
+    shared\runtime\<版とハッシュ>\           同梱 Python 3.13 + torch CPU + 依存
+    shared\dict\<上流コミット>\              Mozc 辞書（マニフェストの SHA-256 で照合済み）
+    shared\cache\<マニフェストのハッシュ>.pkl  辞書キャッシュ（エンジンが作る）
+    shared\model\<リビジョン>\               LM モデル
+    staging\                                更新の作業場。成功したら versions へ移す
 
-## 取得・構築するもの（全部、対象 PC の側で）
+%USERPROFILE%\.oyayubi-ime\                 利用者のデータ。更新でもアンインストールでも触らない
+    config.json  tip.json  learning.jsonl  personal_lexicon.jsonl
+    logs\broker.log  logs\engine.log  logs\notices.log
 
-| もの | 取得元 | 固定方法 | 置き場 |
-|---|---|---|---|
-| IME 本体（ソース一式） | GitHub Releases のソース zip | リリースタグ | `app\` |
-| TIP DLL | GitHub Releases（CI がビルド） | SHA-256 照合 | `app\NicolaIME3.dll` |
-| Python 実行環境 | 発見した Python から venv 作成（無ければ同梱経路） | — | `app\runtime\` |
-| torch（CPU 版） | PyTorch 公式 CPU インデックス | requirements.txt でピン留め | venv 内 |
-| transformers / sentencepiece | PyPI | 同上 | venv 内 |
-| LM モデル（rinna/japanese-gpt2-small） | HuggingFace | コミットハッシュで固定して取得 | `app\model\` |
-| Mozc 辞書 | google/mozc 上流から取得（辞書本体はリポジトリに入っていない）し、マニフェストの SHA-256 で照合 | マニフェストのハッシュ | `app\third_party\mozc_oss_dict\` |
-| 辞書キャッシュ | 現場で構築（load_lex の初回構築） | — | `app\data\cache\` |
+HKLM  CLSID・TIP 登録 → %ProgramFiles%\oyayubi-ime\<tag>\NicolaIME3.dll
+HKCU\Software\oyayubi-ime   Tag = <tag>    「この利用者には、この版が入っている」の印
+HKCU\...\CurrentVersion\Run  oyayubi-ime  = サインイン時にブローカーを起動
+```
 
-DLL のローカルビルド（VS がある開発機向け）は従来の dev-build.ps1 が
-担当し、setup の経路とは分ける。
+大きいもの（ランタイム・辞書・モデル）は中身で名前を付けて共有するので、版を上げても中身が
+同じなら取り直さない。
 
-## 再実行と更新
+## インストールと更新（`setup.ps1`）
 
-setup.ps1 の再実行が、そのまま更新である（専用の更新オプションは
-無い。「普通の操作をしたら普通に使える」が原則）。更新は本体・DLL・
-依存・モデルを最新化し、辞書は再取得＋照合してキャッシュを作り直し、
-再登録とスモークまで行う。学習データ・個人辞書・設定は保持される。
-途中で失敗しても、再実行すれば更新として続きから動く（各段階は
-冪等）。DLL が使用中で置き換えられない場合は、アプリを閉じるか
-サインアウトしてから再実行するよう表示して止まる。
+README の 1 行で `setup.ps1` を取得して実行する。インストールも更新も同じ。**管理者ではない普段の
+PowerShell から**実行する（管理者権限が要る所では確認が 1 回出る）。
 
-## setup の段階
+| 段 | すること | ここで失敗したら |
+|---|---|---|
+| 1 | 保守中の印（`Local\oyayubi-ime-maintenance`）を立てる。この間はブローカーもエンジンも起動しない | — |
+| 2 | `staging\<tag>\` に取得・照合・展開。足りない共有物だけ作る（作りかけの名前で作って、完成したら改名） | 何も変わっていない。前の版が動き続ける。やり直せば続きから |
+| 3 | 本物のブローカーで試運転（`--selftest`）。エンジンを実際に起動して 1 回変換し、ウィンドウが出ないことを確かめる。利用者のデータは使わない | 同上 |
+| 4 | `staging\<tag>` を `versions\<tag>` へ改名 | 同上 |
+| 5 | 管理者権限（`elevated.ps1`）: Program Files に配置（置いた先でハッシュ照合）、`regsvr32`、レジストリを読み返して確認、他の版の削除（使用中は次の起動時） | 前の版の登録のまま。前の版が動き続ける |
+| 6 | 旧ブローカーを終わらせ、HKCU の Tag と Run キーを新しい版に、言語一覧に追加。旧版（v0.1.0）からは学習履歴・個人辞書を移す | — |
+| 7 | 印を下ろし、新しいブローカーを起動して `ready` を確認（最大 60 秒） | 理由を表示。次のサインインでも起動を試みる |
+| 8 | 使われていない版・共有物・キャッシュの片付け | 片付けの失敗はインストールの失敗にしない。次回の setup がまた試す |
 
-1. 環境チェック（上表）。結果を一覧で表示する。
-2. 実施内容の予告：取得するもの・合計サイズの見込み・書き込む場所を
-   表示する。
-3. 配置：Releases からソースと DLL を取得し、ハッシュ照合して
-   `app\` に展開する。
-4. 実行環境：venv（または同梱 Python）を `app\runtime\` に作り、
-   requirements を入れる。
-5. 辞書：上流から取得し、マニフェストで照合して、キャッシュを構築する。照合に失敗したらそこで止まる（上流が変わっていた場合は、辞書の更新として別途扱う）。
-6. モデル：固定リビジョンを取得し、`config.json` の `lm_model` に
-   ローカルのパスを書く。
-7. 登録：TIP を登録する（管理者）。
-8. スモーク：サーバを起動し、変換を1回通して応答を確認する。
-   ここまで通って初めて「完了」と表示する。
-9. 記録：install-manifest.json に、作ったファイル・レジストリ・
-   バージョン・取得元 URL を残す（アンインストールと更新が使う）。
+更新のあと、開いたままのアプリには古い DLL が残る。古い DLL は自分のタグが HKCU の Tag と違うので
+何も起動せず、新しいブローカーにつながる（プロトコルが同じならそのまま使え、違えば
+「このアプリを開き直すと使えます」と表示する）。
 
-## uninstall
+ARM 版の Windows には、まだ対応していない（setup が最初に止まる）。
 
-- install-manifest.json に従って、登録解除 → サーバ停止 →
-  `app\` と `%USERPROFILE%\.oyayubi-ime` を削除する。
-- 既定は全部消す。`-KeepData` のときだけ、学習履歴・個人辞書・
-  config.json を `%USERPROFILE%\oyayubi-ime-userdata\` に退避してから消す。
-- DLL が読み込み中のアプリがある場合は、その旨を表示し、
-  サインアウト後の再実行を案内する（中途半端に消さない）。
+## アンインストール（`uninstall.ps1`）
+
+```powershell
+powershell -ExecutionPolicy Bypass -File $env:LOCALAPPDATA\oyayubi-ime\versions\<tag>\app\packaging\uninstall.ps1
+```
+
+1. 保守中の印。
+2. HKCU の Tag と Run キーを消す（最初に。残った DLL はこれで何も起動しなくなる）。言語一覧から外す。
+3. ブローカーに `quit`（エンジンも終わる）。
+4. 管理者権限: 登録解除、読み返して確認、`Program Files\oyayubi-ime\` を削除（使用中の DLL は次の
+   Windows 起動時に消える予約）。
+5. `%LOCALAPPDATA%\oyayubi-ime\` を削除。
+6. 結果を表示する。アプリを開いたままでも問題ない。
+
+`%USERPROFILE%\.oyayubi-ime\` は残る。消すときは `-RemoveData`（場所と大きさを表示して確かめてから
+消す。`-Yes` で確認を省く）。
+
+## 開発機
+
+- `src\tip\dev-build.ps1`: TIP とブローカーを Release でビルドして試験する（管理者権限・登録なし）。
+  CI もこれを使う。
+- `src\tip\dev-register.ps1 [-Python <python.exe>]`: タグ `dev` として登録する。エンジンは
+  リポジトリから指定の Python で動き、DLL とブローカーは `dist\` から読み込む（Program Files には
+  置かない）。DLL は A/B の 2 つに交互にコピーして登録するので、古い DLL を読み込んだアプリを
+  閉じなくても更新できる。
 
 ## 既知の限界
 
-- 署名なしの DLL は Smart App Control やウイルス対策に止められ得る。
-  setup では検出も回避もしない（回避はしないのが正しい）。登録後に
-  スモークで入力が通らなければ、その可能性を表示する。
-- 取得先に届かないネットワーク（プロキシ制限等）ではインストール
-  できない。チェック段階で名指しして止まる。
+- 署名なしの DLL とブローカーは、Smart App Control やウイルス対策に止められ得る。setup は検出も回避も
+  しない。止められた場合は、試運転（段 3）か起動の確認（段 7）が理由を表示して止まる。
+- 取得先（GitHub / python.org / PyTorch / PyPI / HuggingFace）に届かないネットワークではインストール
+  できない。届かなかった取得の段で止まる（事前の接続確認はしない）。

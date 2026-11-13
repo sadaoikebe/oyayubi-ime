@@ -4,20 +4,31 @@
 
 ## インストール・更新
 
-Windows 10/11（64bit）の PowerShell で、次の1行を実行します。更新も同じ1行です（学習データ・個人辞書・設定は残ります）。
+Windows 10/11（64bit）の、管理者ではない普段の PowerShell で、次の1行を実行します。更新も同じ1行です。
+アプリを開いたままで構いません。
 
 ```powershell
 iwr -UseBasicParsing https://github.com/sadaoikebe/oyayubi-ime/releases/latest/download/setup.ps1 -OutFile $env:TEMP\oyayubi-setup.ps1; powershell -ExecutionPolicy Bypass -File $env:TEMP\oyayubi-setup.ps1
 ```
 
-- 足りないもの（Python など）は確認してから入れます。途中で `[Y/n]` の確認と、IME 登録の管理者確認が出ます。
+- 取得するもの（約 1GB、2 回目からは差分だけ）を表示して確認してから進みます。IME の登録で管理者の確認が 1 回出ます。
 - 終わったら Win+Space で oyayubi-ime を選びます。タスクバーの「あ/A」をクリックで直接入力と切り替え、右クリックで管理ウィンドウ。
-- 入れるのは `%LOCALAPPDATA%\oyayubi-ime` の中だけです。設計は [docs/INSTALL.md](docs/INSTALL.md)。
+- 途中で失敗しても、それまでの版がそのまま動きます。もう一度実行すると続きから進みます。
+- 学習した内容・登録した単語・設定は `%USERPROFILE%\.oyayubi-ime` にあり、更新でもアンインストールでも残ります。
+- 置き場所と手順は [docs/INSTALL.md](docs/INSTALL.md)、全体の設計は [docs/REDESIGN.md](docs/REDESIGN.md)。
 
-アンインストール（全部消えます。学習データを残すときは末尾に `-KeepData`）:
+タスクバーの表示:
+
+| 表示 | 意味 |
+|---|---|
+| 「あ」／「A」 | かな入力／直接入力 |
+| 薄い「あ」 | 変換の準備中（サインイン直後の数秒など）。打った文字は預かって、準備ができたら順に入ります |
+| 「!」 | 日本語変換が止まっています。右クリック →「もう一度試す」「原因を表示」 |
+
+アンインストール（`<tag>` は入れた版。学習データなども消すときは末尾に `-RemoveData`）:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File $env:LOCALAPPDATA\oyayubi-ime\app\packaging\uninstall.ps1
+powershell -ExecutionPolicy Bypass -File $env:LOCALAPPDATA\oyayubi-ime\versions\<tag>\app\packaging\uninstall.ps1
 ```
 
 ## 開発
@@ -32,13 +43,18 @@ powershell -ExecutionPolicy Bypass -File $env:LOCALAPPDATA\oyayubi-ime\app\packa
 
 Notepad / VS Code 用 TSF は自前の小さい TIP（`src/tip`）。
 
+構成（[docs/REDESIGN.md](docs/REDESIGN.md)）: TIP（`src/tip`、アプリの中の DLL）→ 名前付きパイプ →
+ブローカー（`src/broker`、サインインごとに 1 つ）→ 標準入出力 → 変換エンジン（`python -m oyayubi.engine`）。
+
 ```text
 python -m tools.wp0.fetch_mozc_dict   # 初回のみ。OSS 辞書テキスト
-python -m unittest tests.test_fsm tests.test_session
+python -m unittest $(ls tests/test_*.py | sed 's#/#.#;s#\.py$##')   # 全試験（Linux 可）
+cmake -S src/broker -B build/broker && cmake --build build/broker && ctest --test-dir build/broker
 python -m oyayubi.ime.host_win32      # 試験窓。TSF を通さない
 ```
 
-TIP の fail-open 規則と登録手順は [`src/tip/README.md`](src/tip/README.md)。コンパイラは [`docs/DEVENV.md`](docs/DEVENV.md)。
+Windows でのビルドと登録は `src\tip\dev-build.ps1` と `src\tip\dev-register.ps1`（[docs/INSTALL.md](docs/INSTALL.md)）。
+TIP は [`src/tip/README.md`](src/tip/README.md)、ブローカーは [`src/broker/README.md`](src/broker/README.md)。コンパイラは [`docs/DEVENV.md`](docs/DEVENV.md)。
 
 同時打鍵 SM の挙動正本は IME リポジトリの外にあります。
 

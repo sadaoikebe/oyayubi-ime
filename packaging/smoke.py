@@ -1,4 +1,6 @@
-"""Install smoke test (docs/INSTALL.md, setup step 8).
+"""Development smoke test: the real dictionary converts as recorded.
+
+(The installer's own check is the broker's --selftest, REDESIGN §8.2 step 3.)
 
 Replays the project's own golden transcript (tests/transcripts/
 acceptance_real_dictionary.json: real key events against the real

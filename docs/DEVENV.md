@@ -52,18 +52,17 @@ python -c "import torch; print(torch.__version__, torch.cuda.is_available(), tor
 
 `True` と `4060` が出ればよい。
 
-## Notepad 用: 自前 TIP（入れるときだけ管理者）
+## Notepad 用: 自前 TIP とブローカー（登録のときだけ管理者）
 
-`src/tip` が TSF 殻。Activate で待たない・サーバが死んだら素通し、が落ちない条件。
+構成は [REDESIGN.md](REDESIGN.md)。TIP は打鍵をブローカーへ送るだけで、Python を起動しない。
 
-```bat
-cd C:\Users\marur\oyayubi-ime\src\tip
-cmake -B build -G Ninja
-cmake --build build
-python register_admin.py
+```powershell
+powershell -ExecutionPolicy Bypass -File .\src\tip\dev-build.ps1      # ビルドと試験（管理者不要）
+powershell -ExecutionPolicy Bypass -File .\src\tip\dev-register.ps1   # タグ dev として登録（UAC 1 回）
 ```
 
-外す: `python C:\Users\marur\oyayubi-ime\src\tip\unregister_admin.py`
+外す: 製品版と同じ `packaging\uninstall.ps1`（登録されている DLL と同じフォルダの `elevated.ps1` を使う。
+`dev-register.ps1` が `dist\` に置く）。
 
 ## 入れたあとこちらで進めること
 
