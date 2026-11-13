@@ -9,7 +9,12 @@ from typing import TextIO
 
 PROMPTS_PATH = Path(__file__).resolve().parents[2] / "data/stage1/prompts.json"
 SCHEMA = "oyayubi.stage1.v1"
-VK_NEXT_PROMPT = 0x78  # F9; Enter remains available for normal commit strokes.
+# F12: Enter remains available for normal commit strokes, and F6-F10 are the
+# IME's own conversion keys (F9 = full-width alphanumeric), so the recorder
+# must not take one of them. Logs written before 2026-11-13 used F9 (0x78);
+# each log names its key in the session row (next_prompt_vk).
+VK_NEXT_PROMPT = 0x7B
+LEGACY_NEXT_PROMPT_VK = 0x78
 
 
 @dataclass(frozen=True)
@@ -31,7 +36,7 @@ def load_prompts(path: Path = PROMPTS_PATH) -> list[Prompt]:
 class Recorder:
     """Write each row immediately; keep the current prompt's raw events in memory.
 
-    Times are integer milliseconds relative to the host's QPC origin. F9 release
+    Times are integer milliseconds relative to the host's QPC origin. F12 release
     completes a prompt only after every other key has been released. No key,
     including Backspace/Escape/Enter, erases data or restarts a prompt.
     """

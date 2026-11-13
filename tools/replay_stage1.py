@@ -16,7 +16,7 @@ from oyayubi.chord.keys import (
     SHIFT_VKS, SHORTCUT_VKS, VK_BACK, VK_ESCAPE, VK_RETURN, VK_SPACE,
     classify, literal_character,
 )
-from oyayubi.ime.recording import SCHEMA, VK_NEXT_PROMPT
+from oyayubi.ime.recording import LEGACY_NEXT_PROMPT_VK, SCHEMA, VK_NEXT_PROMPT
 from oyayubi.lattice.table import load_table
 
 LABELS = {
@@ -70,6 +70,7 @@ class Trace:
     events: list[dict] = field(default_factory=list)
     status: str = "incomplete"
     end_ms: int = 0
+    next_prompt_vk: int = VK_NEXT_PROMPT  # the log's own key (session row)
 
 
 def read_log(path: Path) -> tuple[list[Trace], bool]:
@@ -111,7 +112,8 @@ def read_log(path: Path) -> tuple[list[Trace], bool]:
                         raise ValueError("empty/invalid prompt")
                     expected_tokens(row["reading"])
                     ids.add(row["id"])
-                    current = Trace(row)
+                    current = Trace(row, next_prompt_vk=metadata.get(
+                        "next_prompt_vk", LEGACY_NEXT_PROMPT_VK))
                     traces.append(current)
                 elif kind == "key":
                     if current is None or row["id"] != current.prompt["id"]:
@@ -213,7 +215,7 @@ def replay(trace: Trace) -> tuple[list[Observation], dict]:
         if repeat:
             counts["repeat_downs"] += 1
             continue
-        if vk == VK_NEXT_PROMPT:
+        if vk == trace.next_prompt_vk:
             if down:
                 counts["next_prompt_downs"] += 1
             continue

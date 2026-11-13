@@ -185,7 +185,7 @@ def paint(hwnd) -> None:
             "Stage 1 実打鍵記録 — ノート PC の Space 1 本で入力\n"
             "普段の速度で、誤りは直さず最後まで入力してください。\n"
             "Space+文字 = 親指シフト。Space 単独・Enter も記録します。\n"
-            "全キーを離して F9 を押して離す = 次の文（やり直しなし）。\n"
+            "全キーを離して F12 を押して離す = 次の文（やり直しなし）。\n"
             "Backspace / Esc でも記録は消えません。\n\n"
         )
         if recorder.closed:
@@ -197,7 +197,7 @@ def paint(hwnd) -> None:
                      f"{prompt.text}\n\n入力する読み: {prompt.reading}\n\n"
                      f"記録イベント数: {_record_event_count}\n"
                      "漢字の変換結果ではなく、上の読み・句読点・数字を入力。\n"
-                     "入力結果は表示しません。打ち間違いがあっても F9 で次へ。")
+                     "入力結果は表示しません。打ち間違いがあっても F12 で次へ。")
         user32.DrawTextW(hdc, text, -1, ctypes.byref(rc), DT_WORDBREAK | DT_NOPREFIX)
         user32.EndPaint(hwnd, ctypes.byref(ps))
         return
@@ -313,7 +313,7 @@ def main() -> None:
         stream = args.record.open("x", encoding="utf-8", newline="\n")
         _record_origin = qpc_ticks()
         recorder = Recorder(stream, prompts, qpc_frequency=_qpc_freq, qpc_origin=_record_origin)
-        print(f"recording to {args.record.resolve()} (F9 = next prompt)")
+        print(f"recording to {args.record.resolve()} (F12 = next prompt)")
     else:
         print("loading dictionary (first run is slow)...")
         session.load()

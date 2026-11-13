@@ -27,10 +27,12 @@ FSM の80 ms / 20 ms、同時打鍵判定、Mozc 評価は変更していない�
 4. かな漢字変換は不要。習慣で押した Space 単独・Enter も記録される。
    入力結果・正誤は表示しない。誤打してもそのまま最後まで打つ。
    Backspace・Esc を押してしまってもイベントは残り、過去の入力は消えず、文も戻らない。
-5. 文を打ち終えたら、**全キーを離して F9 を押して離す**と次の文へ進む。
+5. 文を打ち終えたら、**全キーを離して F12 を押して離す**と次の文へ進む。
    Enter は通常の確定操作のログ用に残してあり、文を進めない。
-   F9 解放時に他のキーが残っている場合は進まない。全キーを離して F9 を押し直す。
-   ノート PC の Fn ロック設定によっては **Fn + F9** が必要。
+   F12 解放時に他のキーが残っている場合は進まない。全キーを離して F12 を押し直す。
+   ノート PC の Fn ロック設定によっては **Fn + F12** が必要。
+   （2026-11-13 まで次の文は F9 だった。F9 は IME の全角英数変換キーなので F12 へ移した。
+   ログの `session` 行の `next_prompt_vk` が鍵を記録しており、再生は各ログの値に従うので旧ログもそのまま読める。）
 6. フォーカスを別の窓へ移すと、その文は `interrupted` になり採点対象外となる。
    窓へ戻ると次の文へ進む。途中から再開したり、同じ文をやり直したりはしない。
    40文終了の表示が出たら窓を閉じる。途中で閉じた文も完了文とは分けて保存する。
@@ -117,7 +119,7 @@ UTF-8、1行1 JSON オブジェクト。全行に `type` と `ms` がある。
 
 | type | 追加フィールド |
 | --- | --- |
-| `session` | `schema`, `clock="QPC"`, `time_unit="ms"`, `qpc_frequency`（tick/秒）, `qpc_origin`（起点tick）, `layout="NICOLA-A"`, `keyboard="single-space-laptop"`, `next_prompt_vk=120`, `prompt_count` |
+| `session` | `schema`, `clock="QPC"`, `time_unit="ms"`, `qpc_frequency`（tick/秒）, `qpc_origin`（起点tick）, `layout="NICOLA-A"`, `keyboard="single-space-laptop"`, `next_prompt_vk=123`（F12。旧ログは 120 = F9）, `prompt_count` |
 | `prompt_start` | `id`, `text`（表示文）, `reading`（入力する読み。句読点と数字を含む） |
 | `key` | `id`（対象文）, `vk`（Win32 VK、整数0〜255）, `action="down"` または `"up"` |
 | `prompt_end` | `id`, `status="complete" / "interrupted" / "incomplete"`, `event_count`, `held_vks`（終了時の押下キー一覧） |
@@ -127,13 +129,13 @@ UTF-8、1行1 JSON オブジェクト。全行に `type` と `ms` がある。
 例（中間のイベントは省略）:
 
 ```jsonl
-{"type":"session","ms":0,"schema":"oyayubi.stage1.v1","clock":"QPC","time_unit":"ms","qpc_frequency":10000000,"qpc_origin":123456789,"layout":"NICOLA-A","keyboard":"single-space-laptop","next_prompt_vk":120,"prompt_count":40}
+{"type":"session","ms":0,"schema":"oyayubi.stage1.v1","clock":"QPC","time_unit":"ms","qpc_frequency":10000000,"qpc_origin":123456789,"layout":"NICOLA-A","keyboard":"single-space-laptop","next_prompt_vk":123,"prompt_count":40}
 {"type":"prompt_start","ms":0,"id":"daily-01","text":"おはよう、今日は少し早く起きた。","reading":"おはよう、きょうはすこしはやくおきた。"}
 {"type":"key","ms":500,"id":"daily-01","vk":32,"action":"down"}
 {"type":"key","ms":520,"id":"daily-01","vk":74,"action":"down"}
 ```
 
-F9 自身の down/up も当該文の `key` として残り、解放後に `prompt_end` →
+F12 自身の down/up も当該文の `key` として残り、解放後に `prompt_end` →
 次の `prompt_start` が同じ時刻で並ぶ。最後の文の後は `session_end`。
 フォーカス喪失では `focus(false)` → `prompt_end(interrupted)`、復帰すると
 `focus(true)` → 次の `prompt_start`。同じ文は再開しない。
@@ -160,7 +162,7 @@ python3 -m py_compile oyayubi/ime/host_win32.py
 正解率62.50%。内訳は重なりでシフト消失1、意図しない同時打鍵1、
 取りこぼし1、その他3。**これは道具の検証値であり、実打鍵の成績ではない。**
 追加テストでは79/80/81 ms と19/20 ms の境界、リピート、Backspace の保持、
-全キー解放前の F9、フォーカス中断、途中終了、不正ログ、CLI の JSON 出力を確認する。
+全キー解放前の F12、フォーカス中断、途中終了、不正ログ、CLI の JSON 出力を確認する。
 
 2026-11-11、Linux / Python 3.12.3 での実行結果:
 全94テスト合格（既存79件＋Stage 1 追加15件、34.849秒）、回帰ゲート5/5合格。
@@ -171,11 +173,11 @@ python3 -m py_compile oyayubi/ime/host_win32.py
 Sadao の本採取前に、別名の短いログで以下を確認する。
 
 - 64 bit Python で記録窓が開き、日本語のお題と読みが折り返される。辞書なしで起動する。
-- 内蔵キーボードの文字、Space、P/Q、/、数字、Backspace、Enter、F9 の down/up が
-  Windows の IME に奪われず記録される。F9 がマルチメディアキーなら Fn を併用する。
+- 内蔵キーボードの文字、Space、P/Q、/、数字、Backspace、Enter、F12 の down/up が
+  Windows の IME に奪われず記録される。F12 がマルチメディアキーなら Fn を併用する。
   OEM キーの VK 対応（特に `;` と `/`）も実機のキーボード配列で確認する。
 - Space を押したまま J→K を打つ列、Space を離して押し直す列の両方が欠けずに記録される。
-- F9 のキーリピートで文が飛ばない。他キー押下中には進まない。
+- F12 のキーリピートで文が飛ばない。他キー押下中には進まない。
 - Alt+Tab で文が `interrupted` になり、戻ると次の文へ進む。
   窓の×・Alt+F4・40文完了の各経路でファイルが閉じる。
 - QPC `ms` が非減少で、保存したログが Linux の再生ツールで受理される。
