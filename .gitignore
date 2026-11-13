@@ -3,8 +3,9 @@ data/learning.jsonl
 data/learning.jsonl.paused
 data/personal_lexicon.jsonl
 data/recordings/
-third_party/mozc_oss_dict/dictionary*.txt
-third_party/mozc_oss_dict/connection_single_column.txt
+# Mozc dictionary (incl. id.def/suffix.txt/READMEs): fetched from upstream
+# by tools/wp0/fetch_mozc_dict and verified against the manifest hashes.
+third_party/mozc_oss_dict/
 __pycache__/
 *.pyc
 src/tip/build/
