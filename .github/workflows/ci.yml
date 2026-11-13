@@ -1,0 +1,91 @@
+# 毎回の push と PR で: Python の全試験、ブローカーの試験 (REDESIGN §5.7, §10)。
+# Linux ではブローカーを POSIX の層でビルドして偽エンジン・偽 TIP で動かし、
+# Windows では MSVC で本物の oyayubi-broker.exe を作って、名前付きパイプで同じ試験を
+# 回す (ウィンドウが 1 枚も出ないことも数える)。
+name: ci
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # 辞書は data/dictionary-manifest.json で固定した上流コミットのもの。
+      - name: Mozc 辞書 (キャッシュ)
+        uses: actions/cache@v4
+        with:
+          path: third_party/mozc_oss_dict
+          key: mozc-dict-${{ hashFiles('data/dictionary-manifest.json') }}
+
+      - name: Mozc 辞書の取得と照合
+        run: |
+          python -m tools.wp0.fetch_mozc_dict
+          python -m oyayubi.lattice.dict_manifest verify
+
+      - name: ブローカーのビルドと中核の試験 (CTest)
+        run: |
+          cmake -S src/broker -B build/broker -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/broker -j 4
+          ctest --test-dir build/broker --output-on-failure
+
+      - name: TIP の JSON 試験 (CTest)
+        run: |
+          cmake -S src/tip -B build/tip -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/tip -j 4
+          ctest --test-dir build/tip --output-on-failure
+
+      - name: Python の全試験 (ブローカーの §5.7 試験を含む)
+        run: python -m unittest $(ls tests/test_*.py | sed 's#/#.#;s#\.py$##')
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Mozc 辞書 (キャッシュ)
+        uses: actions/cache@v4
+        with:
+          path: third_party/mozc_oss_dict
+          key: mozc-dict-${{ hashFiles('data/dictionary-manifest.json') }}
+
+      - name: Mozc 辞書の取得と照合
+        shell: pwsh
+        run: |
+          python -m tools.wp0.fetch_mozc_dict
+          if ($LASTEXITCODE -ne 0) { throw "dictionary fetch failed" }
+          python -m oyayubi.lattice.dict_manifest verify
+          if ($LASTEXITCODE -ne 0) { throw "dictionary does not match the manifest" }
+
+      - name: ブローカーのビルド (MSVC, Release) と中核の試験
+        shell: pwsh
+        run: |
+          cmake -S src/broker -B build/broker -A x64
+          if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }
+          cmake --build build/broker --config Release
+          if ($LASTEXITCODE -ne 0) { throw "broker build failed" }
+          ctest --test-dir build/broker -C Release --output-on-failure
+          if ($LASTEXITCODE -ne 0) { throw "broker core test failed" }
+
+      - name: ブローカーの §5.7 試験 (名前付きパイプ・ジョブ・ウィンドウ 0 枚)
+        shell: pwsh
+        env:
+          OYAYUBI_BROKER: ${{ github.workspace }}\dist\oyayubi-broker.exe
+        run: |
+          python -m unittest -v tests.test_broker
+          if ($LASTEXITCODE -ne 0) { throw "broker tests failed" }
