@@ -5,4 +5,4 @@
 # and imports them before publishing, so a pin that does not resolve
 # or import blocks the release instead of reaching a user's machine.
 transformers==4.57.1
-sentencepiece==0.2.0
+sentencepiece==0.2.1

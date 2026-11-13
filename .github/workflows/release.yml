@@ -21,6 +21,11 @@ jobs:
         shell: pwsh
         run: ./src/tip/dev-build.ps1
 
+      # setup.ps1 が使う Python (同梱ランタイム 3.13、venv は 3.11〜3.13) で確かめる。
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
       - name: 依存ピン留めの実地検証 (torch CPU + requirements + import)
         shell: pwsh
         run: |
