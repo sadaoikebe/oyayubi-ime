@@ -389,6 +389,9 @@ def main(argv=None) -> int:
     log(f"ready in {time.perf_counter() - started:.2f} s")
     engine.serve(sys.stdin.buffer)
     log("stdin closed; exiting")
+    if engine.worker is not None:
+        engine.worker.stop()
+        engine.worker.thread.join()
     return 0
 
 

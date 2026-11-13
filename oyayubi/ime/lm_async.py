@@ -126,6 +126,7 @@ class LmWorker:
         self._running: Job | None = None
         self._running_since = 0.0
         self._errors = 0
+        self._stopped = False
         self.thread = threading.Thread(target=self._run, name="lm-worker", daemon=True)
         self.thread.start()
 
@@ -180,6 +181,27 @@ class LmWorker:
             self.stats.bump("prefetch", "cancelled")
         job.done.set()
 
+    def stop(self) -> None:
+        """Engine shutdown: finish nothing new, cut the running job short.
+
+        The worker is a daemon thread doing native (torch) work; if the
+        interpreter tears down around it, the process can abort instead of
+        exiting. stop() + join() (engine.main) makes exit deterministic:
+        queued jobs are dropped, a running conversion stops at its next
+        kana-run boundary, and a prime is a single bounded scoring pass.
+        """
+        with self._cond:
+            self._stopped = True
+            if self._running is not None:
+                self._running.cancelled = True
+            for job in list(self._wanted):
+                self._drop(job)
+            self._wanted.clear()
+            for job in list(self._slots.values()):
+                self._drop(job)
+            self._slots.clear()
+            self._cond.notify()
+
     # -- worker thread ------------------------------------------------------
     def _run(self) -> None:
         try:
@@ -198,11 +220,16 @@ class LmWorker:
             self.template = template
             self.state = "ready"
         while True:
-            self._execute(self._next())
+            job = self._next()
+            if job is None:  # stopped
+                return
+            self._execute(job)
 
-    def _next(self) -> Job:
+    def _next(self) -> Job | None:
         with self._cond:
             while True:
+                if self._stopped:
+                    return None
                 if self._wanted:
                     job = self._wanted.popleft()
                 else:
