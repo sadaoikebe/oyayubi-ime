@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import unittest
 
-from oyayubi.chord.fsm import Plain
+from oyayubi.chord.fsm import AmbShift, Plain
 from oyayubi.ime.server import dispatch
 from oyayubi.ime.session import ImeSession
 from oyayubi.lattice.mozc_dict import load_lex
@@ -91,6 +91,49 @@ class KanaKeyTest(unittest.TestCase):
         self.assertTrue(s.converted)
         reply = dispatch(s, {"op": "down", "vk": 13})
         self.assertEqual(reply["commit"], "ｶﾞｯｺｳ")
+
+    def typed_cuamba(self):
+        """クアンバ (Cuamba, a town in Mozambique) on the single thumb key:
+        あ/じ share `s` and ば/み share `h`, left and right thumb faces, so
+        the decoder may read くじんば."""
+        s = self.session()
+        s._table = load_table()
+        s.tokens = [Plain("i"), AmbShift("s"), Plain(";"), AmbShift("h")]  # く あ ん ば
+        s._refresh()
+        return s
+
+    def test_repeated_f7_reaches_cuamba(self):
+        s = self.typed_cuamba()
+        seen = [tap(s, VK_F7)["composition"] for _ in range(5)]
+        # Each press is the next reading; the fifth wraps to the first.
+        self.assertEqual(seen, ["クジンバ", "クジンミ", "クアンミ", "クアンバ", "クジンバ"])
+
+    def test_repeated_f6_steps_through_the_readings_in_hiragana(self):
+        s = self.typed_cuamba()
+        seen = [tap(s, VK_F6)["composition"] for _ in range(4)]
+        self.assertEqual(seen[0], "くじんば")  # the decoder's reading comes first
+        self.assertEqual(sorted(seen), sorted(["くじんば", "くじんみ", "くあんみ", "くあんば"]))
+
+    def test_f6_then_f7_starts_katakana_at_the_first_reading(self):
+        s = self.typed_cuamba()
+        tap(s, VK_F6)
+        tap(s, VK_F6)  # step to the next reading
+        self.assertEqual(tap(s, VK_F7)["composition"], "クジンバ")
+
+    def test_unambiguous_repeat_stays(self):
+        s = self.session()
+        type_reading(s, "きょう")
+        self.assertEqual(tap(s, VK_F6)["composition"], "きょう")
+        self.assertEqual(tap(s, VK_F6)["composition"], "きょう")
+        self.assertEqual(tap(s, VK_F7)["composition"], "キョウ")
+        self.assertEqual(tap(s, VK_F7)["composition"], "キョウ")
+
+    def test_f8_uses_the_selected_reading(self):
+        s = self.typed_cuamba()
+        for _ in range(4):
+            if tap(s, VK_F7)["composition"] == "クアンバ":
+                break
+        self.assertEqual(tap(s, VK_F8)["composition"], "ｸｱﾝﾊﾞ")
 
     def test_f10_gives_the_typed_keys_and_cycles_case(self):
         s = self.session()

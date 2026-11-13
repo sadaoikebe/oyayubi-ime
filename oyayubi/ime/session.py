@@ -420,10 +420,16 @@ class ImeSession:
     def _select_script(self, vk: int) -> None:
         """F6-F10: give the focused clause one fixed spelling (MS-IME's gestures).
 
-        F6 hiragana, F7 katakana: the two kana rows that close out every
-        clause's candidate stream; selecting one is an ordinary candidate
-        pick, so a later commit learns it like any other selection.
-        F8 half-width katakana of the same reading (learned like F7).
+        F6 hiragana, F7 katakana: the kana rows that close out every clause's
+        candidate stream, one hiragana/katakana pair per reading the typed
+        chords allow; selecting one is an ordinary candidate pick, so a later
+        commit learns it like any other selection. Pressed again while a row
+        of that script is selected, F6/F7 step to the next reading's row,
+        wrapping to the first: a single thumb key leaves left/right faces
+        ambiguous, and the decoder's reading need not be the one meant
+        (クアンバ: あ/じ and ば/み share keys, so F7 goes
+        クジンバ → クジンミ → クアンミ → クアンバ).
+        F8 half-width katakana of the selected kana reading (else the first).
         F9/F10 the typed keys as full-/half-width alphanumerics (the kana-input
         convention: what the keys would have typed with the IME off); pressed
         again they cycle lower → UPPER → Capitalized. Not learned.
@@ -453,9 +459,12 @@ class ImeSession:
         if not rows:
             return
         if vk in (VK_F6, VK_F7):
-            self._select(rows[1] if vk == VK_F7 and len(rows) > 1 else rows[0])
+            self._select(self._next_kana_row(segment, hiragana=vk == VK_F6,
+                                             default=rows[1] if vk == VK_F7 and len(rows) > 1
+                                             else rows[0]))
             return
-        hira = stream.cache[rows[0]]
+        hira = (segment.selected if segment.selected.kind == "kana"
+                else stream.cache[rows[0]])
         if vk == VK_F8:
             surface, kind = half_katakana(hira.reading), "kana"
         else:
@@ -470,6 +479,33 @@ class ImeSession:
         segment.index = stream.find(chosen)  # -1: shown with no highlighted row
         self.composition = "".join(s.selected.surface for s in self.segments)
         self._show_page()
+
+    @staticmethod
+    def _is_hiragana_row(c: Candidate) -> bool:
+        return c.surface == c.reading  # the katakana row of the same reading differs
+
+    def _next_kana_row(self, segment: Segment, *, hiragana: bool, default: int) -> int:
+        """The kana row F6/F7 selects: the next one of that script after the
+        current selection when one is already selected, else ``default``."""
+        stream = segment.choices
+        assert stream is not None
+        current = segment.selected
+        if (current.kind != "kana" or segment.index < 0
+                or self._is_hiragana_row(current) != hiragana):
+            return default
+
+        def matches(i: int) -> bool:
+            c = stream.cache[i]
+            return c.kind == "kana" and self._is_hiragana_row(c) == hiragana
+
+        # Kana rows close out the stream, so the search after the current row
+        # never generates dictionary rows; wrapping restarts at the first one.
+        i = segment.index + 1
+        while stream.ensure(i):
+            if matches(i):
+                return i
+            i += 1
+        return default
 
     def forget_candidate(self) -> bool:
         """Suppress the highlighted pair, then choose the newly ranked first row."""
