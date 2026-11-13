@@ -86,6 +86,12 @@ class ConnectionHandler(socketserver.StreamRequestHandler):
                 if msg.get("op") == "stats":
                     write_message(self.wfile, {"ok": True, "stats": server.lm_stats()})
                     continue
+                if msg.get("op") == "shutdown":
+                    # A settings change needs a fresh server (settings are
+                    # read at startup). The TIP respawns it on the next key.
+                    write_message(self.wfile, {"ok": True, "msg": "bye"})
+                    threading.Thread(target=server.shutdown, daemon=True).start()
+                    return
                 with server.dispatch_lock:
                     start = time.perf_counter()
                     if pipeline is not None:

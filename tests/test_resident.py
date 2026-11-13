@@ -165,6 +165,19 @@ class ResidentTest(unittest.TestCase):
             self.assertEqual(len(rows), 2)
             self.assertEqual(len({r["record_id"] for r in rows}), 2)
 
+    def test_shutdown_op_stops_the_server(self):
+        with resident.ResidentServer(
+                resident.SessionFactory(loaded_session())) as instance:
+            instance.publish(self.directory)
+            thread = threading.Thread(target=instance.serve_forever,
+                                      kwargs={"poll_interval": 0.01})
+            thread.start()
+            connection = client.connect(self.directory, timeout=1)
+            self.assertTrue(connection.request({"op": "shutdown"})["ok"])
+            connection.close()
+            thread.join(2)
+            self.assertFalse(thread.is_alive())
+
     def test_authentication_and_protocol_errors_do_not_allocate_or_break_peers(self):
         factory = Mock(side_effect=resident.SessionFactory(loaded_session()))
         with self.running(factory) as instance:

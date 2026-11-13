@@ -42,6 +42,13 @@ class TempDir(unittest.TestCase):
         return code, out.getvalue()
 
 
+class ServerTest(TempDir):
+    def test_restart_when_not_running(self):
+        code, out = self.run_manage("server", "restart")
+        self.assertEqual(code, 0)
+        self.assertIn("not running", out)
+
+
 class ConfigTest(TempDir):
     def test_absent_file_is_the_built_in_defaults(self):
         args = config.parse_args(argument_parser(), ["--runtime-dir", str(self.dir)])

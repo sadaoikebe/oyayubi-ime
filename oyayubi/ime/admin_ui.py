@@ -22,7 +22,7 @@ import sys
 from . import config, learning_admin, manage, personal
 
 POS_NAMES = list(personal.POS_IDS)
-RESTART_NOTE = "takes effect when the conversion server restarts"
+RESTART_NOTE = "takes effect when the server restarts (状態 tab: サーバを再起動)"
 
 
 @dataclass(frozen=True)
@@ -218,6 +218,12 @@ class AdminModel:
     def status_rows(self) -> list[tuple[str, str]]:
         return flatten(manage.status(self.settings))
 
+    def restart_server(self) -> Outcome:
+        if manage.restart_server(self.settings):
+            return Outcome(True, "サーバを停止しました。次のキー入力で、"
+                                 "新しい設定で起動します")
+        return Outcome(False, "サーバは動いていません")
+
 
 class AdminWindow:
     """Widgets only: every button calls AdminModel and redraws from it."""
@@ -383,6 +389,9 @@ class AdminWindow:
 
     def _status_tab(self, frame):
         ttk = self.ttk
+        ttk.Button(frame, text="サーバを再起動",
+                   command=lambda: self._show(self.model.restart_server())
+                   ).pack(anchor="e", pady=(0, 6))
         ttk.Button(frame, text="更新", command=self._refresh_status).pack(anchor="e", pady=(0, 6))
         self.status_tree = self._table(frame, ("項目", "値"), (220, 520))
 

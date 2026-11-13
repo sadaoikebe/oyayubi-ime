@@ -44,6 +44,27 @@ class AdminModelTest(Base):
     def test_no_tkinter_needed(self):
         self.assertNotIn("tkinter", sys.modules)
 
+    def test_restart_server_reports_not_running(self):
+        outcome = self.model.restart_server()
+        self.assertFalse(outcome.ok)
+
+    def test_restart_server_when_running(self):
+        from contextlib import contextmanager
+        from unittest.mock import patch
+        from oyayubi.ime import client as client_module
+
+        @contextmanager
+        def fake_connect(directory, **kwargs):
+            class FakeClient:
+                def request(self, msg):
+                    assert msg == {"op": "shutdown"}
+                    return {"ok": True}
+            yield FakeClient()
+
+        with patch.object(client_module, "connect", fake_connect):
+            outcome = self.model.restart_server()
+        self.assertTrue(outcome.ok)
+
     def test_files_come_from_the_config(self):
         self.assertEqual((self.model.config_file, self.model.learning_file,
                           self.model.personal_file), (self.config, self.learning, self.personal))

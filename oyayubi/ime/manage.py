@@ -166,6 +166,31 @@ def status(settings) -> dict:
     }
 
 
+def restart_server(settings) -> bool:
+    """Ask the resident server to exit; True when it answered.
+
+    Settings are read when the server starts, so this is how a settings
+    change takes effect: the TIP respawns the server, with the new
+    settings, on the next keystroke.
+    """
+    from .client import connect
+    runtime_dir = settings.runtime_dir or config.DEFAULT_RUNTIME_DIR
+    try:
+        with connect(runtime_dir) as client:
+            return bool(client.request({"op": "shutdown"}).get("ok"))
+    except (OSError, ValueError, KeyError, EOFError):
+        return False
+
+
+def cmd_server(args, settings) -> int:
+    if restart_server(settings):
+        print("resident server stopped; it restarts with the new settings "
+              "on the next keystroke")
+    else:
+        print("resident server is not running")
+    return 0
+
+
 def cmd_status(args, settings) -> int:
     print(json.dumps(status(settings), ensure_ascii=False, indent=2))
     return 0
@@ -225,11 +250,14 @@ def argument_parser() -> argparse.ArgumentParser:
     settings_cmd.add_parser("unset", help="drop a setting (back to the default)"
                             ).add_argument("key")
     sub.add_parser("status", help="learning, words, dictionary, resident server")
+    server_cmd = sub.add_parser("server", help="the resident server").add_subparsers(
+        dest="action", required=True)
+    server_cmd.add_parser("restart", help="stop it; it restarts with fresh settings")
     return parser
 
 
 COMMANDS = {"word": cmd_word, "learning": cmd_learning, "dict": cmd_dict,
-            "config": cmd_config, "status": cmd_status}
+            "config": cmd_config, "status": cmd_status, "server": cmd_server}
 
 
 def main(argv=None) -> int:

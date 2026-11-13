@@ -12,6 +12,7 @@ One JSON object per line:
   {"op":"toggle_direct"}
   {"op":"context","text":"確定済み"}
   {"op":"stats"}  # resident only: counts since start, no text
+  {"op":"shutdown"}  # resident only: exit; respawned on demand, with fresh settings
   {"op":"down","vk":9,"t":300}  # Tab: predictions for the input, if any
 Reply: {"composition":"...","commit":"...","converted":false,"fsm":"S1","pending":false}
 predicting: the candidates are predictions (Tab acted; the TIP eats that Tab).
