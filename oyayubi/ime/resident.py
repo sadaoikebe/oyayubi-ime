@@ -37,6 +37,7 @@ class SessionFactory:
         return ImeSession(
             _table=loaded._table, _lex=loaded._lex, learning_path=loaded.learning_path,
             _learning=loaded._learning, personal=loaded.personal,
+            prediction=loaded.prediction, predict_index=loaded.predict_index,
         )
 
 

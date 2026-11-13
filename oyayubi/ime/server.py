@@ -12,7 +12,9 @@ One JSON object per line:
   {"op":"toggle_direct"}
   {"op":"context","text":"確定済み"}
   {"op":"stats"}  # resident only: counts since start, no text
+  {"op":"down","vk":9,"t":300}  # Tab: predictions for the input, if any
 Reply: {"composition":"...","commit":"...","converted":false,"fsm":"S1","pending":false}
+predicting: the candidates are predictions (Tab acted; the TIP eats that Tab).
 pending: the conversion awaits the LM (resident); poll with timeout at "timer".
 """
 
@@ -29,6 +31,7 @@ from oyayubi.ime.learning import DEFAULT_LEARNING_PATH
 from oyayubi.ime.personal import DEFAULT_PERSONAL_PATH, PersonalLexicon
 from oyayubi.ime import config
 from oyayubi.ime.lm_rescore import CONTEXT_CHARS
+from oyayubi.ime.predict import DEFAULT_MODE as DEFAULT_PREDICTION, MODES as PREDICTION_MODES
 
 
 def dispatch(sess: ImeSession, msg: dict) -> dict:
@@ -79,6 +82,7 @@ def snapshot(sess: ImeSession, op) -> dict:
         "candidate_page": sess.candidate_page,
         "candidate_kinds": sess.candidate_kinds,
         "has_next_page": sess.has_next_page,
+        "predicting": sess.predicting,
         "pending": False,
     }
 
@@ -96,6 +100,9 @@ def argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-learning", action="store_true", help="disable confirmation learning")
     parser.add_argument("--personal-file", type=Path, default=DEFAULT_PERSONAL_PATH,
                         help="the user's word list (JSONL; edit with python -m oyayubi.ime.manage word)")
+    parser.add_argument("--prediction", choices=PREDICTION_MODES, default=DEFAULT_PREDICTION,
+                        help="Tab on unconverted input offers continuations from history "
+                             "and the dictionary (tab, the default) or does nothing (off)")
     parser.add_argument("--config", type=Path, default=None,
                         help="settings file (default <runtime dir>/config.json; "
                              "command-line options override it)")
@@ -141,8 +148,14 @@ def load_session(args, with_lm: bool = True) -> ImeSession:
     with_lm=False leaves sess.lm unset (the resident server loads it on a worker).
     """
     sess = ImeSession(learning_path=None if args.no_learning else args.learning_file,
-                      personal=PersonalLexicon(args.personal_file))
+                      personal=PersonalLexicon(args.personal_file),
+                      prediction=getattr(args, "prediction", DEFAULT_PREDICTION))
     sess.load()
+    if sess.prediction != "off":
+        sess._sync_personal()
+        # The sorted reading index, once at start rather than on the first Tab.
+        sess.predict_index.keys(sess._lex, sess.personal.revision
+                                if sess.personal is not None else None)
     if with_lm and args.lm_rescore:
         # The LM is optional equipment: a machine without torch/transformers
         # (e.g. a fresh install) still gets a working IME, without rescoring.

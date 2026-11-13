@@ -175,6 +175,14 @@ class LearningStore:
                 contextual = max(contextual, weight)
         return round(PAIR_BONUS * pair + CONTEXT_BONUS * contextual)
 
+    def has_prefix(self, reading: str) -> bool:
+        return reading in self._prefixes
+
+    def learned(self):
+        """The latest confirmation of every learned pair (prediction's history)."""
+        for rows in self._entries.values():
+            yield from rows
+
     def spans(self, tokens: list[dict], start: int, lex: MozcLex):
         """Virtual whole-bunsetsu arcs; original entries and costs stay intact.
 
@@ -208,7 +216,7 @@ class LearningStore:
             return []
         rows = []
         for c, left in selections:
-            if c.kind in ("literal", "number", "date") or not c.reading or is_literal_face(c.reading):
+            if c.kind in ("literal", "number", "date", "alnum") or not c.reading or is_literal_face(c.reading):
                 continue
             cost, lid, rid = c.word_cost, c.lid, c.rid
             user_word = any(r.user_word for r in self._pairs.get((c.reading, c.surface), ()))

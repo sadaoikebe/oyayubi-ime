@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
+import unicodedata
 
 from oyayubi.chord.fsm import AmbShift, ChordFsm, Plain, ThumbTap, Token
 from oyayubi.chord.keys import (
@@ -25,6 +26,7 @@ from .learning import DEFAULT_LEARNING_PATH, LearningStore
 from .lm_rescore import CONTEXT_CHARS, LmRescorer, conversion_picks
 from .numbers import is_digit, number_spellings
 from .personal import PersonalLexicon
+from .predict import DEFAULT_MODE as DEFAULT_PREDICTION, MAX_TAILS, ReadingIndex, predict
 
 VK_LEFT = 0x25
 VK_RIGHT = 0x27
@@ -34,6 +36,12 @@ VK_UP = 0x26
 VK_DOWN = 0x28
 VK_F6 = 0x75
 VK_F7 = 0x76
+VK_F8 = 0x77
+VK_F9 = 0x78
+VK_F10 = 0x79
+SCRIPT_VKS = (VK_F6, VK_F7, VK_F8, VK_F9, VK_F10)  # the one-shot spellings
+VK_TAB = 0x09
+PREDICTION = "predict"  # Segment.context of the predictions' segment
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +51,39 @@ class Literal:
     def __post_init__(self) -> None:
         if len(self.text) != 1:
             raise ValueError("a literal token must contain exactly one character")
+
+
+_HALF_KATAKANA: dict[str, str] = {}
+for _code in range(0xFF66, 0xFF9E):
+    _half = chr(_code)
+    _HALF_KATAKANA.setdefault(unicodedata.normalize("NFKC", _half), _half)
+    for _mark in ("\uff9e", "\uff9f"):
+        _full = unicodedata.normalize("NFKC", _half + _mark)
+        if len(_full) == 1:
+            _HALF_KATAKANA.setdefault(_full, _half + _mark)
+
+
+def half_katakana(hiragana: str) -> str:
+    """F8: ひらがな → ﾊﾝｶｸｶﾀｶﾅ (a kana with no half-width form stays full-width)."""
+    out = []
+    for ch in hiragana:
+        kata = chr(ord(ch) + 0x60) if "ぁ" <= ch <= "ゖ" else ch
+        out.append(_HALF_KATAKANA.get(kata, kata))
+    return "".join(out)
+
+
+def alnum_spelling(keys: str, current: str | None, *, full: bool) -> str:
+    """F9/F10: the typed keys; again on the same width cycles the letter case."""
+    forms = [keys.lower(), keys.upper(), keys[:1].upper() + keys[1:].lower()]
+    if full:
+        forms = [to_full_width(f) for f in forms]
+    if current in forms:
+        return forms[(forms.index(current) + 1) % len(forms)]
+    return forms[0]
+
+
+def to_full_width(text: str) -> str:
+    return "".join(chr(ord(c) + 0xFEE0) if "!" <= c <= "~" else c for c in text)
 
 
 def to_lattice_token(tok: Token | Literal, table: dict) -> dict | None:
@@ -112,6 +153,10 @@ class ImeSession:
     _literal_down: set[int] = field(default_factory=set)
     clock: Callable[[], datetime] = datetime.now  # date rows (U3); fixed in transcripts
     personal: PersonalLexicon | None = None  # the user's word list (D1), shared
+    prediction: str = DEFAULT_PREDICTION  # "off" or "tab" (predict.py)
+    predict_index: ReadingIndex = field(default_factory=ReadingIndex)  # shared
+    predicting: bool = False  # the focused candidates are predictions
+    _word_starts: set[int] = field(default_factory=set)  # 1-best word boundaries
 
     def load(self) -> None:
         if not self._table:
@@ -138,6 +183,7 @@ class ImeSession:
         self.segments.clear()
         self.focus = -1
         self.converted = False
+        self.predicting = False
         self._clear_cands()
         self._await = None
         self._continuation = None
@@ -180,7 +226,7 @@ class ImeSession:
             if down and not self.tokens:
                 self._lm_context = ""  # Ctrl/Alt/Win may move the caret or edit text.
             return None
-        if down and vk in (VK_F6, VK_F7):
+        if down and (vk in (VK_F6, VK_F7) or (vk in SCRIPT_VKS and not shift)):
             pending = self._finish_pending()
             if shift:
                 # The learning corrections live on Shift+F6/F7; the plain
@@ -195,11 +241,11 @@ class ImeSession:
                     return None
                 return self._then(pending, learning_key)
 
-            def kana_key() -> None:
-                self._select_kana(vk == VK_F7)
+            def script_key() -> None:
+                self._select_script(vk)
                 self._literal_down.add(vk)
                 return None
-            return self._then(pending, kana_key)
+            return self._then(pending, script_key)
         if kind == "EDIT":
             if not down:
                 return None
@@ -223,6 +269,10 @@ class ImeSession:
             if picked is not None:
                 self._literal_down.add(vk)
                 return (pending or "") + picked
+        if (down and vk == VK_TAB and not shift and self.prediction != "off"
+                and self._predict_key()):
+            self._literal_down.add(vk)
+            return None
         literal = literal_character(vk, shift)
         if literal is not None:
             if not down:
@@ -315,16 +365,74 @@ class ImeSession:
         self._clear_cands()
         self._refresh()
 
-    def _select_kana(self, katakana: bool) -> None:
-        """F6/F7: give the focused clause its hiragana/katakana spelling.
+    def _predict_key(self) -> bool:
+        """Tab: open predictions, or the next one; False leaves Tab as it was.
 
-        The two kana rows close out every clause's candidate stream,
-        hiragana first; selecting one is an ordinary candidate pick, so
-        a later commit learns it like any other selection. Input not yet
-        converted converts first, as with the MS-IME gesture.
+        Only unconverted input with no chord or conversion in flight asks;
+        with no prediction nothing changes (Tab keeps its old meaning).
+        """
+        if self.predicting:
+            self._cycle(1)
+            return True
+        if (not self.tokens or self.converted or self._await is not None
+                or self.fsm.timer_deadline is not None or self._lex is None):
+            return False
+        self._sync_personal()
+        learning = self._learning.snapshot() if self._learning is not None else None
+        lattice = self._lattice()
+        run = len(lattice)  # the trailing kana run: no literal inside a prediction
+        while run > 0 and lattice[run - 1]["kind"] != "literal":
+            run -= 1
+        starts = sorted(b for b in self._word_starts if run <= b < len(lattice))
+        for start in starts[-MAX_TAILS:]:  # longest tail first
+            index = next(i for i, s in enumerate(self.segments) if s.end > start)
+            head = self.segments[:index]
+            redecoded = self.segments[index].start != start
+            if redecoded:
+                # Inside a clause (いい|天気): the typed head before it, decoded alone.
+                tokens = self.tokens
+                # Lattice offsets skip tokens with no kana; cut the raw list there.
+                kept = [i for i, t in enumerate(tokens)
+                        if to_lattice_token(t, self._table) is not None]
+                self.tokens = tokens[:kept[start]]
+                self._refresh()
+                head = self.segments
+                self.tokens = tokens
+            left = head[-1].selected.surface if head else self._left_surface
+            found = predict(lattice[start:], self._lex, self.predict_index, learning, left,
+                            self.personal.revision if self.personal is not None else None)
+            if not found:
+                if redecoded:
+                    self._refresh()  # restore the clauses exactly as shown
+                continue
+            stream = CandidateStream(iter(found))
+            stream.ensure(0)
+            self.segments = head + [Segment(start, len(lattice), found[0], fixed=True,
+                                            choices=stream, context=PREDICTION)]
+            self.converted = True
+            self.predicting = True
+            self.focus = len(head)
+            self.composition = "".join(s.selected.surface for s in self.segments)
+            self._open_cands()
+            return True
+        return False
+
+    def _select_script(self, vk: int) -> None:
+        """F6-F10: give the focused clause one fixed spelling (MS-IME's gestures).
+
+        F6 hiragana, F7 katakana: the two kana rows that close out every
+        clause's candidate stream; selecting one is an ordinary candidate
+        pick, so a later commit learns it like any other selection.
+        F8 half-width katakana of the same reading (learned like F7).
+        F9/F10 the typed keys as full-/half-width alphanumerics (the kana-input
+        convention: what the keys would have typed with the IME off); pressed
+        again they cycle lower → UPPER → Capitalized. Not learned.
+        Input not yet converted converts first, as with the MS-IME gesture.
         """
         if not self.tokens:
             return
+        if self.predicting:
+            self._cancel_conversion()  # the kana spelling of what was typed
         if not self.converted:
             self.converted = True
             if self.lm is not None:
@@ -342,8 +450,26 @@ class ImeSession:
             if stream.cache[i].kind == "kana":
                 rows.append(i)
             i += 1
-        if rows:
-            self._select(rows[1] if katakana and len(rows) > 1 else rows[0])
+        if not rows:
+            return
+        if vk in (VK_F6, VK_F7):
+            self._select(rows[1] if vk == VK_F7 and len(rows) > 1 else rows[0])
+            return
+        hira = stream.cache[rows[0]]
+        if vk == VK_F8:
+            surface, kind = half_katakana(hira.reading), "kana"
+        else:
+            keys = [t.get("key", "") for t in self._lattice()[segment.start:segment.end]]
+            surface = alnum_spelling("".join(keys), segment.selected.surface
+                                     if segment.selected.kind == "alnum" else None,
+                                     full=vk == VK_F9)
+            kind = "alnum"
+        chosen = Candidate(surface, hira.reading, hira.score, hira.lid, hira.rid, kind)
+        segment.selected = chosen
+        segment.fixed = True
+        segment.index = stream.find(chosen)  # -1: shown with no highlighted row
+        self.composition = "".join(s.selected.surface for s in self.segments)
+        self._show_page()
 
     def forget_candidate(self) -> bool:
         """Suppress the highlighted pair, then choose the newly ranked first row."""
@@ -356,6 +482,11 @@ class ImeSession:
             return False
         if not self._learning.suppress(c.reading, c.surface):
             return False
+        if segment.context == PREDICTION:
+            # The forgotten word leaves the list; back to the input if none remain.
+            self._cancel_conversion()
+            self._predict_key()
+            return True
         segment.fixed = False
         self._prepare_cands(self.focus, reselect=True)
         self.composition = "".join(s.selected.surface for s in self.segments)
@@ -427,6 +558,8 @@ class ImeSession:
 
     def _prepare_cands(self, index: int, *, reselect: bool = False) -> None:
         segment = self.segments[index]
+        if segment.context == PREDICTION:
+            return  # a fixed list, built by _predict_key
         before = self.segments[index - 1] if index > 0 else None
         if segment.selected.kind == "number":
             if segment.choices is None:
@@ -465,8 +598,8 @@ class ImeSession:
     def _resize(self, delta: int) -> None:
         """Override one automatic boundary, keeping all other intervals intact."""
         segment = self.segments[self.focus]
-        if segment.literal:
-            return  # a digit run keeps its interval
+        if segment.literal or self.predicting:
+            return  # a digit run keeps its interval; predictions span the input
         following = self.focus + 1
         if delta > 0:
             if following == len(self.segments) or self.segments[following].literal:
@@ -618,6 +751,7 @@ class ImeSession:
     def _refresh(self, *, rescore: bool = False, picks=None) -> None:
         """Rebuild segments from the 1-best; with rescore or picks, from the LM's picks."""
         self.segments = []
+        self.predicting = False
         offset = 0
         self._sync_personal()
         learning = self._learning.snapshot() if self._learning is not None else None
@@ -631,6 +765,7 @@ class ImeSession:
             picks = None
         kana_runs = 0
         left_id = BOS_ID
+        self._word_starts = set()
         for part in parts:
             if isinstance(part, str):
                 last = self.segments[-1] if self.segments else None
@@ -652,6 +787,7 @@ class ImeSession:
                     dec, _ = decode_tokens(part, self._lex, learning=learning,
                                            left_surface=left_surface, left_id=left_id)
                 kana_runs += 1
+                self._word_starts.update(offset + p.start for p in dec.pieces if not p.literal)
                 self.segments.extend(segments_from(dec.pieces, offset, self._lex))
                 offset += len(part)
                 if self.segments:
@@ -684,6 +820,7 @@ class ImeSession:
             self.focus = -1
             self.composition = ""
             self.converted = False
+            self.predicting = False
             self._clear_cands()
         self._left_surface = left_surface
         self._note_commit(text)

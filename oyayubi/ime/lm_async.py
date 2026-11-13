@@ -308,7 +308,8 @@ class ConnectionPipeline:
             self.sess.lm_deferred = available
             was_converted = self.sess.converted
             commit += apply_op(self.sess, m)
-            if not available and not was_converted and self.sess.converted:
+            if (not available and not was_converted and self.sess.converted
+                    and not self.sess.predicting):
                 self.stats.conversion("bypass")
             if self.sess._await is not None:
                 self._submit_convert()

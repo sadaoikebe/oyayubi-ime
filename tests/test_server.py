@@ -22,6 +22,10 @@ class ServerTest(unittest.TestCase):
         events = []
         session = SimpleNamespace(
             load=lambda: events.append("load"),
+            prediction="tab", _sync_personal=lambda: None, _lex=None,
+            personal=SimpleNamespace(revision=0),
+            predict_index=SimpleNamespace(keys=lambda *args: None),
+            predicting=False,
             on_key=lambda *args: "確定秘密",
             composition="編集中の秘密", converted=False, tokens=[], candidates=[], cand_index=0,
             direct=False,
@@ -85,6 +89,7 @@ class ServerTest(unittest.TestCase):
                 "segments": [], "focus": -1, "candidate_page": 0,
                 "candidate_kinds": [], "has_next_page": False,
                 "direct": False, "pass_through": False, "pending": False,
+                "predicting": False,
             })
         self.assertEqual(replies[-1]["commit"], "う")
         self.assertEqual(stderr.getvalue(), "")
