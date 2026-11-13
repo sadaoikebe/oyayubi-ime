@@ -53,21 +53,29 @@ jobs:
           $embedHash = (Get-FileHash $embedName -Algorithm SHA256).Hash.ToLower()
           $setup = Get-Content packaging/setup.ps1 -Raw
           $setup = $setup -replace "__TAG__", $env:GITHUB_REF_NAME -replace "__EMBED_SHA256__", $embedHash
-          $setup | Set-Content setup.ps1 -Encoding UTF8
+          # 利用者が実行するのは Windows PowerShell 5.1。BOM が無いと ANSI として読まれる。
+          $setup | Set-Content setup.ps1 -Encoding utf8BOM
 
-      - name: setup.ps1 の構文チェック (刻印後の実物も)
-        shell: pwsh
+      - name: setup.ps1 の構文チェック (刻印後の実物も、利用者と同じ Windows PowerShell 5.1 で)
+        shell: powershell
         run: |
           foreach ($f in @("packaging/setup.ps1", "packaging/uninstall.ps1", "setup.ps1")) {
+            $head = [IO.File]::ReadAllBytes((Resolve-Path $f)) | Select-Object -First 3
+            if (($head -join ",") -ne "239,187,191") { throw "$f : missing UTF-8 BOM (Windows PowerShell 5.1 would read it as ANSI)" }
             $tokens = $null; $errors = $null
             [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $f), [ref]$tokens, [ref]$errors)
             if ($errors -and $errors.Count) { throw "$f : $($errors[0].Message)" }
             Write-Host "parse OK: $f"
           }
 
-      - name: リリースへ公開
+      # プレリリースとして公開する。README の latest URL はプレリリースを
+      # 指さないので、実機でインストールを確かめてから正式にする
+      # (gh release edit <tag> --prerelease=false --latest)。
+      - name: リリースへ公開 (プレリリース)
         uses: softprops/action-gh-release@v2
         with:
+          prerelease: true
+          body: "インストール・更新・アンインストールは README の「インストール・更新」を参照してください。"
           files: |
             setup.ps1
             NicolaIME3.dll
