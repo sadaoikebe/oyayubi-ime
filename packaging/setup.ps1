@@ -12,8 +12,26 @@
 param(
     [string]$Tag = "",
     [string]$InstallRoot = "$env:LOCALAPPDATA\oyayubi-ime",
-    [switch]$Yes
+    [switch]$Yes,
+    # システムの Python があっても使わず、同梱ランタイムを入れる。
+    [switch]$EmbeddedPython
 )
+
+# PowerShell 7 (pwsh) から起動されたら、Windows PowerShell 5.1 で起動し直す。
+# 実行と検証は、Windows に必ず入っている 5.1 の一経路だけにしてある。
+if ($PSVersionTable.PSEdition -eq "Core") {
+    $relaunch = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $PSCommandPath)
+    foreach ($kv in $PSBoundParameters.GetEnumerator()) {
+        if ($kv.Value -is [System.Management.Automation.SwitchParameter]) {
+            if ($kv.Value.IsPresent) { $relaunch += "-$($kv.Key)" }
+        } else {
+            $relaunch += "-$($kv.Key)"
+            $relaunch += [string]$kv.Value
+        }
+    }
+    & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" @relaunch
+    exit $LASTEXITCODE
+}
 
 $ErrorActionPreference = "Stop"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -113,6 +131,7 @@ if (-not [Environment]::Is64BitOperatingSystem) { Fail "64bit 版 Windows が必
 $os = [Environment]::OSVersion.Version
 if ($os.Major -lt 10) { Fail "Windows 10 以降が必要です (検出: $os)。" }
 Say "  OS: Windows $($os.Major).$($os.Minor) 64bit OK"
+Say "  PowerShell: $($PSVersionTable.PSVersion) ($($PSVersionTable.PSEdition))"
 
 $drive = Split-Path $InstallRoot -Qualifier
 $free = (Get-PSDrive ($drive.TrimEnd(':'))).Free
@@ -126,9 +145,12 @@ if ($unreachable.Count) {
 }
 Say "  ネット接続: 取得先 $($hosts.Count) 件すべて到達 OK"
 
-$python = Find-Python
+$python = if ($EmbeddedPython) { $null } else { Find-Python }
 $useEmbed = $false
-if ($python) {
+if ($EmbeddedPython) {
+    Say "  Python: -EmbeddedPython の指定により、システムの Python は使いません。"
+    $useEmbed = $true
+} elseif ($python) {
     Say "  Python: $($python.Version) ($($python.Exe)) を検出"
     if (-not $python.VenvOk) {
         Say "  venv が使えません。同梱ランタイム経路に切り替えます。"

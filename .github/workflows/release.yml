@@ -82,3 +82,81 @@ jobs:
             NicolaIME3.dll.sha256
             oyayubi-ime-source.zip
             oyayubi-ime-source.zip.sha256
+
+  # 公開したプレリリースの setup.ps1 で、まっさらなランナーに実際に入れる。
+  # インストール → 更新 (学習データが残るか) → アンインストール (全部消えるか)。
+  install-test:
+    needs: build
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: venv, Windows PowerShell 5.1
+            launcher: powershell
+            embedded: "false"
+            unicode_root: "false"
+            expect_route: "(venv)"
+          - name: embedded runtime, started from pwsh, non-ASCII path with spaces
+            launcher: pwsh
+            embedded: "true"
+            unicode_root: "true"
+            expect_route: "embeddable"
+    name: install (${{ matrix.name }})
+    steps:
+      - name: install, update, uninstall
+        shell: powershell
+        env:
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+          LAUNCHER: ${{ matrix.launcher }}
+          EMBEDDED: ${{ matrix.embedded }}
+          UNICODE_ROOT: ${{ matrix.unicode_root }}
+          EXPECT_ROUTE: ${{ matrix.expect_route }}
+        run: |
+          # ASCII only: this step runs in Windows PowerShell 5.1.
+          $ErrorActionPreference = "Stop"
+          $setup = Join-Path $env:RUNNER_TEMP "oyayubi-setup.ps1"
+          Invoke-WebRequest -UseBasicParsing "https://github.com/$env:REPO/releases/download/$env:TAG/setup.ps1" -OutFile $setup
+          $root = Join-Path $env:LOCALAPPDATA "oyayubi-ime"
+          if ($env:UNICODE_ROOT -eq "true") {
+            $jp = -join [char[]](0x30C6, 0x30B9, 0x30C8)
+            $root = Join-Path $env:RUNNER_TEMP "$jp user\oyayubi ime"
+          }
+          $setupArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $setup, "-Yes", "-InstallRoot", $root)
+          if ($env:EMBEDDED -eq "true") { $setupArgs += "-EmbeddedPython" }
+          $clsid = "Registry::HKEY_LOCAL_MACHINE\Software\Classes\CLSID\{A7C4E201-0B3A-4F11-9E61-0C1A0B7E0A01}"
+
+          function Invoke-Logged([string]$label, [string[]]$argv) {
+            Write-Host "::group::$label"
+            # 5.1 turns a child's stderr into error records; do not stop on them.
+            $ErrorActionPreference = "Continue"
+            $out = & $env:LAUNCHER @argv 2>&1 | ForEach-Object { "$_" }
+            $code = $LASTEXITCODE
+            $ErrorActionPreference = "Stop"
+            $out | ForEach-Object { Write-Host $_ }
+            Write-Host "::endgroup::"
+            if ($code -ne 0) { throw "$label failed with exit code $code" }
+            return ($out -join "`n")
+          }
+
+          $first = Invoke-Logged "install" $setupArgs
+          if ($first -notmatch "PowerShell: 5\.1") { throw "setup did not run in Windows PowerShell 5.1" }
+          if (-not $first.Contains($env:EXPECT_ROUTE)) { throw "expected the $env:EXPECT_ROUTE Python route" }
+          if (-not (Test-Path $clsid)) { throw "TIP is not registered" }
+          $learning = Join-Path $root "app\data\learning.jsonl"
+          if (-not (Test-Path $learning)) { throw "learning file was not created" }
+          Write-Host "install OK"
+
+          $marker = '{"ci":"learning survives an update"}'
+          Set-Content $learning $marker -Encoding ASCII
+          $second = Invoke-Logged "update" $setupArgs
+          if ($second -notmatch "PowerShell: 5\.1") { throw "update did not run in Windows PowerShell 5.1" }
+          if ((Get-Content $learning -Raw).Trim() -ne $marker) { throw "learning data changed during the update" }
+          Write-Host "update OK (learning data kept)"
+
+          $uninstall = Join-Path $root "app\packaging\uninstall.ps1"
+          $null = Invoke-Logged "uninstall" @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $uninstall, "-InstallRoot", $root)
+          if (Test-Path $root) { throw "install root remains after uninstall" }
+          if (Test-Path $clsid) { throw "TIP registration remains after uninstall" }
+          Write-Host "uninstall OK"

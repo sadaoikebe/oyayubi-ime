@@ -13,6 +13,22 @@ param(
     [switch]$KeepData
 )
 
+# PowerShell 7 (pwsh) から起動されたら、Windows PowerShell 5.1 で起動し直す。
+# 実行と検証は、Windows に必ず入っている 5.1 の一経路だけにしてある。
+if ($PSVersionTable.PSEdition -eq "Core") {
+    $relaunch = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $PSCommandPath)
+    foreach ($kv in $PSBoundParameters.GetEnumerator()) {
+        if ($kv.Value -is [System.Management.Automation.SwitchParameter]) {
+            if ($kv.Value.IsPresent) { $relaunch += "-$($kv.Key)" }
+        } else {
+            $relaunch += "-$($kv.Key)"
+            $relaunch += [string]$kv.Value
+        }
+    }
+    & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" @relaunch
+    exit $LASTEXITCODE
+}
+
 $ErrorActionPreference = "Stop"
 Set-Location $env:USERPROFILE   # 自分自身を含むフォルダを消すので、外に出ておく
 $AppDir = Join-Path $InstallRoot "app"
