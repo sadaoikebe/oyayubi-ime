@@ -282,7 +282,7 @@ class Engine:
         settings = parser.parse_args([])
         settings.config = path
         if settings.lm_rescore is None:
-            settings.lm_rescore = True  # the product path (as the resident server had it)
+            settings.lm_rescore = True  # the product path: on unless config.json says otherwise
         if problems:
             self.channel.warning("config")
         return settings

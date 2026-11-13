@@ -1,4 +1,4 @@
-"""Resident server only: LM rescoring off the key path (design 2026-11-12, D1-D8).
+"""The engine only: LM rescoring off the key path (design 2026-11-12, D1-D8).
 
 LmWorker owns the scorer on one daemon thread. ConnectionPipeline sits between a
 connection and its ImeSession: a ThumbTap with LM work leaves the session

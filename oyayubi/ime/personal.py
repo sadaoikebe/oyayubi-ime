@@ -8,7 +8,7 @@ effect without a restart: every conversion checks the file's signature.
 
 The overlay never mutates a reading's entry list in place. Each change builds
 a new list and swaps it into lex.by_reading in one assignment, so a decode
-running on another thread (resident connections, the LM worker) sees either
+running on another thread (the engine's sessions, the LM worker) sees either
 the old list or the new one.
 """
 from __future__ import annotations

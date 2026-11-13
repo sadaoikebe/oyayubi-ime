@@ -1,4 +1,9 @@
-"""JSON protocol for the TIP (stdio by default; --resident for shared TCP).
+"""The engine's request protocol, and a stdio host for tests and evaluation.
+
+The product talks to the engine through oyayubi.engine (REDESIGN §6.1); this
+module holds what both share: dispatch() applies one request to a session and
+returns the reply. ``python -m oyayubi.ime.server`` serves one session over
+stdin/stdout for tests and evaluation only (not a product path).
 
 One JSON object per line:
   {"op":"down","vk":74,"t":123}
@@ -11,12 +16,10 @@ One JSON object per line:
   {"op":"set_direct","direct":true}
   {"op":"toggle_direct"}
   {"op":"context","text":"確定済み"}
-  {"op":"stats"}  # resident only: counts since start, no text
-  {"op":"shutdown"}  # resident only: exit; respawned on demand, with fresh settings
   {"op":"down","vk":9,"t":300}  # Tab: predictions for the input, if any
 Reply: {"composition":"...","commit":"...","converted":false,"fsm":"S1","pending":false}
 predicting: the candidates are predictions (Tab acted; the TIP eats that Tab).
-pending: the conversion awaits the LM (resident); poll with timeout at "timer".
+pending: the conversion awaits the LM (engine); poll with timeout at "timer".
 """
 
 from __future__ import annotations
@@ -37,7 +40,7 @@ from oyayubi.ime.predict import DEFAULT_MODE as DEFAULT_PREDICTION, MODES as PRE
 
 
 def dispatch(sess: ImeSession, msg: dict) -> dict:
-    """Shared protocol path for stdio, resident connections and transcript tests."""
+    """Shared protocol path for the engine, the stdio host and transcript tests."""
     commit = apply_op(sess, msg)
     reply = snapshot(sess, msg.get("op"))
     reply["commit"] = commit
@@ -91,9 +94,8 @@ def snapshot(sess: ImeSession, op) -> dict:
 
 def argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--resident", action="store_true", help="serve multiple TIPs over loopback TCP")
     parser.add_argument("--runtime-dir", type=Path, default=None,
-                        help="private endpoint/lock directory (default ~/.oyayubi-ime)")
+                        help="the user's data directory (default ~/.oyayubi-ime)")
     parser.add_argument(
         "--log-text", action="store_true", help="log composition/commit text to stderr (private input)"
     )
@@ -111,11 +113,11 @@ def argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", type=Path, default=None,
                         help="settings file (default <runtime dir>/config.json; "
                              "command-line options override it)")
-    lm = parser.add_argument_group("Stage 5b LM rescoring (on by default for --resident)")
+    lm = parser.add_argument_group("Stage 5b LM rescoring (on by default in the engine)")
     lm.add_argument("--lm-rescore", action="store_true", default=None,
                     help="rescore the k-best with a causal LM on Space (needs torch+transformers)")
     lm.add_argument("--no-lm-rescore", action="store_false", dest="lm_rescore",
-                    help="disable LM rescoring (the resident default is on)")
+                    help="disable LM rescoring (the engine's default is on)")
     lm.add_argument("--lm-model", default=None,
                     help="HF model id or local directory (default rinna/japanese-gpt2-small)")
     lm.add_argument("--lm-alpha", type=float, default=None, help="LM weight (default 1.0)")
@@ -124,14 +126,14 @@ def argument_parser() -> argparse.ArgumentParser:
     lm.add_argument("--lm-timing", action="store_true",
                     help="log rescoring time per conversion to stderr (no text)")
     lm.add_argument("--lm-prefetch", choices=("thumb", "typing", "off"), default="thumb",
-                    help="resident: start the LM early on thumb press (default), "
+                    help="engine: start the LM early on thumb press (default), "
                          "on every keystroke, or never")
     lm.add_argument("--lm-deadline-ms", type=float, default=400,
-                    help="resident: fall back to the Viterbi 1-best after this wait")
+                    help="engine: fall back to the Viterbi 1-best after this wait")
     lm.add_argument("--lm-grace-ms", type=float, default=30,
-                    help="resident: how long the converting request waits for the LM")
+                    help="engine: how long the converting request waits for the LM")
     lm.add_argument("--lm-prefetch-delay-ms", type=float, default=30,
-                    help="resident: thumb press to prefetch start")
+                    help="engine: thumb press to prefetch start")
     return parser
 
 
@@ -149,9 +151,9 @@ def build_rescorer(args):
 
 def load_session(args, with_lm: bool = True, *, lex=None, create_learning_file: bool = False,
                  on_problem=None) -> ImeSession:
-    """Load expensive resources once, for stdio or a resident SessionFactory.
+    """Load expensive resources once, for the engine's sessions or the stdio host.
 
-    with_lm=False leaves sess.lm unset (the resident server loads it on a worker).
+    with_lm=False leaves sess.lm unset (the engine loads it on a worker).
     lex: an already loaded lexicon (the engine loads it itself, for its progress).
     create_learning_file: learning on makes a missing history file (the engine).
     on_problem: told once about a history that cannot be read or written.
@@ -203,17 +205,10 @@ def process_request(sess: ImeSession, msg: dict, *, log_text=False, lm_timing=Fa
 def main() -> None:
     args = config.parse_args(argument_parser())
     if args.lm_rescore is None:
-        # Resident serving is the product path: LM rescoring paid off in the
-        # 2026-11-12 measurement (53 fixed vs 1 broken on the Mozc-error set),
-        # and the scorer loads once per server. The stdio host stays opt-in.
-        args.lm_rescore = args.resident
-    # Pipes from the TIP default to cp1252; Japanese composition must be UTF-8.
+        args.lm_rescore = False  # the stdio host converts without the LM unless asked
+    # Pipes default to cp1252 on Windows; Japanese composition must be UTF-8.
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
-    if args.resident:
-        from oyayubi.ime.resident import run_resident
-        run_resident(args)
-        return
     sess = load_session(args)
     # The long-lived dictionary must not be traversed by full GC during typing.
     gc.freeze()

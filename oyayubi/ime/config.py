@@ -22,13 +22,13 @@ import os
 from pathlib import Path
 import sys
 
-DEFAULT_RUNTIME_DIR = Path.home() / ".oyayubi-ime"  # endpoint, lock and config.json
+DEFAULT_RUNTIME_DIR = Path.home() / ".oyayubi-ime"  # the user's data: config.json, logs, ...
 CONFIG_NAME = "config.json"
 
 LEARNING_MODES = ("on", "paused", "off")  # config.json "learning" (REDESIGN §6.7)
 
 # Options that only make sense per invocation, never from a file.
-NOT_IN_FILE = {"resident", "runtime_dir", "config", "help"}
+NOT_IN_FILE = {"runtime_dir", "config", "help"}
 
 # Settings that live elsewhere, listed so the inventory is complete.
 OTHER_SETTINGS = {
