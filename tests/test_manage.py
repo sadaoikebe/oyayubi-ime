@@ -146,7 +146,7 @@ class ManageTest(TempDir):
         self.assertEqual(status["personal_lexicon"]["words"], 1)
         self.assertEqual(status["resident_server"], "not running")
         out = self.run_manage("config", "show")[1]
-        self.assertIn(f'learning_file = "{self.learning}"\t[file]', out)
+        self.assertIn(f"learning_file = {json.dumps(str(self.learning), ensure_ascii=False)}\t[file]", out)
         self.assertIn("lm_deadline_ms = 400\t[default]", out)
         self.assertIn("tip.json toggle_vk", out)
 
