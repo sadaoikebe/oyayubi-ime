@@ -108,8 +108,12 @@ class LmWorker:
     """One daemon thread; the only user of the scorer."""
 
     def __init__(self, loader, lex, *, stats: LmStats | None = None, stall_ms: float = STALL_MS,
-                 clock=time.monotonic):
+                 clock=time.monotonic, on_disabled=None):
+        """on_disabled(reason): told once when the LM is not used any more
+        ("unavailable": it could not be loaded; "errors": it failed MAX_ERRORS
+        times in a row). Called on the worker thread."""
         self.loader = loader
+        self.on_disabled = on_disabled
         self.lex = lex
         self.stats = stats if stats is not None else LmStats()
         self.stall_ms = stall_ms
@@ -186,6 +190,8 @@ class LmWorker:
                   file=sys.stderr, flush=True)
             with self._cond:
                 self.state = "disabled"
+            if self.on_disabled is not None:
+                self.on_disabled("unavailable")
             return
         gc.freeze()  # the model's objects must not be traversed by full GC
         with self._cond:
@@ -231,21 +237,30 @@ class LmWorker:
                 if prime is not None:
                     prime(job.context)
             self._errors = 0
-        except Exception:
+        except Exception as exc:
             job.error = True
             self._errors += 1
+            print(f"LM job failed ({type(exc).__name__}); {self._errors} in a row",
+                  file=sys.stderr, flush=True)
         elapsed = (self.clock() - start) * 1000
         job.stats["job_ms"] = elapsed
         self.stats.busy(elapsed)
+        disabled = False
         with self._cond:
             self._running = None
-            if self._errors >= MAX_ERRORS:
+            if self._errors >= MAX_ERRORS and self.state != "disabled":
                 self.state = "disabled"
+                disabled = True
             if job.wanted:
                 self.stats.observe("job_ms", elapsed)
             elif job.kind == "convert" and job.cancelled:
                 self.stats.bump("prefetch", "cancelled")
             job.done.set()
+        if disabled:
+            print(f"LM rescoring disabled after {MAX_ERRORS} failures in a row",
+                  file=sys.stderr, flush=True)
+            if self.on_disabled is not None:
+                self.on_disabled("errors")
 
 
 PENDING = object()

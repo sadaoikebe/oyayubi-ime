@@ -59,10 +59,12 @@ class CausalLmScorer:
             torch.set_num_threads(threads)
         self.torch = torch
         # rinna's GPT-2 ships a SentencePiece (T5Tokenizer) vocabulary.
-        self.tok = AutoTokenizer.from_pretrained(model, use_fast=False)
+        # local_files_only: the IME never goes to the network (REDESIGN §6.2);
+        # the model is fetched at install (packaging/fetch_model.py).
+        self.tok = AutoTokenizer.from_pretrained(model, use_fast=False, local_files_only=True)
         # Eager attention: the trie forward passes a 4-D additive mask to the blocks.
         self.model = AutoModelForCausalLM.from_pretrained(
-            model, attn_implementation="eager").eval()
+            model, attn_implementation="eager", local_files_only=True).eval()
         self.bos = (self.tok.bos_token_id if self.tok.bos_token_id is not None
                     else self.tok.eos_token_id)
         self.pad = self.tok.pad_token_id or 0
