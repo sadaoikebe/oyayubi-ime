@@ -1567,6 +1567,11 @@ public:
         *icon = nullptr;
         return S_OK;
     }
+    HRESULT STDMETHODCALLTYPE GetText(BSTR* text) override {
+        if (!text) return E_INVALIDARG;
+        *text = SysAllocString(L"oyayubi-ime 管理");
+        return *text ? S_OK : E_OUTOFMEMORY;
+    }
 
     HRESULT STDMETHODCALLTYPE ActivateEx(ITfThreadMgr* ptim, TfClientId tid, DWORD) override {
         tm_ = ptim;
