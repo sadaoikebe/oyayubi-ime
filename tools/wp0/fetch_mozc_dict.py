@@ -47,11 +47,17 @@ def _is_current(dest: Path, expected: str | None) -> bool:
     return dest.stat().st_size > 100
 
 
-def main() -> None:
-    OUT.mkdir(parents=True, exist_ok=True)
+def main(argv=()) -> None:
+    """python -m tools.wp0.fetch_mozc_dict [--out DIR] (default third_party/mozc_oss_dict)."""
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--out", type=Path, default=None,
+                        help="where to put the files (the installer: shared\\dict\\<commit>)")
+    out = parser.parse_args(argv).out or OUT
+    out.mkdir(parents=True, exist_ok=True)
     expected = _expected_hashes()
     for name in FILES:
-        dest = OUT / name
+        dest = out / name
         if _is_current(dest, expected.get(name)):
             print("skip", name, dest.stat().st_size)
             continue
@@ -61,4 +67,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    main(sys.argv[1:])

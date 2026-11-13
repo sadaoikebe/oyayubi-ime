@@ -117,7 +117,11 @@ def main(argv=None) -> int:
     v = sub.add_parser("verify", help="check the current files against the manifest")
     v.add_argument("--manifest", type=Path, default=MANIFEST)
     v.add_argument("--deep", action="store_true", help="also compare the cache with the text")
+    v.add_argument("--dict-dir", type=Path, default=None,
+                   help="check the files in this directory (the installer's shared copy)")
     args = parser.parse_args(argv)
+    if getattr(args, "dict_dir", None) is not None:
+        mozc_dict.DICT_DIR = args.dict_dir
     if args.command == "write":
         args.manifest.write_text(json.dumps(build(args.label, args.upstream_commit),
                                             ensure_ascii=False, indent=2) + "\n",

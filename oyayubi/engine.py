@@ -144,6 +144,9 @@ def argument_parser() -> argparse.ArgumentParser:
                         help="the Mozc dictionary files (default third_party/mozc_oss_dict)")
     parser.add_argument("--cache-dir", type=Path, default=None,
                         help="where the dictionary cache is kept (default data/cache)")
+    parser.add_argument("--lm-model", default=None,
+                        help="the installed LM model directory (engine.json); a lm_model "
+                             "in config.json still wins")
     parser.add_argument("--test-hooks", action="store_true",
                         help="accept {\"op\":\"test_raise\"}, which raises inside a request")
     return parser
@@ -271,6 +274,8 @@ class Engine:
         parser = server.argument_parser()
         parser.set_defaults(learning_file=args.data_dir / "learning.jsonl",
                             personal_file=args.data_dir / "personal_lexicon.jsonl")
+        if args.lm_model is not None:
+            parser.set_defaults(lm_model=args.lm_model)
         path = args.data_dir / config.CONFIG_NAME
         problems: list[str] = []
         parser.set_defaults(**config.read_config(path, parser, problems))
