@@ -186,6 +186,7 @@ public:
         RecordNotice(data_dir_ / "logs", notice);
     }
     void ClearStopped() override { Log("notice cleared"); }
+    void ShowReason() override { Log("the stop's reason was asked for (a dialog on Windows)"); }
 
     void OpenAdmin() override {
         if (config_.pythonw.empty()) return;

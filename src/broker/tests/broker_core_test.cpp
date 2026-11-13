@@ -20,6 +20,7 @@ struct Fake : Platform {
     int kills = 0;
     int spawn_resets = 0;
     int cleared = 0;
+    int reasons = 0;
     std::vector<std::string> to_engine;
     std::vector<std::pair<ClientId, std::string>> to_client;
     std::vector<Notice> notices;
@@ -40,6 +41,7 @@ struct Fake : Platform {
     void WriteClient(ClientId c, const std::string& line) override { to_client.push_back({c, line}); }
     void Notify(const Notice& n) override { notices.push_back(n); }
     void ClearStopped() override { ++cleared; }
+    void ShowReason() override { ++reasons; }
     void OpenAdmin() override {}
     void ResetSpawnCount() override { ++spawn_resets; }
     bool MaintenanceActive() override { return maintenance; }
@@ -217,6 +219,8 @@ void ThreeCrashesThenRetryStartsOnce() {
     assert(f.starts == 3 && b.State() == EngineState::Failed);
     assert(f.notices.size() == 1);
     Hello(b, 1);
+    b.OnClientLine(1, R"({"op":"show_reason"})");  // the TIP's menu
+    assert(f.reasons == 1);
     b.OnClientLine(1, R"({"op":"retry"})");
     assert(f.starts == 4 && f.cleared == 1 && b.State() == EngineState::Starting);
     b.OnEngineExit(1);  // the one attempt fails before ready: stopped again

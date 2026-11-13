@@ -163,6 +163,10 @@ void Broker::OnClientLine(ClientId id, const std::string& line) {
         Retry();
         return;
     }
+    if (op == "show_reason") {
+        platform_.ShowReason();
+        return;
+    }
     if (op == "open_admin") {
         Log("opening the management window");
         platform_.OpenAdmin();

@@ -55,6 +55,7 @@ public:
     virtual void WriteClient(ClientId client, const std::string& line) = 0;
     virtual void Notify(const Notice& notice) = 0;
     virtual void ClearStopped() = 0;  // the stop the user was told about is over
+    virtual void ShowReason() = 0;  // the TIP's menu "原因を表示" (§9.4): the stop dialog
     virtual void OpenAdmin() = 0;
     virtual void ResetSpawnCount() = 0;  // §7.3 condition 4
     virtual bool MaintenanceActive() = 0;  // §8.1

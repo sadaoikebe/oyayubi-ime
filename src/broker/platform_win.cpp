@@ -52,6 +52,7 @@ constexpr UINT WM_APP_NOTICE = WM_APP + 1;
 constexpr UINT WM_APP_CLEAR = WM_APP + 2;
 constexpr UINT WM_APP_TRAY = WM_APP + 3;
 constexpr UINT WM_APP_EXIT = WM_APP + 4;
+constexpr UINT WM_APP_REASON = WM_APP + 5;
 constexpr ULONG_PTR KEY_IO = 1, KEY_ENGINE = 2, KEY_UI = 3;
 constexpr int UI_RETRY = 1;
 constexpr int BUTTON_RETRY = 101, BUTTON_LOGS = 102, BUTTON_REINSTALL = 103;
@@ -310,6 +311,7 @@ public:
     }
     void Post(const Notice& notice) { PostMessageW(hwnd_, WM_APP_NOTICE, 0, (LPARAM)new Notice(notice)); }
     void ClearStopped() { PostMessageW(hwnd_, WM_APP_CLEAR, 0, 0); }
+    void ShowReason() { PostMessageW(hwnd_, WM_APP_REASON, 0, 0); }
 
 private:
     void Run(HANDLE created) {
@@ -355,6 +357,10 @@ private:
         if (message == WM_APP_CLEAR) {
             stopped_ = false;
             RemoveIcon();
+            return 0;
+        }
+        if (message == WM_APP_REASON) {
+            if (stopped_) ShowDialog();  // asked for from the TIP's menu
             return 0;
         }
         if (message == WM_APP_EXIT || message == WM_ENDSESSION) {
@@ -638,6 +644,9 @@ public:
     }
     void ClearStopped() override {
         if (ui_) ui_->ClearStopped();
+    }
+    void ShowReason() override {
+        if (ui_) ui_->ShowReason();
     }
 
     void OpenAdmin() override {
