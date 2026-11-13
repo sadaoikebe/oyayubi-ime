@@ -55,7 +55,7 @@ def read_config(path: Path, parser: argparse.ArgumentParser) -> dict:
     file cannot keep the IME from starting.
     """
     try:
-        raw = json.loads(Path(path).read_text(encoding="utf-8"))
+        raw = json.loads(Path(path).read_text(encoding="utf-8-sig"))  # a BOM is fine
     except FileNotFoundError:
         return {}
     known = file_settings(parser)
@@ -128,7 +128,7 @@ def parse_setting(parser: argparse.ArgumentParser, key: str, text: str):
 
 def _read_raw(path: Path) -> dict:
     try:
-        raw = json.loads(Path(path).read_text(encoding="utf-8"))
+        raw = json.loads(Path(path).read_text(encoding="utf-8-sig"))  # a BOM is fine
     except FileNotFoundError:
         return {}
     if not isinstance(raw, dict):

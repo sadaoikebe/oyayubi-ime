@@ -284,6 +284,15 @@ class ConfigTest(unittest.TestCase):
             path.write_text('{"prediction": "off"}', encoding="utf-8")
             self.assertEqual(config.read_config(path, argument_parser()), {"prediction": "off"})
 
+    def test_config_file_with_a_bom_is_read(self):
+        # Windows PowerShell 5.1 (setup.ps1 before the fix) and Notepad write one.
+        from oyayubi.ime import config
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.json"
+            path.write_bytes(b"\xef\xbb\xbf" + b'{"prediction": "off"}')
+            self.assertEqual(config.read_config(path, argument_parser()), {"prediction": "off"})
+            self.assertEqual(config._read_raw(path), {"prediction": "off"})
+
 
 if __name__ == "__main__":
     unittest.main()

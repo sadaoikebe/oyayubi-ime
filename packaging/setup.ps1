@@ -297,7 +297,9 @@ if (Test-Path $configPath) { $config = Get-Content $configPath -Raw | ConvertFro
 $modelPath = Join-Path $AppDir "model"
 if ($config.PSObject.Properties.Name -contains "lm_model") { $config.lm_model = $modelPath }
 else { $config | Add-Member -NotePropertyName "lm_model" -NotePropertyValue $modelPath }
-$config | ConvertTo-Json -Depth 4 | Set-Content $configPath -Encoding UTF8
+# BOM なしで書く (5.1 の Set-Content -Encoding UTF8 は BOM を付け、Python の json が読めない)。
+$utf8NoBom = New-Object Text.UTF8Encoding($false)
+[IO.File]::WriteAllText($configPath, ($config | ConvertTo-Json -Depth 4), $utf8NoBom)
 
 # 学習はファイルがあるときだけ有効になる。新規インストールでは空のファイルを
 # 作って最初から学習を有効にする。更新では触れない (利用者が消して無効に
@@ -339,7 +341,7 @@ $manifest = [ordered]@{
     python_route = $(if ($useEmbed) { "embeddable" } else { "venv" })
     runtime_dir = $RuntimeDir
 }
-$manifest | ConvertTo-Json -Depth 4 | Set-Content $ManifestPath -Encoding UTF8
+[IO.File]::WriteAllText($ManifestPath, ($manifest | ConvertTo-Json -Depth 4), $utf8NoBom)
 Remove-Item $tmp -Recurse -Force
 
 Say ""
