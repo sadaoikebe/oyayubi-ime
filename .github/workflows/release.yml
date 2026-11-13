@@ -43,7 +43,7 @@ jobs:
         shell: pwsh
         run: |
           git archive --format=zip -o oyayubi-ime-source.zip HEAD
-          Copy-Item src/tip/dist/NicolaIME3.dll .
+          Copy-Item dist/NicolaIME3.dll .
           foreach ($name in @("NicolaIME3.dll", "oyayubi-ime-source.zip")) {
             (Get-FileHash $name -Algorithm SHA256).Hash.ToLower() | Set-Content "$name.sha256" -Encoding ASCII -NoNewline
           }
