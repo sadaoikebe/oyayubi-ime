@@ -31,7 +31,7 @@
 | TSF | Notepad で NicolaIME として打てる。`かえる`（W 単独→Space+W→Space+I）で「か」が残る |
 | 常駐サーバ | ユーザーごとに 1 プロセス（`python -m oyayubi.ime.server --resident`）を全アプリで共有。TIP が loopback TCP＋トークン認証で接続し、不在なら起動する。詳細は [STAGE3.md](STAGE3.md) と `src/tip/README.md` |
 | 管理 | 単語登録・学習の管理・設定・状態を、管理ウィンドウ（`python -m oyayubi.ime.admin_ui`）と端末（`python -m oyayubi.ime.manage`）の両方から扱える。両者は同じ関数で同じファイルを触る |
-| インストール | 設計は docs/INSTALL.md。持ち込むのは小さな `packaging/setup.ps1` だけで、環境チェック（Python の有無・版・場所、空き容量、取得先への接続。不合格でも入れられるものは承認を取って公式の方法で入れる）→ 本体と DLL を GitHub Releases から SHA-256 照合つきで取得 → 専用 venv（無ければ同梱 Python）へ LM 込みで構築 → 登録 → 実辞書スモークまで自動。`uninstall.ps1` は完全削除が既定（-KeepData で学習データ等だけ退避）。リリースは `.github/workflows/release.yml` が DLL ビルド・依存ピン留め・モデル固定リビジョン・setup 構文を検証してから公開する。旧「全部同梱 zip」方式は廃止。実機での setup 実行は未実施 |
+| インストール | 設計は docs/INSTALL.md。持ち込むのは小さな `packaging/setup.ps1` だけで、環境チェック（Python の有無・版・場所、空き容量、取得先への接続。不合格でも入れられるものは承認を取って公式の方法で入れる）→ 本体と DLL を GitHub Releases から SHA-256 照合つきで取得 → 専用 venv（無ければ同梱 Python）へ LM 込みで構築 → 登録 → 実辞書スモークまで自動。再実行はそのまま更新になる（学習データ等は保持、辞書キャッシュは作り直し）。`uninstall.ps1` は完全削除が既定（-KeepData で学習データ等だけ退避）。リリースは `.github/workflows/release.yml` が DLL ビルド・依存ピン留め・モデル固定リビジョン・setup 構文を検証してから公開する。旧「全部同梱 zip」方式は廃止。実機での setup 実行は未実施 |
 | 登録 | `ITfInputProcessorProfileMgr` のみ。日本語の第 2 IME。Alt+Shift は言語巡回なので Microsoft IME が当たる。切替は Win+Space かトレイ |
 
 試験窓: `python -m oyayubi.ime.host_win32`（TSF を通さない）。

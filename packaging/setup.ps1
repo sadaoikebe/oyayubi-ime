@@ -93,10 +93,18 @@ Say "oyayubi-ime セットアップ"
 Say "インストール先: $InstallRoot"
 Say ""
 
+# 再実行はそのまま更新になる (専用オプションは無い)。学習データ・
+# 個人辞書・設定は保持される。下の各段階は冪等に作ってある。
+$Updating = $false
+$OldTag = $null
 if (Test-Path $ManifestPath) {
-    Fail "既にインストールされています。先に uninstall.ps1 を実行してください。"
+    $Updating = $true
+    try { $OldTag = (Get-Content $ManifestPath -Raw | ConvertFrom-Json).tag } catch { }
+    Say "インストール済み (タグ: $OldTag) を検出しました。更新として実行します。"
+    Say "学習データ・個人辞書・設定は保持されます。"
+    Say ""
 }
-if ((Test-Path $AppDir) -and (Get-ChildItem $AppDir -Force | Select-Object -First 1)) {
+if (-not $Updating -and (Test-Path $AppDir) -and (Get-ChildItem $AppDir -Force | Select-Object -First 1)) {
     Fail "$AppDir に未知の内容があります。上書きしません。空にしてから再実行してください。"
 }
 
@@ -166,12 +174,24 @@ function Get-Verified([string]$url, [string]$dest) {
     Say "  照合 OK: $(Split-Path $dest -Leaf)"
 }
 
+if ($Updating) {
+    $servers = Get-CimInstance Win32_Process -Filter "Name like 'python%'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($InstallRoot) -and $_.CommandLine -like "*oyayubi.ime.server*" }
+    foreach ($s in $servers) {
+        Stop-Process -Id $s.ProcessId -Force -ErrorAction SilentlyContinue
+        Say "  更新のため常駐サーバを停止しました (PID $($s.ProcessId))。"
+    }
+}
 $sourceZip = Join-Path $tmp "oyayubi-ime-source.zip"
 $dllPath = Join-Path $tmp "NicolaIME3.dll"
 Get-Verified "$baseUrl/oyayubi-ime-source.zip" $sourceZip
 Get-Verified "$baseUrl/NicolaIME3.dll" $dllPath
 Expand-Archive $sourceZip -DestinationPath $AppDir -Force
-Copy-Item $dllPath (Join-Path $AppDir "NicolaIME3.dll")
+try {
+    Copy-Item $dllPath (Join-Path $AppDir "NicolaIME3.dll") -Force -ErrorAction Stop
+} catch {
+    Fail "DLL を置き換えられませんでした。IME を使っているアプリを全部閉じて (またはサインアウトして) から、setup.ps1 を再実行してください。再実行は更新として続きから動きます。"
+}
 
 # ---------------------------------------------------------------- 実行環境
 Say ""
@@ -222,7 +242,10 @@ Invoke-Step "辞書の取得 (google/mozc 上流、約 93MB)" {
 Invoke-Step "辞書マニフェストの照合 (SHA-256)" {
     Push-Location $AppDir; & $runtimePython -m oyayubi.ime.manage dict verify; Pop-Location
 }
-Invoke-Step "辞書キャッシュの構築 (初回のみ数分かかります)" {
+if ($Updating) {
+    Remove-Item (Join-Path $AppDir "data\cache") -Recurse -Force -ErrorAction SilentlyContinue
+}
+Invoke-Step "辞書キャッシュの構築 (初回と辞書更新時のみ数分かかります)" {
     Push-Location $AppDir; & $runtimePython -c "from oyayubi.lattice.mozc_dict import load_lex; load_lex()"; Pop-Location
 }
 Invoke-Step "LM モデルの取得 (HuggingFace、リビジョン固定)" {
@@ -274,7 +297,8 @@ $manifest | ConvertTo-Json -Depth 4 | Set-Content $ManifestPath -Encoding UTF8
 Remove-Item $tmp -Recurse -Force
 
 Say ""
-Say "完了しました。入力切替 (Win+Space) で oyayubi-ime を選んでください。"
+if ($Updating) { Say "更新が完了しました (タグ: $Tag)。" } else { Say "完了しました。" }
+Say "入力切替 (Win+Space) で oyayubi-ime を選んでください。"
 Say "状態確認: `"$runtimePython`" -m oyayubi.ime.manage status (場所: $AppDir)"
 Say "管理ウィンドウ: `"$runtimePython`" -m oyayubi.ime.admin_ui"
 Say "アンインストール: uninstall.ps1 (全部消えます。学習データを残すときは -KeepData)"
