@@ -1,4 +1,5 @@
-"""Looking after the learning history file (D2): list, forget, compact, clear.
+"""Looking after the learning history file (D2): list, forget, promote, pause,
+compact, clear.
 
 Everything here goes through LearningStore's replay, so what is listed is
 exactly what conversion uses. Rewrites (compact, clear) replace the file
@@ -12,7 +13,8 @@ import json
 import os
 from pathlib import Path
 
-from .learning import Confirmation, LearningStore
+from . import personal
+from .learning import Confirmation, LearningStore, pause_marker
 
 
 @dataclass(frozen=True)
@@ -44,6 +46,37 @@ def forget(path: Path, reading: str, surface: str) -> bool:
     if (reading, surface) not in store._pairs:
         return False
     return store.suppress(reading, surface)
+
+
+def is_learned(path: Path, reading: str, surface: str) -> bool:
+    return (reading, surface) in LearningStore(path)._pairs
+
+
+def promote(path: Path, personal_path: Path, reading: str, surface: str,
+            pos: str = "名詞") -> personal.Word | None:
+    """Register a learned pair as a personal word, so it survives clearing the
+    history; None if the pair was never learned (register it as a word instead)."""
+    if not is_learned(path, reading, surface):
+        return None
+    return personal.add_word(personal_path, reading, surface, pos)
+
+
+def state(path: Path) -> str:
+    if not Path(path).exists():
+        return "off (no file)"
+    return "paused" if pause_marker(path).exists() else "on"
+
+
+def set_paused(path: Path, paused: bool) -> None:
+    """Pause (history kept and used, nothing recorded) or resume learning."""
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(path)
+    marker = pause_marker(path)
+    if paused:
+        marker.touch()
+    else:
+        marker.unlink(missing_ok=True)
 
 
 def _rewrite(path: Path, rows: list[Confirmation]) -> None:

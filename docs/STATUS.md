@@ -30,9 +30,19 @@
 | 確定学習 | 文節の読み・表記・左隣をローカルJSONLへ保存。1-best・文節候補へ減衰するボーナス、未知かなのユーザー語登録。Shift+F6で候補の忘却、Shift+F7で確定ごとの学習取消（複数回可）。無修飾のF6/F7は慣例どおりひらがな/カタカナ変換。いずれも追記式。ファイルなしは無効。評価は学習を読み込まない |
 | TSF | Notepad で NicolaIME として打てる。`かえる`（W 単独→Space+W→Space+I）で「か」が残る |
 | 常駐サーバ | ユーザーごとに 1 プロセス（`python -m oyayubi.ime.server --resident`）を全アプリで共有。TIP が loopback TCP＋トークン認証で接続し、不在なら起動する。詳細は [STAGE3.md](STAGE3.md) と `src/tip/README.md` |
+| 管理 | 単語登録・学習の管理・設定・状態を、管理ウィンドウ（`python -m oyayubi.ime.admin_ui`）と端末（`python -m oyayubi.ime.manage`）の両方から扱える。両者は同じ関数で同じファイルを触る |
 | 登録 | `ITfInputProcessorProfileMgr` のみ。日本語の第 2 IME。Alt+Shift は言語巡回なので Microsoft IME が当たる。切替は Win+Space かトレイ |
 
 試験窓: `python -m oyayubi.ime.host_win32`（TSF を通さない）。
+
+管理ウィンドウ（2026-11-13）: `python -m oyayubi.ime.admin_ui`（tkinter、標準ライブラリのみ。`--runtime-dir` / `--config` は manage と同じ）。単語登録・学習・設定・状態の 4 タブ。
+
+- 単語登録: 個人辞書（`personal_file`）の一覧・登録（読み・単語・品詞・コスト）・削除。動いている変換サーバには次の変換から効く
+- 学習: 学習履歴の一覧と検索、選択した組の忘却（Shift+F6 と同じ抑制）、単語登録への昇格（履歴を消しても残る）、学習の一時停止／再開、件数。学習ファイルが無い（学習オフ）ときは一時停止も忘却もできない
+- 設定: `config.json` に書ける全項目を値・出所（file／default）・説明つきで表示し、選んで書き換え・既定に戻す。値はサーバの引数と同じ変換・検査を通し、知らないキーは残す。サーバの次回起動から有効。tip.json など他所の設定は一覧だけ
+- 状態: `manage status` と同じ内容（設定ファイル、学習、個人辞書、辞書マニフェスト、常駐サーバ）
+
+ロジックは `AdminModel`（tkinter 非依存、`tests/test_admin_ui.py`）にあり、画面は薄い殻。TIP／言語バーから開く導線はまだ無い。
 
 候補窓: Spaceで変換、←→で文節移動、Shift+←→で1トークンずつ文節伸縮、Space / ↑↓で文節候補巡回、PgUp/Downで9件ページ送り、1–9で選択、Enterで全確定。F6で注目文節をひらがなに、F7でカタカナに変換し、Shift+F6で注目候補の学習を忘却、Shift+F7で直近の確定学習を戻す（確定文字は保持）。詳細は[STAGE4.md](STAGE4.md)。かな候補も末尾にある。既読と記憶のように別読みの語は並べる。左右ラベルは付けない。TIPへの接続はStage 3。
 

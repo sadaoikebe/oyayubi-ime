@@ -9,11 +9,16 @@ The TIP keeps its own ~/.oyayubi-ime/tip.json (read by the C++ side); the
 settings inventory below lists both so there is one place to look.
 
   python -m oyayubi.ime.manage config show   # effective values and their source
+  python -m oyayubi.ime.admin_ui             # view and edit them in a window
+
+The server reads the file when it starts: a changed setting takes effect at
+the next server start.
 """
 from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import sys
 
@@ -92,3 +97,68 @@ def effective(parser: argparse.ArgumentParser, path: Path) -> list[tuple[str, ob
             value, source = action.default, "default"
         rows.append((dest, value, source, action.help or ""))
     return rows
+
+
+def is_switch(action: argparse.Action) -> bool:
+    """An on/off option (store_true): its file value is true or false."""
+    return action.nargs == 0 and isinstance(action.const, bool)
+
+
+def parse_setting(parser: argparse.ArgumentParser, key: str, text: str):
+    """Text typed for a setting, converted and checked as read_config would."""
+    action = file_settings(parser).get(key)
+    if action is None:
+        raise ValueError(f"unknown setting {key!r}")
+    text = text.strip()
+    if is_switch(action):
+        lowered = text.lower()
+        if lowered in ("true", "on", "yes", "1"):
+            return True
+        if lowered in ("false", "off", "no", "0"):
+            return False
+        raise ValueError(f"{key} is on or off (true/false), not {text!r}")
+    try:
+        value = action.type(text) if action.type is not None else text
+    except (TypeError, ValueError):
+        raise ValueError(f"{key}: {text!r} is not a valid value") from None
+    if action.choices is not None and value not in action.choices:
+        raise ValueError(f"{key} is one of {list(action.choices)}, not {text!r}")
+    return value
+
+
+def _read_raw(path: Path) -> dict:
+    try:
+        raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+    if not isinstance(raw, dict):
+        raise ValueError(f"{path} does not hold a JSON object")
+    return raw
+
+
+def _write_raw(path: Path, raw: dict) -> None:
+    """Replace the file atomically; keys the server does not know stay as written."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(raw, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def set_setting(path: Path, parser: argparse.ArgumentParser, key: str, text: str):
+    """Write one setting into the file; returns the value as stored."""
+    value = parse_setting(parser, key, text)
+    raw = _read_raw(path)
+    raw[key] = str(value) if isinstance(value, Path) else value
+    _write_raw(path, raw)
+    return value
+
+
+def unset_setting(path: Path, key: str) -> bool:
+    """Drop a setting from the file (back to the built-in default)."""
+    raw = _read_raw(path)
+    if key not in raw:
+        return False
+    del raw[key]
+    _write_raw(path, raw)
+    return True

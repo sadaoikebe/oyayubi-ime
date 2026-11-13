@@ -10,7 +10,7 @@
   python -m oyayubi.ime.manage learning clear [--with-words]
   python -m oyayubi.ime.manage learning pause | resume
   python -m oyayubi.ime.manage dict verify [--deep] | write --label LABEL
-  python -m oyayubi.ime.manage config show
+  python -m oyayubi.ime.manage config show | set KEY VALUE | unset KEY
   python -m oyayubi.ime.manage status
 
 The files are the ones the server uses: its settings file (config.json in the
@@ -28,7 +28,6 @@ import sys
 
 from oyayubi.lattice import dict_manifest
 from . import config, learning_admin, personal
-from .learning import LearningStore, pause_marker
 
 
 def server_settings(runtime_dir: Path | None, config_path: Path | None) -> argparse.Namespace:
@@ -41,10 +40,7 @@ def server_settings(runtime_dir: Path | None, config_path: Path | None) -> argpa
     return config.parse_args(argument_parser(), argv)
 
 
-def learning_state(path: Path) -> str:
-    if not path.exists():
-        return "off (no file)"
-    return "paused" if pause_marker(path).exists() else "on"
+learning_state = learning_admin.state
 
 
 def _when(timestamp: float) -> str:
@@ -81,11 +77,7 @@ def cmd_learning(args, settings) -> int:
         if not path.exists():
             print(f"learning is off (no {path}); nothing to {args.action}")
             return 1
-        marker = pause_marker(path)
-        if args.action == "pause":
-            marker.touch()
-        else:
-            marker.unlink(missing_ok=True)
+        learning_admin.set_paused(path, args.action == "pause")
         print(f"learning {learning_state(path)}")
         return 0
     if not path.exists():
@@ -97,10 +89,11 @@ def cmd_learning(args, settings) -> int:
             return 1
         print(f"forgot {args.reading} → {args.surface}")
     elif args.action == "promote":
-        if (args.reading, args.surface) not in LearningStore(path)._pairs:
+        word = learning_admin.promote(path, settings.personal_file, args.reading,
+                                      args.surface, args.pos)
+        if word is None:
             print(f"not learned: {args.reading} → {args.surface} (use: word add)")
             return 1
-        word = personal.add_word(settings.personal_file, args.reading, args.surface, args.pos)
         print(f"registered {word.reading} → {word.surface} ({word.pos}) in "
               f"{settings.personal_file}; it now survives clearing the history")
     elif args.action == "compact":
@@ -124,6 +117,17 @@ def cmd_dict(args, settings) -> int:
 def cmd_config(args, settings) -> int:
     from .server import argument_parser
     path = settings.config
+    if args.action == "set":
+        value = config.set_setting(path, argument_parser(), args.key, args.value)
+        shown = json.dumps(str(value) if isinstance(value, Path) else value, ensure_ascii=False)
+        print(f"{args.key} = {shown} in {path}; takes effect when the server restarts")
+        return 0
+    if args.action == "unset":
+        if not config.unset_setting(path, args.key):
+            print(f"{args.key} is not set in {path}; it already uses the default")
+            return 1
+        print(f"{args.key} back to the default; takes effect when the server restarts")
+        return 0
     print(f"# {path} ({'present' if path.exists() else 'absent: built-in defaults'})")
     for name, value, source, help_text in config.effective(argument_parser(), path):
         shown = json.dumps(str(value) if isinstance(value, Path) else value, ensure_ascii=False)
@@ -212,8 +216,14 @@ def argument_parser() -> argparse.ArgumentParser:
     for p in (verify, write):
         p.add_argument("--manifest", type=Path, default=dict_manifest.MANIFEST)
 
-    sub.add_parser("config", help="settings").add_subparsers(
-        dest="action", required=True).add_parser("show")
+    settings_cmd = sub.add_parser("config", help="settings").add_subparsers(
+        dest="action", required=True)
+    settings_cmd.add_parser("show")
+    set_cmd = settings_cmd.add_parser("set", help="write one setting to config.json")
+    set_cmd.add_argument("key")
+    set_cmd.add_argument("value")
+    settings_cmd.add_parser("unset", help="drop a setting (back to the default)"
+                            ).add_argument("key")
     sub.add_parser("status", help="learning, words, dictionary, resident server")
     return parser
 

@@ -143,6 +143,17 @@ class ManageTest(TempDir):
         self.assertIn("lm_deadline_ms = 400\t[default]", out)
         self.assertIn("tip.json toggle_vk", out)
 
+    def test_config_set_and_unset(self):
+        self.assertEqual(self.run_manage("config", "set", "lm_k", "4")[0], 0)
+        self.assertEqual(json.loads(self.config.read_text(encoding="utf-8"))["lm_k"], 4)
+        self.assertIn("lm_k = 4\t[file]", self.run_manage("config", "show")[1])
+        err = io.StringIO()
+        with redirect_stderr(err):
+            self.assertEqual(self.run_manage("config", "set", "lm_k", "four")[0], 2)
+        self.assertEqual(self.run_manage("config", "unset", "lm_k")[0], 0)
+        self.assertNotIn("lm_k", json.loads(self.config.read_text(encoding="utf-8")))
+        self.assertEqual(self.run_manage("config", "unset", "lm_k")[0], 1)
+
     def test_dict_manifest_round_trip(self):
         manifest = self.dir / "manifest.json"
         self.assertEqual(self.run_manage("dict", "write", "--label", "t",
