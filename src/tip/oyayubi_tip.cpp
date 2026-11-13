@@ -14,8 +14,10 @@
 #include <ws2tcpip.h>
 #include <windows.h>
 #include <oleauto.h>
+#include <olectl.h>
 #include <initguid.h>
 #include <msctf.h>
+#include <ctffunc.h>
 #include <inputscope.h>
 #include <memory>
 #include <algorithm>
@@ -47,9 +49,6 @@ static const GUID GUID_OyayubiToggle = {
 // never as VK_OEM_3, so the default toggle also preserves that alias.
 static const GUID GUID_OyayubiToggleKanji = {
     0xa7c4e207, 0x0b3a, 0x4f11, {0x9e, 0x61, 0x0c, 0x1a, 0x0b, 0x7e, 0x0a, 0x01}};
-// {A7C4E203-0B3A-4F11-9E61-0C1A0B7E0A01}
-static const GUID GUID_OyayubiLangBar = {
-    0xa7c4e203, 0x0b3a, 0x4f11, {0x9e, 0x61, 0x0c, 0x1a, 0x0b, 0x7e, 0x0a, 0x01}};
 
 static const GUID kCats[] = {
     GUID_TFCAT_TIP_KEYBOARD,
@@ -1033,12 +1032,70 @@ public:
     }
 };
 
+// The taskbar input indicator (Windows 8+) shows only an item whose guidItem
+// is GUID_LBI_INPUTMODE, drawn from its icon. The DLL has no icon resource,
+// so the glyph is rendered at run time in the taskbar's foreground colour.
+static bool TaskbarIsLight() {
+    DWORD value = 0, size = sizeof(value);
+    return RegGetValueW(HKEY_CURRENT_USER,
+               L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+               L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &value, &size) == ERROR_SUCCESS
+           && value != 0;
+}
+static HICON MakeModeIcon(const wchar_t* glyph) {
+    int cx = GetSystemMetrics(SM_CXSMICON), cy = GetSystemMetrics(SM_CYSMICON);
+    BITMAPINFO bi{};
+    bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
+    bi.bmiHeader.biWidth = cx; bi.bmiHeader.biHeight = -cy;
+    bi.bmiHeader.biPlanes = 1; bi.bmiHeader.biBitCount = 32; bi.bmiHeader.biCompression = BI_RGB;
+    void* bits = nullptr;
+    HDC screen = GetDC(nullptr);
+    HDC dc = CreateCompatibleDC(screen);
+    HBITMAP color = CreateDIBSection(screen, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    ReleaseDC(nullptr, screen);
+    if (!dc || !color || !bits) {
+        if (color) DeleteObject(color);
+        if (dc) DeleteDC(dc);
+        return nullptr;
+    }
+    HGDIOBJ old_bmp = SelectObject(dc, color);
+    // White glyph on black; its grey level becomes the alpha below.
+    HFONT font = CreateFontW(-(cy * 7 / 8), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                             DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                             ANTIALIASED_QUALITY, DEFAULT_PITCH, L"Yu Gothic UI");
+    HGDIOBJ old_font = SelectObject(dc, font);
+    SetBkMode(dc, TRANSPARENT);
+    SetTextColor(dc, RGB(255, 255, 255));
+    RECT rc{0, 0, cx, cy};
+    DrawTextW(dc, glyph, -1, &rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    GdiFlush();
+    SelectObject(dc, old_font);
+    DeleteObject(font);
+    SelectObject(dc, old_bmp);
+    DeleteDC(dc);
+    BYTE fg = TaskbarIsLight() ? 0 : 255;
+    auto* px = static_cast<BYTE*>(bits);
+    for (int i = 0; i < cx * cy; ++i, px += 4) {
+        BYTE a = (std::max)(px[0], (std::max)(px[1], px[2]));
+        px[0] = px[1] = px[2] = fg; px[3] = a;
+    }
+    HBITMAP mask = CreateBitmap(cx, cy, 1, 1, nullptr);
+    ICONINFO ii{};
+    ii.fIcon = TRUE; ii.hbmColor = color; ii.hbmMask = mask;
+    HICON icon = mask ? CreateIconIndirect(&ii) : nullptr;
+    if (mask) DeleteObject(mask);
+    DeleteObject(color);
+    return icon;
+}
+static const UINT kMenuToggle = 1, kMenuAdmin = 2;
+
 class Tip : public ITfTextInputProcessorEx,
             public ITfKeyEventSink,
             public ITfThreadMgrEventSink,
             public ITfCompositionSink,
             public ITfDisplayAttributeProvider,
-            public ITfLangBarItemButton {
+            public ITfLangBarItemButton,
+            public ITfSource {
 public:
     LONG refs_ = 1;
     ITfThreadMgr* tm_ = nullptr;
@@ -1059,6 +1116,8 @@ public:
     bool alias_preserved_ = false;
     UINT toggle_active_vk_ = 0;  // the VK that set toggle_down_ (toggle_vk or its alias)
     bool langbar_ = false;
+    ITfLangBarItemSink* lb_sink_ = nullptr;  // the input indicator, for OnUpdate
+    static const DWORD kLangBarCookie = 0x6f79;
     bool test_alt_logged_ = false, down_alt_logged_ = false;
     int n_tokens_ = 0, focus_ = -1, page_ = 0;
     bool has_next_page_ = false;
@@ -1313,7 +1372,9 @@ public:
     bool NoteReply(const ServerReply& r) {
         bool was = pending_;
         pending_ = r.pending;
+        bool mode_changed = direct_ != r.direct;
         direct_ = r.direct;
+        if (mode_changed) UpdateLangBar();
         server_.RememberDirect(direct_);
         last_comp_ = r.composition;
         n_tokens_ = r.n_tokens; focus_ = r.focus; page_ = r.page; has_next_page_ = r.has_next_page;
@@ -1503,6 +1564,8 @@ public:
             *pp = static_cast<ITfDisplayAttributeProvider*>(this);
         } else if (riid == IID_ITfLangBarItem || riid == IID_ITfLangBarItemButton) {
             *pp = static_cast<ITfLangBarItemButton*>(this);
+        } else if (riid == IID_ITfSource) {
+            *pp = static_cast<ITfSource*>(this);
         } else {
             *pp = nullptr;
             return E_NOINTERFACE;
@@ -1564,17 +1627,20 @@ public:
         test_alt_logged_ = down_alt_logged_ = false;
         return S_OK;
     }
-    // ITfLangBarItemButton: one language-bar button that opens the
-    // management window. The DLL carries no icon resource, so GetIcon
-    // hands back none and the bar shows the item's description.
+    // ITfLangBarItemButton as the input-mode item: the taskbar shows あ/A,
+    // a click toggles direct input, and the right-click menu (InitMenu) also
+    // opens the management window.
+    void UpdateLangBar() {
+        if (lb_sink_) lb_sink_->OnUpdate(TF_LBI_ICON | TF_LBI_TEXT | TF_LBI_TOOLTIP);
+    }
     HRESULT STDMETHODCALLTYPE GetInfo(TF_LANGBARITEMINFO* info) override {
         if (!info) return E_INVALIDARG;
         info->clsidService = CLSID_OyayubiTip;
-        info->guidItem = GUID_OyayubiLangBar;
+        info->guidItem = GUID_LBI_INPUTMODE;
         info->dwStyle = TF_LBI_STYLE_BTN_BUTTON | TF_LBI_STYLE_SHOWNINTRAY;
         info->ulSort = 0;
         wcsncpy_s(info->szDescription, ARRAYSIZE(info->szDescription),
-                  L"oyayubi-ime 管理", _TRUNCATE);
+                  L"oyayubi-ime 入力モード", _TRUNCATE);
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE GetStatus(DWORD* status) override {
@@ -1585,24 +1651,62 @@ public:
     HRESULT STDMETHODCALLTYPE Show(BOOL) override { return E_NOTIMPL; }
     HRESULT STDMETHODCALLTYPE GetTooltipString(BSTR* tip) override {
         if (!tip) return E_INVALIDARG;
-        *tip = SysAllocString(L"oyayubi-ime の管理ウィンドウを開く");
+        *tip = SysAllocString(direct_ ? L"oyayubi-ime: 直接入力（クリックでかな入力）"
+                                      : L"oyayubi-ime: かな入力（クリックで直接入力）");
         return *tip ? S_OK : E_OUTOFMEMORY;
     }
-    HRESULT STDMETHODCALLTYPE OnClick(TfLBIClick, POINT, const RECT*) override {
-        server_.SpawnAdminUi();
+    void ToggleFromLangBar() {
+        SyncConnection();
+        if (!server_.Alive() || !Eligible()) {
+            Log(L"langbar toggle skipped ready=%u", (unsigned)server_.Alive());
+            return;
+        }
+        Toggle();
+    }
+    HRESULT STDMETHODCALLTYPE OnClick(TfLBIClick click, POINT, const RECT*) override {
+        if (click == TF_LBI_CLK_LEFT) ToggleFromLangBar();
         return S_OK;
     }
-    HRESULT STDMETHODCALLTYPE InitMenu(ITfMenu*) override { return S_OK; }
-    HRESULT STDMETHODCALLTYPE OnMenuSelect(UINT) override { return S_OK; }
+    HRESULT STDMETHODCALLTYPE InitMenu(ITfMenu* menu) override {
+        if (!menu) return E_INVALIDARG;
+        const wchar_t* toggle = direct_ ? L"かな入力に切り替え" : L"直接入力に切り替え";
+        menu->AddMenuItem(kMenuToggle, 0, nullptr, nullptr, toggle, (ULONG)wcslen(toggle), nullptr);
+        const wchar_t* admin = L"管理ウィンドウを開く";
+        menu->AddMenuItem(kMenuAdmin, 0, nullptr, nullptr, admin, (ULONG)wcslen(admin), nullptr);
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE OnMenuSelect(UINT id) override {
+        if (id == kMenuToggle) ToggleFromLangBar();
+        else if (id == kMenuAdmin) server_.SpawnAdminUi();
+        return S_OK;
+    }
     HRESULT STDMETHODCALLTYPE GetIcon(HICON* icon) override {
         if (!icon) return E_INVALIDARG;
-        *icon = nullptr;
-        return S_OK;
+        *icon = MakeModeIcon(direct_ ? L"A" : L"あ");  // the caller destroys it
+        return *icon ? S_OK : E_FAIL;
     }
     HRESULT STDMETHODCALLTYPE GetText(BSTR* text) override {
         if (!text) return E_INVALIDARG;
-        *text = SysAllocString(L"oyayubi-ime 管理");
+        *text = SysAllocString(direct_ ? L"A" : L"あ");
         return *text ? S_OK : E_OUTOFMEMORY;
+    }
+    // ITfSource: the language bar advises its item sink here.
+    HRESULT STDMETHODCALLTYPE AdviseSink(REFIID riid, IUnknown* unk, DWORD* cookie) override {
+        if (!unk || !cookie) return E_INVALIDARG;
+        if (riid != IID_ITfLangBarItemSink) return CONNECT_E_CANNOTCONNECT;
+        if (lb_sink_) return CONNECT_E_ADVISELIMIT;
+        if (FAILED(unk->QueryInterface(IID_ITfLangBarItemSink, (void**)&lb_sink_))) {
+            lb_sink_ = nullptr;
+            return E_NOINTERFACE;
+        }
+        *cookie = kLangBarCookie;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE UnadviseSink(DWORD cookie) override {
+        if (cookie != kLangBarCookie || !lb_sink_) return CONNECT_E_NOCONNECTION;
+        lb_sink_->Release();
+        lb_sink_ = nullptr;
+        return S_OK;
     }
 
     HRESULT STDMETHODCALLTYPE ActivateEx(ITfThreadMgr* ptim, TfClientId tid, DWORD) override {
