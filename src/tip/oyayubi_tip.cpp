@@ -42,6 +42,11 @@ static const GUID GUID_OyayubiProfile = {
 // {A7C4E206-0B3A-4F11-9E61-0C1A0B7E0A01}
 static const GUID GUID_OyayubiToggle = {
     0xa7c4e206, 0x0b3a, 0x4f11, {0x9e, 0x61, 0x0c, 0x1a, 0x0b, 0x7e, 0x0a, 0x01}};
+// {A7C4E207-0B3A-4F11-9E61-0C1A0B7E0A01}
+// Alt+` on the Japanese 101 layout (kbd101.dll) reaches TSF as Alt+VK_KANJI,
+// never as VK_OEM_3, so the default toggle also preserves that alias.
+static const GUID GUID_OyayubiToggleKanji = {
+    0xa7c4e207, 0x0b3a, 0x4f11, {0x9e, 0x61, 0x0c, 0x1a, 0x0b, 0x7e, 0x0a, 0x01}};
 // {A7C4E203-0B3A-4F11-9E61-0C1A0B7E0A01}
 static const GUID GUID_OyayubiLangBar = {
     0xa7c4e203, 0x0b3a, 0x4f11, {0x9e, 0x61, 0x0c, 0x1a, 0x0b, 0x7e, 0x0a, 0x01}};
@@ -1050,6 +1055,9 @@ public:
     TF_PRESERVEDKEY preserved_toggle_{};
     unsigned preserved_mods_ = 0;
     bool preserve_attempted_ = false, toggle_preserved_ = false;
+    TF_PRESERVEDKEY preserved_alias_{};
+    bool alias_preserved_ = false;
+    UINT toggle_active_vk_ = 0;  // the VK that set toggle_down_ (toggle_vk or its alias)
     bool langbar_ = false;
     bool test_alt_logged_ = false, down_alt_logged_ = false;
     int n_tokens_ = 0, focus_ = -1, page_ = 0;
@@ -1215,7 +1223,23 @@ public:
         scope_allowed_ = tm_ && !KeyboardDisabled(tm_, client_) && !KeyboardClosed(tm_);
     }
 
+    // The VK the layout actually delivers for the toggle besides toggle_vk:
+    // Alt+VK_OEM_3 becomes Alt+VK_KANJI on the Japanese 101 layout.
+    static UINT ToggleAlias(UINT vk, unsigned mods) {
+        return vk == VK_OEM_3 && (mods & 4) ? VK_KANJI : 0;
+    }
+    bool IsToggleVk(UINT vk) const {
+        const auto& s = server_.settings;
+        return vk == s.toggle_vk || (vk != 0 && vk == ToggleAlias(s.toggle_vk, s.toggle_mods));
+    }
+
     void UnpreserveToggle(ITfKeystrokeMgr* km) {
+        if (alias_preserved_) {
+            HRESULT ahr = km->UnpreserveKey(GUID_OyayubiToggleKanji, &preserved_alias_);
+            Log(L"UnpreserveKey toggle alias vk=%u modifiers=0x%x hr=%08lx",
+                preserved_alias_.uVKey, preserved_alias_.uModifiers, ahr);
+            alias_preserved_ = false;
+        }
         if (!toggle_preserved_) return;
         HRESULT hr = km->UnpreserveKey(GUID_OyayubiToggle, &preserved_toggle_);
         Log(L"UnpreserveKey toggle vk=%u modifiers=0x%x hr=%08lx",
@@ -1250,6 +1274,13 @@ public:
         toggle_preserved_ = SUCCEEDED(hr);
         Log(L"PreserveKey toggle vk=%u mods=0x%x modifiers=0x%x hr=%08lx",
             preserved_toggle_.uVKey, preserved_mods_, preserved_toggle_.uModifiers, hr);
+        if (UINT alias = ToggleAlias(settings.toggle_vk, preserved_mods_)) {
+            preserved_alias_ = {alias, preserved_toggle_.uModifiers};
+            HRESULT ahr = km->PreserveKey(client_, GUID_OyayubiToggleKanji, &preserved_alias_, nullptr, 0);
+            alias_preserved_ = SUCCEEDED(ahr);
+            Log(L"PreserveKey toggle alias vk=%u modifiers=0x%x hr=%08lx",
+                preserved_alias_.uVKey, preserved_alias_.uModifiers, ahr);
+        }
         km->Release();
         test_alt_logged_ = down_alt_logged_ = false;
     }
@@ -1259,7 +1290,8 @@ public:
         TipConfig defaults;
         const auto& settings = server_.SettingsLoaded() ? server_.settings : defaults;
         unsigned mods = HeldMods();
-        if (vk != settings.toggle_vk || !(mods & 4)) return;
+        if ((vk != settings.toggle_vk && vk != ToggleAlias(settings.toggle_vk, settings.toggle_mods))
+            || !(mods & 4)) return;
         logged = true;
         Log(L"%s observed Alt+toggle_vk vk=%u mods=0x%x ready=%u direct=%u",
             source, vk, mods, (unsigned)server_.Alive(), (unsigned)direct_);
@@ -1320,8 +1352,8 @@ public:
         SyncConnection();
         // A preserved system key's release need not reach OnKeyUp. Use the
         // thread's queued key state so the repeat latch also clears in that case.
-        if (toggle_down_ && !(GetKeyState(server_.settings.toggle_vk) & 0x8000)) {
-            down_eaten_[server_.settings.toggle_vk] = false;
+        if (toggle_down_ && !(GetKeyState(toggle_active_vk_) & 0x8000)) {
+            down_eaten_[toggle_active_vk_] = false;
             toggle_down_ = toggle_eaten_ = false;
         }
         if (!server_.Alive()) return;
@@ -1368,11 +1400,11 @@ public:
         return tm_ && !KeyboardDisabled(tm_, client_) && !KeyboardClosed(tm_);
     }
     bool ToggleKey(UINT vk) const {
-        return vk == server_.settings.toggle_vk && HeldMods() == server_.settings.toggle_mods;
+        return IsToggleVk(vk) && HeldMods() == server_.settings.toggle_mods;
     }
     bool CanEat(UINT vk) {
         if (!server_.Alive() || !Eligible()) return false;
-        if (ToggleKey(vk) || (toggle_down_ && vk == server_.settings.toggle_vk)) return true;
+        if (ToggleKey(vk) || (toggle_down_ && vk == toggle_active_vk_)) return true;
         if (direct_) return false;
         bool current = server_.Generation() == connection_generation_;
         // A pending conversion always resolves to converted with candidates.
@@ -1626,7 +1658,7 @@ public:
         UINT vk = VkOf(w);
         // Read-only candidate check. No IPC, reset or state mutation here.
         *e = server_.Alive() && Eligible() &&
-             ((toggle_down_ && vk == server_.settings.toggle_vk && toggle_eaten_) ||
+             ((toggle_down_ && vk == toggle_active_vk_ && toggle_eaten_) ||
               (!direct_ && down_eaten_[vk])) ? TRUE : FALSE;
         return S_OK;
     }
@@ -1643,7 +1675,7 @@ public:
         bool changed = state_ && (!ctx || state_->ctx != ctx);
         if (ctx) ctx->Release();
         if (changed) { ResetFocus(); return S_OK; }
-        if (toggle_down_ && vk == server_.settings.toggle_vk) {
+        if (toggle_down_ && vk == toggle_active_vk_) {
             *e = toggle_eaten_ ? TRUE : FALSE;
             return S_OK;
         }
@@ -1654,7 +1686,7 @@ public:
                 (unsigned)((l & (LPARAM(1) << 30)) != 0));
             if (l & (LPARAM(1) << 30)) return S_OK;
             bool eaten = Toggle();
-            toggle_down_ = true; toggle_eaten_ = eaten;
+            toggle_down_ = true; toggle_eaten_ = eaten; toggle_active_vk_ = vk;
             down_eaten_[vk] = eaten;
             *e = eaten ? TRUE : FALSE;
             return S_OK;
@@ -1677,7 +1709,7 @@ public:
         SyncConnection();
         if (!Eligible()) { ResetFocus(); return S_OK; }
         scope_allowed_ = true;
-        if (toggle_down_ && vk == server_.settings.toggle_vk) {
+        if (toggle_down_ && vk == toggle_active_vk_) {
             *e = server_.Alive() && toggle_eaten_ ? TRUE : FALSE;
             toggle_down_ = toggle_eaten_ = false;
             down_eaten_[vk] = false;
@@ -1696,10 +1728,11 @@ public:
     HRESULT STDMETHODCALLTYPE OnPreservedKey(ITfContext*, REFGUID guid, BOOL* e) override {
         if (!e) return E_INVALIDARG;
         *e = FALSE;
-        if (guid != GUID_OyayubiToggle) return S_OK;
+        bool alias = guid == GUID_OyayubiToggleKanji;
+        if (guid != GUID_OyayubiToggle && !alias) return S_OK;
         SyncConnection();
         bool eligible = Eligible();
-        Log(L"OnPreservedKey toggle ready=%u eligible=%u direct=%u",
+        Log(L"OnPreservedKey toggle alias=%u ready=%u eligible=%u direct=%u", (unsigned)alias,
             (unsigned)server_.Alive(), (unsigned)eligible, (unsigned)direct_);
         if (!eligible) { ResetFocus(); return S_OK; }
         scope_allowed_ = true;
@@ -1708,7 +1741,7 @@ public:
         bool changed = state_ && (!ctx || state_->ctx != ctx);
         if (ctx) ctx->Release();
         if (changed) { ResetFocus(); return S_OK; }
-        UINT vk = server_.settings.toggle_vk;
+        UINT vk = alias ? preserved_alias_.uVKey : server_.settings.toggle_vk;
         if (!ToggleKey(vk)) {
             Log(L"OnPreservedKey toggle modifiers mismatch mods=0x%x expected=0x%x",
                 HeldMods(), server_.settings.toggle_mods);
@@ -1718,7 +1751,7 @@ public:
         // one press) cannot toggle twice. Key-up or the timer releases it.
         if (!toggle_down_) {
             bool eaten = Toggle();
-            toggle_down_ = true; toggle_eaten_ = eaten;
+            toggle_down_ = true; toggle_eaten_ = eaten; toggle_active_vk_ = vk;
             down_eaten_[vk] = eaten;
         }
         *e = toggle_eaten_ ? TRUE : FALSE;
