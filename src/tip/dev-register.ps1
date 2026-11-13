@@ -48,6 +48,8 @@ try {
 } catch {
     throw "コピー先 $slot は使用中です。この DLL を使う古いアプリを終了してから再実行してください。"
 }
+# packaging\uninstall.ps1 は登録済み DLL と同じフォルダの elevated.ps1 を使う。
+Copy-Item -LiteralPath (Join-Path $Repo 'packaging\elevated.ps1') -Destination (Join-Path $Dist 'elevated.ps1') -Force
 $p = Start-Process "$env:SystemRoot\System32\regsvr32.exe" -ArgumentList @('/s', "`"$slot`"") -Verb RunAs -Wait -PassThru
 if ($p.ExitCode -ne 0) { throw "regsvr32 が失敗しました (終了コード $($p.ExitCode))。" }
 if ((Get-ItemProperty -LiteralPath $inproc).'(default)' -ne $slot) { throw "登録を読み返すと $slot ではありませんでした。" }
