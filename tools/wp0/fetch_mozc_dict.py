@@ -7,7 +7,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "third_party" / "mozc_oss_dict"
-BASE = "https://raw.githubusercontent.com/google/mozc/master/src/data/dictionary_oss/"
+# Pinned to the commit data/dictionary-manifest.json records (upstream_commit):
+# all 16 manifest files match it, so a fresh fetch passes `dict verify`.
+REVISION = "8be758dcc2330011d052a670b39cf8ffbaa1c253"
+BASE = f"https://raw.githubusercontent.com/google/mozc/{REVISION}/src/data/dictionary_oss/"
 FILES = (
     ["README.txt", "README.md", "id.def", "suffix.txt", "evaluation.tsv"]
     + [f"dictionary{i:02d}.txt" for i in range(10)]
