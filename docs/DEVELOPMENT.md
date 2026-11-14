@@ -46,7 +46,7 @@ TIP（src/tip、アプリの中の DLL）
 
 同時打鍵 SM の挙動の正本は、IME リポジトリの外にあります。
 
-- [`C:\Users\marur\qmk_userspace\docs\NICOLA-SPEC.md`](C:\Users\marur\qmk_userspace\docs\NICOLA-SPEC.md)
+- 作者の qmk_userspace リポジトリの `docs/NICOLA-SPEC.md`
 
 ## ビルドと試験
 

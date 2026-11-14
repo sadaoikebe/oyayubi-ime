@@ -17,7 +17,7 @@ REMOVED = [
     ("SpawnResident / ResolvePython / FindPython / SpawnAdminUi",
      r"SpawnResident|ResolvePython|FindPython|SpawnAdminUi"),
     ("any Python started by the TIP", r"yuragi\.ime\.|pythonw?\.exe|py\.exe"),
-    ("the developer's own path", r"marur"),
+    ("the developer's own path", r"(?i)Users\\\\"),
     ("PATH search for a program", r"SearchPathW"),
     ("TCP and Winsock", r"winsock|ws2_32|WSAStartup|\bsocket\(|closesocket|\brecv\(|MSG_PEEK"),
     ("endpoint.json and its token", r"endpoint\.json|\"token\""),

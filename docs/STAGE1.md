@@ -13,7 +13,7 @@ FSM の80 ms / 20 ms、同時打鍵判定、Mozc 評価は変更していない�
 2. リポジトリ直下の PowerShell で実行する。既存ファイルへの上書きは拒否する。
 
    ```powershell
-   cd C:\Users\marur\oyayubi-ime
+   cd $env:USERPROFILE\oyayubi-ime
    $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
    python -m oyayubi.ime.host_win32 --record "data\recordings\stage1-$stamp.jsonl"
    ```

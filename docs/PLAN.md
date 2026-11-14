@@ -7,7 +7,7 @@
 | 日付 | 2026-08-16 |
 | 状態 | Draft r3。実装の到達点は [STATUS.md](STATUS.md) |
 | 対象読者 | 実装する本人、および将来の自分（シニアエンジニア向け） |
-| 関連リポジトリ（予定） | `C:\Users\marur\oyayubi-ime` |
+| 関連リポジトリ（予定） | `%USERPROFILE%\oyayubi-ime` |
 | 本ドキュメントの性質 | **調査・設計・計画のみ。実装コードは含めない。** |
 
 ---
@@ -20,7 +20,7 @@
 
 本プロジェクトはあいまいさを「親指キーの左右不明」だけに限定する。単一 Space と文字の同時打鍵は `AmbShift`（2 面）のままかな格子へ載せ、**打鍵経路 × 単語列を同時に採点** する。1 本の読みに潰して既存 IME に渡すことは禁止する。
 
-再利用スタックは **TSF + Mozc 変換ライブラリ + 作者の NICOLA 仕様** である。同時打鍵 SM は 2000 年規格書から起こし直すのではなく、`C:\Users\marur\qmk_userspace\docs\NICOLA-SPEC.md` をホスト側へ移植する。ファームウェアは物理 2 親指なので確定かな（実際はローマ字 HID）を出す。IME 層で増える仕事は、Space が唯一の O キーのとき `Shifted(Left|Right)` の代わりに `AmbShift` を出すことだけである。タイミング規則は変えない。`nicola.c` は GPL-2.0-or-later なので **コピーせず**、仕様の挙動だけを BSD/MIT クリーンに再実装する。
+再利用スタックは **TSF + Mozc 変換ライブラリ + 作者の NICOLA 仕様** である。同時打鍵 SM は 2000 年規格書から起こし直すのではなく、`qmk_userspace\docs\NICOLA-SPEC.md` をホスト側へ移植する。ファームウェアは物理 2 親指なので確定かな（実際はローマ字 HID）を出す。IME 層で増える仕事は、Space が唯一の O キーのとき `Shifted(Left|Right)` の代わりに `AmbShift` を出すことだけである。タイミング規則は変えない。`nicola.c` は GPL-2.0-or-later なので **コピーせず**、仕様の挙動だけを BSD/MIT クリーンに再実装する。
 
 ---
 
@@ -171,7 +171,7 @@ Token
 
 ### NICOLA 同時打鍵ステートマシン
 
-**挙動の正本は作者仕様** [`C:\Users\marur\qmk_userspace\docs\NICOLA-SPEC.md`](C:\Users\marur\qmk_userspace\docs\NICOLA-SPEC.md)（2026-08-11 書き直し済み、TS52K 実機確認、`users/nicola/nicola.c` と対）。WP1 はこれをホスト側・仮想時計・単体テスト可能なモジュールへ **移植** する作業である。2000 年 NICOLA 配列規格書や紅皿／hoboNicola のフォークロアから起こし直さない。
+**挙動の正本は作者仕様** `qmk_userspace\docs\NICOLA-SPEC.md`（2026-08-11 書き直し済み、TS52K 実機確認、`users/nicola/nicola.c` と対）。WP1 はこれをホスト側・仮想時計・単体テスト可能なモジュールへ **移植** する作業である。2000 年 NICOLA 配列規格書や紅皿／hoboNicola のフォークロアから起こし直さない。
 
 規格書は「50–200 ms が実験的に妥当、例 100 ms」と書く。作者の動いている値は:
 
@@ -1030,8 +1030,8 @@ oyayubi-ime/
 
 ### NICOLA / 親指シフト
 
-- 作者 NICOLA 実装仕様（SM 正本）: `C:\Users\marur\qmk_userspace\docs\NICOLA-SPEC.md`
-- 作者テーブル（割当の根拠。GPL。IME へコピーしない）: `C:\Users\marur\qmk_userspace\users\nicola\nicola_table.c`
+- 作者 NICOLA 実装仕様（SM 正本）: `qmk_userspace\docs\NICOLA-SPEC.md`
+- 作者テーブル（割当の根拠。GPL。IME へコピーしない）: `qmk_userspace\users\nicola\nicola_table.c`
 - NICOLA 配列規格書（文字種。タイミングの既定値ではない）: http://nicola.sunicom.co.jp/spec/kikaku.htm
 - NICOLA 規格ポータル: http://nicola.sunicom.co.jp/info2.html
 - 対応 IME / エミュレータ一覧: http://nicola.sunicom.co.jp/info3.html

@@ -152,7 +152,7 @@ IME を使っている PC では、次のことが起きる。
 
 1. `PATH` 上の `python.exe` を探す。Python を入れていない Windows では、これは
    **Microsoft Store を開くためのスタブ**（`WindowsApps\python.exe`）に当たる。
-2. 無ければ `C:\Users\marur\AppData\Local\Programs\Python\Python313\python.exe`。
+2. 無ければ 開発者個人の `C:\Users\<名前>\AppData\Local\Programs\Python\Python313\python.exe`。
    **開発機の個人のパスがそのまま出荷物に入っている。**
 3. 無ければ `C:\Windows\py.exe`。
 
