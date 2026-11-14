@@ -118,16 +118,20 @@ class ReplayTest(unittest.TestCase):
         self.assertEqual(result['completed_prompts'], 8)
         self.assertTrue(result['session_closed'])
         s = result['summary']
-        self.assertEqual((s['expected_count'], s['actual_count'], s['matches']), (16, 16, 11))
-        self.assertEqual((s['substitutions'], s['deletions'], s['insertions']), (4, 1, 1))
-        self.assertEqual(s['edit_distance'], 6)
-        self.assertEqual(s['token_accuracy'], 0.625)
-        self.assertEqual(s['failures'], {'thumb_overlap_shift_loss': 1, 'unintended_chord': 1,
+        # The overlap prompt (の held in the press of お, released inside it)
+        # is a chord since the S1-S7 FSM (album design 2 §3.2): no error.
+        self.assertEqual((s['expected_count'], s['actual_count'], s['matches']), (16, 16, 12))
+        self.assertEqual((s['substitutions'], s['deletions'], s['insertions']), (3, 1, 1))
+        self.assertEqual(s['edit_distance'], 5)
+        self.assertEqual(s['token_accuracy'], 0.6875)
+        self.assertEqual(s['failures'], {'thumb_overlap_shift_loss': 0, 'unintended_chord': 1,
                                        'missed_chord': 1, 'other': 3})
         clean, overlap = result['prompts'][:2]
         self.assertEqual(clean['token_accuracy'], 1)
-        self.assertEqual(overlap['errors'][0]['source_event'], 3)
-        self.assertEqual(overlap['errors'][0]['ms'], 2170)
+        self.assertEqual(overlap['errors'], [])
+        self.assertEqual(overlap['raw_tokens'][1], {
+            'kind': 'AmbShift', 'key': 'k', 'ms': 2170, 'source_event': 3,
+            'press': 1, 'turn': 2, 'held': True})
         self.assertEqual(s['controls']['backspace_downs'], 1)
         self.assertEqual(s['controls']['thumb_taps'], 2)
         self.assertEqual(s['controls']['next_prompt_downs'], 8)
@@ -166,9 +170,15 @@ class ReplayTest(unittest.TestCase):
         result = evaluate_trace(t)
         self.assertEqual(result['failures']['missed_chord'], 1)
         self.assertEqual(result['failures']['thumb_overlap_shift_loss'], 0)
-        # A second character can settle the first chord while Space is held.
+        # A second character can settle the first chord while Space is held;
+        # released inside the press it is a chord too (album design 2 §3.2).
         t = trace('おの', [(0, 32, 'down'), (10, 74, 'down'), (40, 75, 'down'),
                           (50, 74, 'up'), (60, 75, 'up'), (70, 32, 'up')])
+        result = evaluate_trace(t)
+        self.assertEqual(result['edit_distance'], 0)
+        # Held only 15 ms with Space (< V), it goes back to pending and is plain.
+        t = trace('おの', [(0, 32, 'down'), (10, 74, 'down'), (100, 74, 'up'),
+                          (110, 75, 'down'), (125, 32, 'up'), (160, 75, 'up')])
         result = evaluate_trace(t)
         self.assertEqual(result['failures']['thumb_overlap_shift_loss'], 1)
 
@@ -233,7 +243,7 @@ class ReplayTest(unittest.TestCase):
                                    '--json', '--report', str(report)],
                                   capture_output=True, text=True, check=True)
             self.assertEqual(json.loads(proc.stdout), json.loads(report.read_text()))
-            self.assertEqual(json.loads(proc.stdout)['summary']['token_accuracy'], 0.625)
+            self.assertEqual(json.loads(proc.stdout)['summary']['token_accuracy'], 0.6875)
 
 
 if __name__ == '__main__':

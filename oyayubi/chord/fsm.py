@@ -1,10 +1,45 @@
-"""Host-side NICOLA chord FSM.
+"""Host-side NICOLA chord state machine (S1–S7).
 
-Behavior from qmk_userspace/docs/NICOLA-SPEC.md §4 (S6_OO abolished).
-- Emit each token at most once.
-- 80ms タイムアウトは「同時打鍵窓が閉じた」。先に押したキーは単独確定。
-  Space@0 → 80ms → J は Space 単独＋「と」であり、コードではない（規格どおり）。
-- ファームウェアは HID 押しっぱなしのため timeout 後も状態を残すが、IME では確定したら S1 に戻す。
+States are the thumb (Space) state and whether a character is pending:
+
+| state | Space | pending character |
+| --- | --- | --- |
+| S1 | up | none (idle) |
+| S2 | up | yes (character first) |
+| S3 | down, unused | none (thumb first) |
+| S4 | down, unused | yes, the character came first |
+| S5 | down, unused | yes, the thumb came first |
+| S6 | down, used | none: the press has done its job (a chord, or a lone Space) |
+| S7 | down, used | yes: a character typed while that press is still held |
+
+A press is one Space down..up. Its first use is a chord (the character with
+the thumb) or a lone Space (ThumbTap, after the 80 ms window). Each press gets
+a serial number; every AmbShift carries it and its position among the press's
+AmbShifts (1, 2, ...), so the conversion can make the thumbs of one press
+alternate. Plain and ThumbTap do not count.
+
+S1–S6 decide as before: the 80 ms window (T) and the 20 ms overlap (V). The
+deadline is the pending key's down + T and is not re-armed when S4/S5 fall
+back after a short overlap.
+
+S7 (a character m held inside a used press) decides at its exit, comparing
+the overlap with Space ("cover": m down to the exit) with what would still be
+left of m after it, estimated from the last released character's held length
+("last"): a chord if cover >= last - cover, else a plain character. No last
+length yet (first stroke): T stands in. Exits:
+
+- Space up: cover < V leaves m pending (S2); else the comparison, then S1.
+- m up: m lay entirely inside the press, a chord; S6.
+- deadline (m down + T): a chord, as S4/S5; S6.
+- next character m': the comparison with the cover so far; m' pending in S7.
+
+After a lone Space (press job "tap") the S7 exits follow ``tap_follower``:
+"plain" gives the earlier output (the character is plain, and Space up leaves
+it pending as S2); "rule" uses the same exits as after a chord. Which one is
+right is an open decision (album design §6.2); "plain" keeps today's output.
+
+Everything is decided once, from key order and timing; a token is never
+changed after it is emitted.
 """
 
 from __future__ import annotations
@@ -15,7 +50,7 @@ from typing import Literal
 TIMEOUT_MS = 80
 OVERLAP_MS = 20
 
-State = Literal["S1", "S2", "S3", "S4", "S5"]
+State = Literal["S1", "S2", "S3", "S4", "S5", "S6", "S7"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,7 +60,15 @@ class Plain:
 
 @dataclass(frozen=True, slots=True)
 class AmbShift:
+    """A chord: the key with one thumb, left or right unknown.
+
+    press/turn say where it was typed (the press serial number, and 1, 2, ...
+    among that press's chords), not what it is, so they do not take part in
+    equality.
+    """
     key: str
+    press: int = field(default=0, compare=False)
+    turn: int = field(default=1, compare=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,224 +83,199 @@ Token = Plain | AmbShift | ThumbTap
 class ChordFsm:
     timeout_ms: int = TIMEOUT_MS
     overlap_ms: int = OVERLAP_MS
+    tap_follower: Literal["plain", "rule"] = "plain"
     state: State = "S1"
-    m_key: str | None = None
+    m_key: str | None = None  # the pending character
     m_time: int = 0
-    m_emitted: bool = False
-    o_key: str | None = None
-    o_time: int = 0
-    o_emitted: bool = False
-    om_emitted: bool = False
+    o_time: int = 0  # Space down of the current press
+    press: int = 0  # serial number of the current (or last) press
+    turn: int = 0  # AmbShifts emitted in the current press
+    job: Literal["chord", "tap"] | None = None  # how the press was first used
     timer_deadline: int | None = None
+    last_length: int | None = None  # held length of the last released character
     down_keys: set[str] = field(default_factory=set)
+    pressed_at: dict[str, int] = field(default_factory=dict)  # character key → down time
 
     def reset(self) -> None:
+        """Close the press logically (literal/edit boundary). Physical keys,
+        the press counter and the last held length are facts that stay."""
         self.state = "S1"
         self.m_key = None
-        self.o_key = None
-        self.m_emitted = self.o_emitted = self.om_emitted = False
+        self.job = None
         self.timer_deadline = None
 
-    def _arm(self, now: int) -> None:
-        self.timer_deadline = now + self.timeout_ms
+    # -- tokens ----------------------------------------------------------
 
-    def _disarm(self) -> None:
-        self.timer_deadline = None
+    def _plain(self) -> list[Token]:
+        assert self.m_key is not None
+        token = Plain(self.m_key)
+        self.m_key = None
+        return [token]
 
-    def _emit_plain(self) -> list[Token]:
-        if self.m_emitted or self.m_key is None:
-            return []
-        self.m_emitted = True
-        return [Plain(self.m_key)]
+    def _shift(self) -> list[Token]:
+        assert self.m_key is not None
+        self.turn += 1
+        token = AmbShift(self.m_key, self.press, self.turn)
+        self.m_key = None
+        if self.job is None:
+            self.job = "chord"
+        return [token]
 
-    def _emit_amb(self) -> list[Token]:
-        if self.om_emitted or self.m_key is None:
-            return []
-        self.om_emitted = True
-        self.m_emitted = True
-        return [AmbShift(self.m_key)]
+    def _follower(self, now: int) -> list[Token]:
+        """S7's m at Space up or at the next character: the cover comparison."""
+        if self.job == "tap" and self.tap_follower == "plain":
+            return self._plain()
+        cover = now - self.m_time
+        last = self.last_length if self.last_length is not None else self.timeout_ms
+        return self._shift() if cover >= last - cover else self._plain()
 
-    def _emit_tap(self) -> list[Token]:
-        if self.o_emitted:
-            return []
-        self.o_emitted = True
-        return [ThumbTap()]
+    def _held_follower(self) -> list[Token]:
+        """S7's m at its own release or at the deadline: a chord."""
+        if self.job == "tap" and self.tap_follower == "plain":
+            return self._plain()
+        return self._shift()
+
+    # -- events ----------------------------------------------------------
 
     def on_down(self, kind: str, key: str, now: int) -> list[Token]:
         kid = f"{kind}:{key}"
         if kid in self.down_keys:
             return []  # HID repeat
         self.down_keys.add(kid)
-        out: list[Token] = []
         if kind == "M":
-            out = self._m_down(key, now)
-            self.m_key = key
-            self.m_time = now
-            self._arm(now)
-        elif kind == "O":
-            out = self._o_down(key, now)
-            self.o_key = key
-            self.o_time = now
-            self._arm(now)
-        return out
+            self.pressed_at[key] = now
+            return self._m_down(key, now)
+        if kind == "O":
+            self._o_down(now)
+        return []
 
     def on_up(self, kind: str, key: str, now: int) -> list[Token]:
         self.down_keys.discard(f"{kind}:{key}")
         if kind == "M":
-            return self._m_up(key, now)
+            out = self._m_up(now) if key == self.m_key else []
+            start = self.pressed_at.pop(key, None)
+            if start is not None:
+                self.last_length = now - start
+            return out
         if kind == "O":
-            return self._o_up(key, now)
+            return self._o_up(now)
         return []
 
     def on_timeout(self, now: int) -> list[Token]:
         if self.timer_deadline is None or now < self.timer_deadline:
             return []
         self.timer_deadline = None
-        if self.state == "S2":
-            out = self._emit_plain()
+        st = self.state
+        if st == "S2":
             self.state = "S1"
-            return out
-        if self.state == "S3":
-            out = self._emit_tap()
-            self.state = "S1"
-            return out
-        if self.state in ("S4", "S5"):
-            return self._emit_amb()
+            return self._plain()
+        if st == "S3":
+            self.state = "S6"
+            self.job = "tap"
+            return [ThumbTap()]
+        if st in ("S4", "S5"):
+            self.state = "S6"
+            return self._shift()
+        if st == "S7":
+            self.state = "S6"
+            return self._held_follower()
         return []
 
     def _m_down(self, key: str, now: int) -> list[Token]:
         st = self.state
-        if st == "S1":
-            self.m_emitted = False
-            self.om_emitted = False
-            self.state = "S2"
-            return []
-        if st == "S2":
-            out = self._emit_plain()
-            self.m_emitted = False
-            self.om_emitted = False
-            self.state = "S2"
-            return out
-        if st == "S3":
-            self.m_emitted = False
-            self.om_emitted = False
-            self.state = "S5"
-            return []
-        if st == "S4":
-            t1 = self.o_time - self.m_time
-            t2 = now - self.o_time
-            if t1 < t2:
-                out = self._emit_amb()
-                self.m_emitted = False
-                self.om_emitted = False
-                self.state = "S2"
-                return out
-            out = self._emit_plain()
-            self.m_emitted = False
-            self.om_emitted = False
-            self.state = "S5"
-            return out
-        if st == "S5":
-            out = self._emit_amb()
-            self.m_emitted = False
-            self.om_emitted = False
-            self.state = "S2"
-            return out
-        return []
-
-    def _o_down(self, key: str, now: int) -> list[Token]:
-        st = self.state
-        if st == "S1":
-            self.o_emitted = False
-            self.om_emitted = False
-            self.state = "S3"
-            return []
-        if st == "S2":
-            self.o_emitted = False
-            self.om_emitted = False
-            self.state = "S4"
-            return []
-        if st == "S3":
-            out = self._emit_tap()
-            self.o_emitted = False
-            self.om_emitted = False
-            self.state = "S3"
-            return out
-        if st == "S4":
-            out = self._emit_amb()
-            self.o_emitted = False
-            self.om_emitted = False
-            self.state = "S3"
-            return out
-        if st == "S5":
-            t1 = self.m_time - self.o_time
-            t2 = now - self.m_time
-            if t1 < t2:
-                out = self._emit_amb()
-                self.o_emitted = False
-                self.om_emitted = False
-                self.state = "S3"
-                return out
-            out = self._emit_tap()
-            self.o_emitted = False
-            self.om_emitted = False
-            self.state = "S4"
-            return out
-        return []
-
-    def _m_up(self, key: str, now: int) -> list[Token]:
-        if self.m_key != key:
-            return []
-        st = self.state
         out: list[Token] = []
+        if st == "S1":
+            self.state = "S2"
+        elif st == "S2":
+            out = self._plain()
+        elif st == "S3":
+            self.state = "S5"
+        elif st == "S4":
+            t1 = self.o_time - self.m_time
+            t2 = now - self.o_time
+            if t1 < t2:
+                out = self._shift()
+                self.state = "S7"
+            else:
+                out = self._plain()
+                self.state = "S5"
+        elif st == "S5":
+            out = self._shift()
+            self.state = "S7"
+        elif st == "S6":
+            self.state = "S7"
+        elif st == "S7":
+            out = self._follower(now)
+        self.m_key = key
+        self.m_time = now
+        self.timer_deadline = now + self.timeout_ms
+        return out
+
+    def _o_down(self, now: int) -> None:
+        # One thumb key: Space cannot go down again inside a press.
+        self.state = {"S1": "S3", "S2": "S4"}[self.state]
+        self.press += 1
+        self.turn = 0
+        self.job = None
+        self.o_time = now
+        self.timer_deadline = now + self.timeout_ms
+
+    def _m_up(self, now: int) -> list[Token]:
+        st = self.state
         if st == "S2":
-            out = self._emit_plain()
-            self.reset()
-            return out
+            self.state = "S1"
+            self.timer_deadline = None
+            return self._plain()
         if st == "S4":
             t1 = self.o_time - self.m_time
             t2 = now - self.o_time
             if t1 >= t2 and t2 < self.overlap_ms:
-                out = self._emit_plain()
-                self.m_key = None
-                self.m_emitted = False
-                self.om_emitted = False
                 self.state = "S3"
-                self._arm(now)
-                return out
-            out = self._emit_amb()
-            self.reset()
-            return out
+                self.timer_deadline = self.o_time + self.timeout_ms
+                return self._plain()
+            self.state = "S6"
+            self.timer_deadline = None
+            return self._shift()
         if st == "S5":
-            out = self._emit_amb()
-            self.reset()
-            return out
+            self.state = "S6"
+            self.timer_deadline = None
+            return self._shift()
+        if st == "S7":
+            self.state = "S6"
+            self.timer_deadline = None
+            return self._held_follower()
         return []
 
-    def _o_up(self, key: str, now: int) -> list[Token]:
-        if self.o_key != key:
-            return []
+    def _o_up(self, now: int) -> list[Token]:
         st = self.state
         if st == "S3":
-            out = self._emit_tap()
-            self.reset()
-            return out
+            self.state = "S1"
+            self.timer_deadline = None
+            return [ThumbTap()]
         if st == "S4":
-            out = self._emit_amb()
-            self.reset()
-            return out
+            self.state = "S1"
+            self.timer_deadline = None
+            return self._shift()
         if st == "S5":
             t1 = self.m_time - self.o_time
             t2 = now - self.m_time
             if t1 >= t2 and t2 < self.overlap_ms:
-                out = self._emit_tap()
-                self.o_key = None
-                self.o_emitted = False
-                self.om_emitted = False
                 self.state = "S2"
-                self._arm(now)
-                return out
-            out = self._emit_amb()
-            self.reset()
+                self.timer_deadline = self.m_time + self.timeout_ms
+                return [ThumbTap()]
+            self.state = "S1"
+            self.timer_deadline = None
+            return self._shift()
+        if st == "S6":
+            self.state = "S1"
+            return []
+        if st == "S7":
+            if ((self.job == "tap" and self.tap_follower == "plain")
+                    or now - self.m_time < self.overlap_ms):
+                self.state = "S2"  # m stays pending; its deadline m down + T stands
+                return []
+            out = self._follower(now)
+            self.state = "S1"
+            self.timer_deadline = None
             return out
         return []

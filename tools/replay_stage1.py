@@ -38,6 +38,16 @@ def token_json(token) -> dict:
     return {"kind": type(token).__name__, "key": token.key}
 
 
+def raw_token_json(o: "Observation") -> dict:
+    """token_json plus where the stroke was typed (press/turn, held in a used press)."""
+    row = dict(token_json(o.token), ms=o.ms, source_event=o.source_event)
+    if isinstance(o.token, AmbShift):
+        row.update(press=o.token.press, turn=o.token.turn)
+    if o.held:
+        row["held"] = True
+    return row
+
+
 def expected_tokens(reading: str, table: dict | None = None) -> list:
     """Plain faces first; shifted kana/literals keep the physical AmbShift key.
 
@@ -156,16 +166,18 @@ class Observation:
     ms: int
     source_event: int
     held_consumed_space: bool = False
+    held: bool = False  # a character typed inside a used press (left the FSM's S7)
 
 
-def replay(trace: Trace) -> tuple[list[Observation], dict]:
+def replay(trace: Trace, fsm=None) -> tuple[list[Observation], dict]:
     """Fire due deadlines BEFORE equal-time keys; drain pending at prompt end.
 
     This is a deterministic virtual clock, not a reconstruction of WM_TIMER
     scheduling. Native digits/edit boundaries finish pending FSM output using
     its existing timeout path, as the session does, but never delete tokens.
+    fsm: another state machine with the same interface (default ChordFsm()).
     """
-    fsm = ChordFsm()
+    fsm = fsm if fsm is not None else ChordFsm()
     observations = []
     modifiers: set[int] = set()
     native_down: set[int] = set()
@@ -174,22 +186,27 @@ def replay(trace: Trace) -> tuple[list[Observation], dict]:
     space_used = False
     counts = Counter()
 
-    def emit(tokens, ms):
+    def emit(tokens, ms, held=False):
+        """held: the FSM was in S7 before the event; every S7 exit emits its m."""
         nonlocal space_used
         for token in tokens:
             source, held_used = sources.get(token.key, (-1, False))
-            observations.append(Observation(token, ms, source, held_used))
+            observations.append(Observation(token, ms, source, held_used, held))
+            if held:
+                counts[f"held_{type(token).__name__}"] += 1
             if isinstance(token, AmbShift):
                 space_used = True
 
     def timeout(ms):
         deadline = fsm.timer_deadline
         if deadline is not None and deadline <= ms:
-            emit(fsm.on_timeout(deadline), deadline)
+            held = fsm.state == "S7"
+            emit(fsm.on_timeout(deadline), deadline, held)
 
     def boundary(ms):
         if fsm.timer_deadline is not None:
-            emit(fsm.on_timeout(fsm.timer_deadline), ms)
+            held = fsm.state == "S7"
+            emit(fsm.on_timeout(fsm.timer_deadline), ms, held)
         fsm.reset()
 
     for index, event in enumerate(trace.events):
@@ -243,12 +260,14 @@ def replay(trace: Trace) -> tuple[list[Observation], dict]:
         if down:
             # on_down can settle the PREVIOUS character. Register this source
             # after processing it so even repeated same-key strokes keep origin.
-            emit(fsm.on_down(kind, key, ms), ms)
+            held = fsm.state == "S7"
+            emit(fsm.on_down(kind, key, ms), ms, held)
             if kind == "O":
                 space_used = False
             sources[key] = (index, VK_SPACE in physical and space_used)
         else:
-            emit(fsm.on_up(kind, key, ms), ms)
+            held = fsm.state == "S7"
+            emit(fsm.on_up(kind, key, ms), ms, held)
     boundary(trace.end_ms)
     counts["thumb_taps"] = sum(isinstance(o.token, ThumbTap) for o in observations)
     return observations, dict(counts)
@@ -320,8 +339,7 @@ def evaluate_trace(trace: Trace) -> dict:
             "token_accuracy": max(0.0, 1 - edits / len(expected)),
             "failures": dict(failures), "controls": controls,
             "expected_tokens": [token_json(t) for t in expected],
-            "raw_tokens": [dict(token_json(o.token), ms=o.ms, source_event=o.source_event)
-                           for o in observations], "errors": errors}
+            "raw_tokens": [raw_token_json(o) for o in observations], "errors": errors}
 
 
 def evaluate_log(path: Path) -> dict:
