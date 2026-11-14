@@ -1301,28 +1301,47 @@ public:
         *tip = SysAllocString(text);
         return *tip ? S_OK : E_OUTOFMEMORY;
     }
-    HRESULT STDMETHODCALLTYPE OnClick(TfLBIClick click, POINT, const RECT*) override {
+    // The menu's items (§9.4); grayed: shown but not selectable.
+    const wchar_t* MenuText(int item, bool* grayed) const {
+        *grayed = false;
+        switch (item) {
+            case tip_logic::MENU_TOGGLE: return direct_ ? L"かな入力に切り替え" : L"直接入力に切り替え";
+            case tip_logic::MENU_ADMIN: return L"管理ウィンドウを開く";
+            case tip_logic::MENU_RETRY: return L"もう一度試す";
+            case tip_logic::MENU_REASON: return L"原因を表示";
+            case tip_logic::MENU_PREPARING:
+                *grayed = true;
+                return L"（変換の準備をしています）";
+        }
+        return L"";
+    }
+    HRESULT STDMETHODCALLTYPE OnClick(TfLBIClick click, POINT pt, const RECT*) override {
         if (click == TF_LBI_CLK_LEFT && CurrentMode() == Mode::Normal && Eligible()) Toggle();
+        // The taskbar input indicator hands a right click over as OnClick and never
+        // calls InitMenu, so the menu is shown here (owned by this thread's focus window).
+        if (click == TF_LBI_CLK_RIGHT) {
+            HMENU popup = CreatePopupMenu();
+            for (int item : tip_logic::MenuFor(CurrentMode())) {
+                bool grayed;
+                const wchar_t* text = MenuText(item, &grayed);
+                AppendMenuW(popup, MF_STRING | (grayed ? MF_GRAYED : 0), item, text);
+            }
+            UINT align = GetSystemMetrics(SM_MENUDROPALIGNMENT) ? TPM_RIGHTALIGN : TPM_LEFTALIGN;
+            UINT id = (UINT)TrackPopupMenuEx(popup, align | TPM_BOTTOMALIGN | TPM_RETURNCMD |
+                                                 TPM_NONOTIFY | TPM_RIGHTBUTTON,
+                                             pt.x, pt.y, GetFocus(), nullptr);
+            DestroyMenu(popup);
+            if (id) OnMenuSelect(id);
+        }
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE InitMenu(ITfMenu* menu) override {
         if (!menu) return E_INVALIDARG;
         for (int item : tip_logic::MenuFor(CurrentMode())) {
-            const wchar_t* text = L"";
-            DWORD flags = 0;
-            switch (item) {
-                case tip_logic::MENU_TOGGLE:
-                    text = direct_ ? L"かな入力に切り替え" : L"直接入力に切り替え";
-                    break;
-                case tip_logic::MENU_ADMIN: text = L"管理ウィンドウを開く"; break;
-                case tip_logic::MENU_RETRY: text = L"もう一度試す"; break;
-                case tip_logic::MENU_REASON: text = L"原因を表示"; break;
-                case tip_logic::MENU_PREPARING:
-                    text = L"（変換の準備をしています）";
-                    flags = TF_LBMENUF_GRAYED;
-                    break;
-            }
-            menu->AddMenuItem(item, flags, nullptr, nullptr, text, (ULONG)wcslen(text), nullptr);
+            bool grayed;
+            const wchar_t* text = MenuText(item, &grayed);
+            menu->AddMenuItem(item, grayed ? TF_LBMENUF_GRAYED : 0, nullptr, nullptr, text,
+                              (ULONG)wcslen(text), nullptr);
         }
         return S_OK;
     }
