@@ -156,12 +156,13 @@ inline bool SendsKeys(Mode mode) { return mode == Mode::Normal || mode == Mode::
 // The taskbar glyph and whether it is drawn faint.
 inline const char* Glyph(Mode mode, bool direct) {
     switch (mode) {
-        case Mode::Normal: return direct ? "A" : "\xE3\x81\x82";  // あ
-        case Mode::Preparing: return "\xE3\x81\x82";
+        // お (oyayubi) and N (NICOLA), not あ/A: told apart from Microsoft IME at a glance.
+        case Mode::Normal: return direct ? "N" : "\xE3\x81\x8A";  // お
+        case Mode::Preparing: return "\xE3\x81\x8A";
         case Mode::Stopped: return "!";
-        case Mode::Excluded: return "A";
+        case Mode::Excluded: return "N";
     }
-    return "A";
+    return "N";
 }
 inline bool Faint(Mode mode) { return mode == Mode::Preparing; }
 

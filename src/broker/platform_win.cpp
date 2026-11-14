@@ -277,7 +277,7 @@ Texts TextsFor(const Notice& n) {
     if (n.warning == "config")
         return {L"oyayubi-ime: 設定ファイルを読めませんでした", L"標準の設定で動いています。",
                 L"設定ファイル（.oyayubi-ime\\config.json）の一部を読めませんでした。"
-                L"読めなかった項目は標準の値で動いています。管理ウィンドウの「設定」で直せます。"};
+                L"読めなかった項目は標準の値で動いています。設定ウィンドウの「設定」タブで直せます。"};
     if (n.warning == "lm")
         return {L"oyayubi-ime: 言語モデルを使えません", L"辞書だけで変換しています。",
                 L"変換の候補を選び直す言語モデルを読み込めませんでした。"

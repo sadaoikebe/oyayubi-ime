@@ -75,10 +75,10 @@ static void StatesAndWhatTheUserSees() {
 
     assert(SendsKeys(Mode::Normal) && SendsKeys(Mode::Preparing));
     assert(!SendsKeys(Mode::Stopped) && !SendsKeys(Mode::Excluded));
-    assert(std::string(Glyph(Mode::Normal, false)) == "\xE3\x81\x82");
-    assert(std::string(Glyph(Mode::Normal, true)) == "A");
+    assert(std::string(Glyph(Mode::Normal, false)) == "\xE3\x81\x8A");  // お
+    assert(std::string(Glyph(Mode::Normal, true)) == "N");
     assert(std::string(Glyph(Mode::Stopped, false)) == "!");
-    assert(std::string(Glyph(Mode::Excluded, false)) == "A");
+    assert(std::string(Glyph(Mode::Excluded, false)) == "N");
     assert(Faint(Mode::Preparing) && !Faint(Mode::Normal));
 
     assert((MenuFor(Mode::Normal) == std::vector<int>{MENU_TOGGLE, MENU_ADMIN}));

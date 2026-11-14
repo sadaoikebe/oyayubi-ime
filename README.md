@@ -12,7 +12,7 @@ iwr -UseBasicParsing https://github.com/sadaoikebe/oyayubi-ime/releases/latest/d
 ```
 
 - 取得するもの（約 1GB、2 回目からは差分だけ）を表示して確認してから進みます。IME の登録で管理者の確認が 1 回出ます。
-- 終わったら Win+Space で oyayubi-ime を選びます。タスクバーの「あ/A」をクリックで直接入力と切り替え、右クリックで管理ウィンドウ。
+- 終わったら Win+Space で oyayubi-ime を選びます。タスクバーの「お/N」をクリックで直接入力と切り替え、右クリックの「設定を開く」で設定ウィンドウ。
 - 途中で失敗しても、それまでの版がそのまま動きます。もう一度実行すると続きから進みます。
 - 学習した内容・登録した単語・設定は `%USERPROFILE%\.oyayubi-ime` にあり、更新でもアンインストールでも残ります。
 - 置き場所と手順は [docs/INSTALL.md](docs/INSTALL.md)、全体の設計は [docs/REDESIGN.md](docs/REDESIGN.md)。
@@ -21,8 +21,8 @@ iwr -UseBasicParsing https://github.com/sadaoikebe/oyayubi-ime/releases/latest/d
 
 | 表示 | 意味 |
 |---|---|
-| 「あ」／「A」 | かな入力／直接入力 |
-| 薄い「あ」 | 変換の準備中（サインイン直後の数秒など）。打った文字は預かって、準備ができたら順に入ります |
+| 「お」／「N」 | かな入力／直接入力 |
+| 薄い「お」 | 変換の準備中（サインイン直後の数秒など）。打った文字は預かって、準備ができたら順に入ります |
 | 「!」 | 日本語変換が止まっています。右クリック →「もう一度試す」「原因を表示」 |
 
 アンインストール（`<tag>` は入れた版。学習データなども消すときは末尾に `-RemoveData`）:

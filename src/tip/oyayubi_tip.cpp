@@ -736,6 +736,13 @@ static LONG Utf16Offset(const std::wstring& text, int codepoints) {
     return (LONG)i;
 }
 
+// Our popups are drawn in the host's DPI mode: in a per-monitor aware application
+// (Notepad, most of Windows 11) nothing scales them, so every size is given at 96 dpi
+// and scaled to the window's monitor here.
+static int Px(HWND h, int pixels_at_96) {
+    return MulDiv(pixels_at_96, (int)GetDpiForWindow(h), 96);
+}
+
 // Below the caret, in screen coordinates; hidden when the text is not laid out.
 static void PlaceBelow(TfEditCookie ec, ITfContext* ctx, ITfRange* caret, HWND window) {
     if (!window) return;
@@ -748,7 +755,7 @@ static void PlaceBelow(TfEditCookie ec, ITfContext* ctx, ITfRange* caret, HWND w
         // collapsed, so a visible caret may come back zero wide (Notepad does):
         // IsRectEmpty would call that empty.
         if (SUCCEEDED(view->GetTextExt(ec, caret, &rect, &clipped)) && rect.bottom > rect.top) {
-            SetWindowPos(window, HWND_TOPMOST, rect.left, rect.bottom + 4, 0, 0,
+            SetWindowPos(window, HWND_TOPMOST, rect.left, rect.bottom + Px(window, 4), 0, 0,
                          SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
             positioned = true;
         }
@@ -943,8 +950,11 @@ static bool TaskbarIsLight() {
                L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &value, &size) == ERROR_SUCCESS
            && value != 0;
 }
+// Sized for the taskbar's scale, not this application's: in a DPI-unaware application
+// GetSystemMetrics answers at 96 dpi (16 px) while a 150 % taskbar shows 24 px.
 static HICON MakeModeIcon(const wchar_t* glyph, bool faint) {
-    int cx = GetSystemMetrics(SM_CXSMICON), cy = GetSystemMetrics(SM_CYSMICON);
+    UINT dpi = GetDpiForWindow(FindWindowW(L"Shell_TrayWnd", nullptr));
+    int cx = GetSystemMetricsForDpi(SM_CXSMICON, dpi), cy = GetSystemMetricsForDpi(SM_CYSMICON, dpi);
     BITMAPINFO bi{};
     bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
     bi.bmiHeader.biWidth = cx; bi.bmiHeader.biHeight = -cy;
@@ -960,16 +970,31 @@ static HICON MakeModeIcon(const wchar_t* glyph, bool faint) {
         return nullptr;
     }
     HGDIOBJ old_bmp = SelectObject(dc, color);
-    // White glyph on black; its grey level becomes the alpha below.
-    HFONT font = CreateFontW(-(cy * 7 / 8), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+    // White glyph on black; its grey level becomes the alpha below. The font is as tall
+    // as the icon; the glyph is drawn once to find its ink, then again centred on the
+    // ink (centring the text line leaves it small and low, the line has leading).
+    HFONT font = CreateFontW(-cy, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                              DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                              ANTIALIASED_QUALITY, DEFAULT_PITCH, L"Yu Gothic UI");
     HGDIOBJ old_font = SelectObject(dc, font);
     SetBkMode(dc, TRANSPARENT);
     SetTextColor(dc, RGB(255, 255, 255));
-    RECT rc{0, 0, cx, cy};
-    DrawTextW(dc, glyph, -1, &rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-    GdiFlush();
+    auto draw = [&](int dx, int dy) {
+        memset(bits, 0, (size_t)cx * cy * 4);
+        RECT rc{dx, dy, cx + dx, cy + dy};
+        DrawTextW(dc, glyph, -1, &rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        GdiFlush();
+    };
+    draw(0, 0);
+    int left = cx, top = cy, right = -1, bottom = -1;
+    const BYTE* ink = static_cast<const BYTE*>(bits);
+    for (int y = 0; y < cy; ++y)
+        for (int x = 0; x < cx; ++x, ink += 4)
+            if (ink[0] | ink[1] | ink[2]) {
+                left = (std::min)(left, x); right = (std::max)(right, x);
+                top = (std::min)(top, y); bottom = (std::max)(bottom, y);
+            }
+    if (right >= 0) draw((cx - 1 - right - left) / 2, (cy - 1 - bottom - top) / 2);
     SelectObject(dc, old_font);
     DeleteObject(font);
     SelectObject(dc, old_bmp);
@@ -978,7 +1003,7 @@ static HICON MakeModeIcon(const wchar_t* glyph, bool faint) {
     auto* px = static_cast<BYTE*>(bits);
     for (int i = 0; i < cx * cy; ++i, px += 4) {
         BYTE a = (std::max)(px[0], (std::max)(px[1], px[2]));
-        if (faint) a = (BYTE)(a * 2 / 5);  // "あ" drawn faint while preparing
+        if (faint) a = (BYTE)(a * 2 / 5);  // "お" drawn faint while preparing
         px[0] = px[1] = px[2] = fg; px[3] = a;
     }
     HBITMAP mask = CreateBitmap(cx, cy, 1, 1, nullptr);
@@ -1007,6 +1032,13 @@ static const wchar_t* NoticeText(Notice n) {
 static LRESULT CALLBACK PopupProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     if (m == WM_MOUSEACTIVATE) return MA_NOACTIVATE;
     if (m == WM_NCHITTEST) return HTTRANSPARENT;
+    if (m == WM_DPICHANGED) {  // moved to a monitor with another scale: Windows' size for it
+        const RECT* r = (const RECT*)l;
+        SetWindowPos(h, nullptr, r->left, r->top, r->right - r->left, r->bottom - r->top,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+        InvalidateRect(h, nullptr, TRUE);
+        return 0;
+    }
     return DefWindowProcW(h, m, w, l);
 }
 
@@ -1306,7 +1338,7 @@ public:
         *grayed = false;
         switch (item) {
             case tip_logic::MENU_TOGGLE: return direct_ ? L"かな入力に切り替え" : L"直接入力に切り替え";
-            case tip_logic::MENU_ADMIN: return L"管理ウィンドウを開く";
+            case tip_logic::MENU_ADMIN: return L"設定を開く";
             case tip_logic::MENU_RETRY: return L"もう一度試す";
             case tip_logic::MENU_REASON: return L"原因を表示";
             case tip_logic::MENU_PREPARING:
@@ -1783,12 +1815,13 @@ private:
             GetClientRect(h, &rc);
             FillRect(hdc, &rc, (HBRUSH)GetStockObject(WHITE_BRUSH));
             if (self) {
-                HFONT font = CreateFontW(18, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                HFONT font = CreateFontW(Px(h, 18), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                          SHIFTJIS_CHARSET, 0, 0, 0, 0, L"Yu Gothic UI");
                 HGDIOBJ old = SelectObject(hdc, font);
-                int y = 2;
+                const int row = Px(h, 22);
+                int y = Px(h, 2);
                 for (size_t i = 0; i < self->cands_.size(); ++i) {
-                    RECT line = {4, y, rc.right - 4, y + 22};
+                    RECT line = {Px(h, 4), y, rc.right - Px(h, 4), y + row};
                     wchar_t buf[256];
                     swprintf_s(buf, L"%d. %s", (int)i + 1, self->cands_[i].c_str());
                     if ((int)i == self->cand_index_) {
@@ -1798,8 +1831,9 @@ private:
                         SetBkColor(hdc, RGB(255, 255, 255));
                         SetTextColor(hdc, RGB(0, 0, 0));
                     }
-                    ExtTextOutW(hdc, 6, y + 2, ETO_OPAQUE, &line, buf, (UINT)wcslen(buf), nullptr);
-                    y += 22;
+                    ExtTextOutW(hdc, Px(h, 6), y + Px(h, 2), ETO_OPAQUE, &line, buf,
+                                (UINT)wcslen(buf), nullptr);
+                    y += row;
                 }
                 SelectObject(hdc, old);
                 DeleteObject(font);
@@ -1818,12 +1852,12 @@ private:
             GetClientRect(h, &rc);
             FillRect(hdc, &rc, (HBRUSH)GetStockObject(WHITE_BRUSH));
             if (self) {
-                HFONT font = CreateFontW(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                HFONT font = CreateFontW(Px(h, 16), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                          SHIFTJIS_CHARSET, 0, 0, 0, 0, L"Yu Gothic UI");
                 HGDIOBJ old = SelectObject(hdc, font);
                 SetBkMode(hdc, TRANSPARENT);
                 SetTextColor(hdc, RGB(0x30, 0x30, 0x30));
-                RECT text = {6, 2, rc.right - 6, rc.bottom - 2};
+                RECT text = {Px(h, 6), Px(h, 2), rc.right - Px(h, 6), rc.bottom - Px(h, 2)};
                 DrawTextW(hdc, NoticeText(self->notice_), -1, &text,
                           DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
                 SelectObject(hdc, old);
@@ -1860,7 +1894,8 @@ private:
         if (!cand_hwnd_) cand_hwnd_ = Popup(L"OyayubiCand", CandProc);
         int rows = (int)cands_.size();
         // Placement and showing happen under an edit cookie (GetTextExt).
-        SetWindowPos(cand_hwnd_, nullptr, 0, 0, 280, 6 + rows * 22,
+        SetWindowPos(cand_hwnd_, nullptr, 0, 0, Px(cand_hwnd_, 280),
+                     Px(cand_hwnd_, 6 + rows * 22),
                      SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
         InvalidateRect(cand_hwnd_, nullptr, TRUE);
     }
@@ -2008,8 +2043,8 @@ void Tip::ShowNotice(Notice n) {
     notice_ = n;
     if (!notice_hwnd_) notice_hwnd_ = Popup(L"OyayubiNotice", NoticeProc);
     HDC dc = GetDC(notice_hwnd_);
-    HFONT font = CreateFontW(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, SHIFTJIS_CHARSET, 0, 0,
-                             0, 0, L"Yu Gothic UI");
+    HFONT font = CreateFontW(Px(notice_hwnd_, 16), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                             SHIFTJIS_CHARSET, 0, 0, 0, 0, L"Yu Gothic UI");
     HGDIOBJ old = SelectObject(dc, font);
     SIZE size{};
     const wchar_t* text = NoticeText(n);
@@ -2017,7 +2052,8 @@ void Tip::ShowNotice(Notice n) {
     SelectObject(dc, old);
     DeleteObject(font);
     ReleaseDC(notice_hwnd_, dc);
-    SetWindowPos(notice_hwnd_, nullptr, 0, 0, size.cx + 14, size.cy + 6,
+    SetWindowPos(notice_hwnd_, nullptr, 0, 0, size.cx + Px(notice_hwnd_, 14),
+                 size.cy + Px(notice_hwnd_, 6),
                  SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
     InvalidateRect(notice_hwnd_, nullptr, TRUE);
     KillTimer(hwnd_, kTimerNotice);
