@@ -113,7 +113,8 @@ jobs:
             python-3.13.7-tkinter-amd64.zip.sha256
 
   # 公開したプレリリースの setup.ps1 で、まっさらなランナーに実際に入れる (経路は 1 本)。
-  # インストール → 動作 (ブローカーが ready) → 同じ版の入れ直し (学習データが残るか)
+  # インストール → 動作 (ブローカーが ready、同梱ランタイムで tkinter が動くか)
+  # → 同じ版の入れ直し (学習データが残るか)
   # → リリースの uninstall.ps1 でアンインストール (プログラムは全部消え、利用者のデータは残るか)
   # → もう一度 uninstall.ps1 (入っていないと伝えて、何もせずに終わるか)。
   install-test:
@@ -175,6 +176,11 @@ jobs:
           Invoke-Logged "install" $setupArgs
           Assert-Installed
           Write-Host "install OK"
+
+          # The settings window (admin_args in engine.json) needs tkinter in the bundled runtime.
+          $engine = Get-Content (Join-Path $local "versions\$env:TAG\engine.json") -Raw | ConvertFrom-Json
+          & $engine.python -c "import tkinter; r = tkinter.Tk(); r.withdraw(); print('tkinter OK: Tk', r.tk.call('info', 'patchlevel')); r.destroy()"
+          if ($LASTEXITCODE -ne 0) { throw "tkinter does not load in the bundled runtime ($($engine.python))" }
 
           $learning = Join-Path $userData "learning.jsonl"
           $marker = '{"ci":"learning survives a reinstall"}'
