@@ -140,26 +140,19 @@ class S7Exits(unittest.TestCase):
 
 
 class AfterLoneSpace(unittest.TestCase):
-    """design2 §6.2 is open. tap_follower="plain" (default) keeps today's
-    output; "rule" is the alternative, the same S7 row as after a chord."""
+    """A character held in a press whose job was a lone Space is plain
+    (design2 §6.2 is open; the code keeps today's output)."""
 
     EVENTS = "G+0 G-113 S+300 E+443 S-518 E-539"  # sentence 10, G 113 ms
 
-    def test_plain_keeps_todays_output(self):
+    def test_held_character_is_plain(self):
         toks, _ = run(self.EVENTS.split())
         self.assertEqual(shape(toks), [("Plain", "g"), ("ThumbTap", "space"), ("Plain", "e")])
-
-    def test_rule_reads_the_cover(self):
-        toks, _ = run(self.EVENTS.split(), ChordFsm(tap_follower="rule"))
-        self.assertEqual(shape(toks), [("Plain", "g"), ("ThumbTap", "space"),
-                                       ("AmbShift", "e", 1, 1)])
 
     def test_existing_space_timeout_case(self):
         # tests/test_fsm.py test_space_timeout_is_standalone_then_j_is_to.
         events = "S+0 J+100 J-140 S-150".split()
         self.assertEqual(run(events)[0], [ThumbTap(), Plain("j")])
-        self.assertEqual(shape(run(events, ChordFsm(tap_follower="rule"))[0]),
-                         [("ThumbTap", "space"), ("AmbShift", "j", 1, 1)])
 
 
 class RealHeldCharacters(unittest.TestCase):
@@ -186,12 +179,7 @@ class RealHeldCharacters(unittest.TestCase):
         self.check("D+-22 S+0 D-58 L+96 S-117 L-184", ("Plain", "l"))
 
     def test_sentence_10_after_lone_space(self):
-        # §6.2 open: plain today, a chord under the rule (cover 75 >= G 113 - 75).
-        events = "G+-300 G--187 S+0 E+143 S-218 E-239"
-        toks, _ = run(shifted(1000, events))
-        self.assertEqual(shape(toks)[-1], ("Plain", "e"))
-        toks, _ = run(shifted(1000, events), ChordFsm(tap_follower="rule"))
-        self.assertEqual(shape(toks)[-1], ("AmbShift", "e", 1, 1))
+        self.check("G+-300 G--187 S+0 E+143 S-218 E-239", ("Plain", "e"))
 
 
 def legacy_shape(tokens):
@@ -268,7 +256,7 @@ class SameAsBeforeWithoutHeldCharacters(unittest.TestCase):
     def test_recorded_sentences(self):
         """40 sentences: with every held character read as plain, the output
         is the old one; the held ones are the six of §4.1 (five, since in
-        sentence 10 Space up returns its E to S2 under tap_follower=plain)."""
+        sentence 10 Space up returns its E to S2: it follows a lone Space)."""
         traces, _ = read_log(STAGE1_LOG)
         traces = [t for t in traces if t.status == "complete"]
         self.assertEqual(len(traces), 40)

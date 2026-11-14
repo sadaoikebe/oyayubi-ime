@@ -33,10 +33,8 @@ length yet (first stroke): T stands in. Exits:
 - deadline (m down + T): a chord, as S4/S5; S6.
 - next character m': the comparison with the cover so far; m' pending in S7.
 
-After a lone Space (press job "tap") the S7 exits follow ``tap_follower``:
-"plain" gives the earlier output (the character is plain, and Space up leaves
-it pending as S2); "rule" uses the same exits as after a chord. Which one is
-right is an open decision (album design §6.2); "plain" keeps today's output.
+After a lone Space (press job "tap") a character held in the press is plain:
+its exits give a plain character, and Space up leaves it pending (S2).
 
 Everything is decided once, from key order and timing; a token is never
 changed after it is emitted.
@@ -83,7 +81,6 @@ Token = Plain | AmbShift | ThumbTap
 class ChordFsm:
     timeout_ms: int = TIMEOUT_MS
     overlap_ms: int = OVERLAP_MS
-    tap_follower: Literal["plain", "rule"] = "plain"
     state: State = "S1"
     m_key: str | None = None  # the pending character
     m_time: int = 0
@@ -123,7 +120,7 @@ class ChordFsm:
 
     def _follower(self, now: int) -> list[Token]:
         """S7's m at Space up or at the next character: the cover comparison."""
-        if self.job == "tap" and self.tap_follower == "plain":
+        if self.job == "tap":
             return self._plain()
         cover = now - self.m_time
         last = self.last_length if self.last_length is not None else self.timeout_ms
@@ -131,7 +128,7 @@ class ChordFsm:
 
     def _held_follower(self) -> list[Token]:
         """S7's m at its own release or at the deadline: a chord."""
-        if self.job == "tap" and self.tap_follower == "plain":
+        if self.job == "tap":
             return self._plain()
         return self._shift()
 
@@ -270,8 +267,7 @@ class ChordFsm:
             self.state = "S1"
             return []
         if st == "S7":
-            if ((self.job == "tap" and self.tap_follower == "plain")
-                    or now - self.m_time < self.overlap_ms):
+            if self.job == "tap" or now - self.m_time < self.overlap_ms:
                 self.state = "S2"  # m stays pending; its deadline m down + T stands
                 return []
             out = self._follower(now)
