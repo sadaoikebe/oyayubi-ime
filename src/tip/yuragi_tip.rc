@@ -1,0 +1,5 @@
+// The product icon: the input-method list shows it for this profile
+// (RegisterProfile names this DLL and -IDI_YURAGI). The language bar's
+// mode button draws its own glyph at run time and does not use it.
+#include "resource.h"
+IDI_YURAGI ICON "../../assets/icon/yuragi.ico"

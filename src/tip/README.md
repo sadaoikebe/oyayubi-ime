@@ -10,6 +10,7 @@
 | `yuragi_tip.cpp` | TSF とのやりとり（キー、変換中の文字の描画、表示属性、候補ウィンドウ、言語バー、トグル）と、ブローカーとの接続（`BrokerLink`） |
 | `tip_logic.h` | TSF に依存しない判断: 返事の読み取り（知らない項目は無視、無い項目は既定値）、食べるかどうか、返事の順序、状態と表示 |
 | `tip_json.h` | 小さな JSON 解析器（ブローカーと共有） |
+| `yuragi_tip.rc` `resource.h` | 製品アイコン（`assets/icon/yuragi.ico`）を DLL に持たせる。登録時に `RegisterProfile` がこの DLL とリソース番号を渡し、入力方式の切り替え一覧に出る。言語バーの「ゆ/Y」は実行時に描くモード表示で、これとは別 |
 | `tests/tip_logic_test.cpp` `tests/tip_json_test.cpp` | 上の 2 つの単体試験（どの OS でも動く） |
 | `tests/mingw/ctffunc.h` | Linux で llvm-mingw を使って型検査するときだけの補い（製品のビルドでは使わない） |
 

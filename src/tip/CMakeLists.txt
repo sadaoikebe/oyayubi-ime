@@ -11,7 +11,9 @@ if(WIN32)
     yuragi_tip.cpp
     tip_json.h
     tip_logic.h
+    resource.h
     yuragi_tip.def
+    yuragi_tip.rc
   )
 
   target_compile_features(yuragi_tip PRIVATE cxx_std_17)

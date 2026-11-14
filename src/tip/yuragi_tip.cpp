@@ -34,6 +34,7 @@
 #include <thread>
 #include <vector>
 
+#include "resource.h"
 #include "tip_json.h"
 #include "tip_logic.h"
 
@@ -2162,7 +2163,8 @@ static HRESULT RegisterProfile(BOOL add) {
     if (add) {
         std::wstring path = DllPath();
         hr = mgr->RegisterProfile(CLSID_YuragiTip, ja, GUID_YuragiProfile, L"ゆらぎ",
-                                  (ULONG)wcslen(L"ゆらぎ"), path.c_str(), (ULONG)path.size(), 0,
+                                  (ULONG)wcslen(L"ゆらぎ"), path.c_str(), (ULONG)path.size(),
+                                  (ULONG)-IDI_YURAGI,  // negative: a resource ID, as ExtractIcon reads it
                                   nullptr, 0, TRUE, 0);
         mgr->Release();
         HRESULT categories = RegisterCategories(TRUE);
