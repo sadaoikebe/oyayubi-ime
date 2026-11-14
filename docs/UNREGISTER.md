@@ -40,12 +40,17 @@ regsvr32 の終了コード 5 は「DllUnregisterServer が失敗を返した」
 登録解除の順番を、カテゴリ → プロファイルにした（SampleIME と同じ順）。登録の順番は変えていない。
 直したあと同じ手順で、すべての手順が S_OK、`uninstall.ps1` が 1 回で「登録解除 OK」まで進むことを確かめた。
 
-## 残っている別件（未対応）
+## HKCU の残り（同日に対応）
 
-`uninstall.ps1` が最後まで成功しても、次の 2 つが HKCU に残る。
+上を直したあとも、`uninstall.ps1` が成功したあとに次の 2 つが HKCU に残っていた。
 
 - `HKCU\SOFTWARE\Microsoft\CTF\TIP\{A7C4E201-…}\LanguageProfile\0x00000411\{A7C4E202-…}`
-  の `Enable = 0`（言語一覧から外したときに Windows が書く利用者ごとの設定）
-- 空の `HKCU\Software\oyayubi-ime`（スクリプトは Tag の値だけを消し、キーは残す）
+  の `Enable = 0`（段 2 で言語一覧から外したときに Windows が書く、利用者ごとの設定）
+- 空の `HKCU\Software\oyayubi-ime`（段 2 は Tag の値だけを消し、キーは残していた）
 
-1 回目が止まっていたときは、2 回目の実行で CTF の方が消えていた。次のインストールに影響するかは未確認。
+`uninstall.ps1` の段 5（ブローカーの終了と登録解除のあと）で、両方のキーを消すようにした。
+`Software\oyayubi-ime` に入るのは Tag と揮発キー Session だけで、利用者のデータはない。
+開いたままのアプリに残った古い DLL は、Tag が無いのでブローカーを起動せず、Session も作らない。
+登録 → `uninstall.ps1` で、HKLM・HKCU・`%LOCALAPPDATA%` に何も残らないことを確かめた。
+
+他の利用者の HKCU に書かれた分は、この利用者のスクリプトからは消さない。

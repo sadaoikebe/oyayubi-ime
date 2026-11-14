@@ -7,7 +7,7 @@
 #   2 HKCU の Tag と Run キーを消す (最初に: 残った DLL はこれで何も起動しなくなる)、言語一覧から外す
 #   3 ブローカーに quit (エンジンも終わる)
 #   4 管理者権限: 登録解除、読み返し、Program Files\oyayubi-ime の削除 (使用中の DLL は次の起動時)
-#   5 %LOCALAPPDATA%\oyayubi-ime を削除
+#   5 HKCU の製品のキーと TSF の利用者設定、%LOCALAPPDATA%\oyayubi-ime を削除
 #   6 結果
 # 学習した内容・登録した単語・設定 (%USERPROFILE%\.oyayubi-ime) は残す。
 # -RemoveData を付けたときだけ、場所と大きさを見せて確かめてから消す (I-7)。
@@ -146,6 +146,11 @@ Say "  登録解除 OK"
 }
 
 # ---------------------------------------------------------------- 5
+# 登録が消えたあとの、この利用者の分: 製品のキー (Tag と揮発キー Session) と、
+# 言語一覧から外したときに Windows が書く TSF の利用者設定 (Enable = 0)。
+if (Test-Path -LiteralPath $ProductKey) { Remove-Item -LiteralPath $ProductKey -Recurse -Force }
+$userTip = "HKCU:\SOFTWARE\Microsoft\CTF\TIP\$Clsid"
+if (Test-Path -LiteralPath $userTip) { Remove-Item -LiteralPath $userTip -Recurse -Force }
 $maintenance.ReleaseMutex()
 $maintenance.Dispose()
 $left = @()

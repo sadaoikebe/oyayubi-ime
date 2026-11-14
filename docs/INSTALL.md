@@ -73,7 +73,8 @@ powershell -ExecutionPolicy Bypass -File $env:LOCALAPPDATA\oyayubi-ime\versions\
 3. ブローカーに `quit`（エンジンも終わる）。
 4. 管理者権限: 登録解除、読み返して確認、`Program Files\oyayubi-ime\` を削除（使用中の DLL は次の
    Windows 起動時に消える予約）。
-5. `%LOCALAPPDATA%\oyayubi-ime\` を削除。
+5. HKCU の `Software\oyayubi-ime`（Tag と揮発キー Session）と、言語一覧から外したときに Windows が書く
+   TSF の利用者設定（`SOFTWARE\Microsoft\CTF\TIP\{CLSID}`）を削除。`%LOCALAPPDATA%\oyayubi-ime\` を削除。
 6. 結果を表示する。アプリを開いたままでも問題ない。
 
 `%USERPROFILE%\.oyayubi-ime\` は残る。消すときは `-RemoveData`（場所と大きさを表示して確かめてから
