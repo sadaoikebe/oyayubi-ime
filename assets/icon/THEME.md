@@ -41,18 +41,23 @@
 各 .ico には 16 / 20 / 24 / 32 / 40 / 48 / 64 / 256 px が入っている
 （表示倍率 100〜300% に対応。256 のみ PNG 圧縮、ほかは 32bit BMP + マスク）。
 
-## 組み込みの目安
+## ゆらぎでの使いどころ
 
-```rc
-IDI_YURAGI        ICON "yuragi.ico"
-IDI_YURAGI_LIGHT  ICON "yuragi-light.ico"
-IDI_YURAGI_DARK   ICON "yuragi-dark.ico"
-```
+使っているのは明暗両用の `yuragi.ico` だけ。どれもこの場所のファイルを直接参照するので、
+`build.py` で作り直せば、次のビルド（とインストール）でそのまま入れ替わる。
 
-- プロファイル登録（`ITfInputProcessorProfileMgr::RegisterProfile` のアイコン指定）は固定の 1 枚なので、
-  明暗両用の `yuragi.ico` を使う。これだけで条件は満たせる。
-- 台座なしの 2 枚は任意。言語バー項目のアイコンを実行時に返す箇所で、
-  タスクバーの明暗に応じて出し分けたい場合に使う。
+| どこに | どうやって |
+|---|---|
+| 入力方式の切り替え一覧（TSF のプロファイル） | `src/tip/yuragi_tip.rc` で DLL に `IDI_YURAGI` として入れ、`RegisterProfile` に DLL のパスと `-IDI_YURAGI` を渡す。反映は登録し直したとき |
+| `yuragi-broker.exe` のアイコン | `src/broker/broker.rc` に `IDI_YURAGI` として入れる |
+| 設定ウィンドウ（ゆらぎ 設定）の窓アイコン | `yuragi/ime/admin_ui.py` が `iconbitmap(default=...)` で読む。インストール先はソースの木をそのまま展開したものなので、同じ相対位置にある |
+
+使っていないところ:
+
+- 言語バーの「ゆ/Y」はモード表示で、`yuragi_tip.cpp` の `GetIcon` が実行時に字を描く。製品アイコンとは別。
+- ブローカーの通知領域のお知らせは、システムの情報/警告アイコンのまま。
+- 台座なしの `yuragi-light.ico` / `yuragi-dark.ico` はまだどこにも組み込んでいない。
+  タスクバーの明暗で出し分けたくなったときのために置いてある。
 
 ## 形を変えたいとき
 
