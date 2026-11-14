@@ -4,9 +4,11 @@ Original code in this repository is under the MIT License (`LICENSE`).
 The data and software that the installer fetches (the dictionary, the Python
 runtime and its packages, the language model) are under their own terms.
 Those terms do **not** relicense the IME source. They apply to the named
-items only. None of them is stored in this repository or attached to a
-release: `setup.ps1` downloads each one on the user's PC from the source
-named below.
+items only. None of them is stored in this repository, and all but one
+are not attached to a release: `setup.ps1` downloads each one on the
+user's PC from the source named below. The one exception is the tkinter
+files for the settings window ("Python tkinter files" below), which the
+release attaches as `python-<version>-tkinter-amd64.zip`.
 
 One thing that is stored in this repository (and so is in the release's
 source zip) is also not MIT: a list of 157 entries taken from the Mozc
@@ -173,6 +175,25 @@ below. Each package keeps the license files its own wheel carries, in
 The Python embeddable package carries its own `LICENSE.txt` (the PSF
 License Agreement and the licenses of the software incorporated into
 Python); it stays at the top of the runtime folder.
+
+### Python tkinter files (attached to the release)
+
+The embeddable package has no tkinter, which the settings window needs.
+The release workflow copies these files, unmodified, from the regular
+Python of the same version (3.13.7, 64-bit, installed on the build runner
+by `actions/setup-python`) into the release asset
+`python-3.13.7-tkinter-amd64.zip`. `setup.ps1` checks its SHA-256 and
+unpacks it into the runtime folder.
+
+| Files | Component | License |
+| --- | --- | --- |
+| `_tkinter.pyd`, `Lib\tkinter\` | Python's tkinter | PSF License Agreement (the runtime's `LICENSE.txt`) |
+| `tcl86t.dll`, `tk86t.dll`, `tcl\` | Tcl/Tk 8.6 | Tcl/Tk license (BSD-style); Tk's copy is `tcl\tk8.6\license.terms` |
+| `zlib1.dll` (when the Python build has it) | zlib | zlib License |
+
+The regular Python does not ship Tcl's own `license.terms`, so the asset
+does not have it either. Tcl is under the same BSD-style license as Tk
+(the `license.terms` of the Tcl source distribution).
 
 The packages above are pinned (`$TorchVersion` in `packaging/setup.ps1`,
 `packaging/requirements.txt`). pip resolves their dependencies at install

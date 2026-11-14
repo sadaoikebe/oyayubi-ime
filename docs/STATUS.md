@@ -36,7 +36,7 @@
 
 試験窓: `python -m yuragi.ime.host_win32`（TSF を通さない）。
 
-設定ウィンドウ（2026-11-13、旧称 管理ウィンドウ）: `python -m yuragi.ime.admin_ui`（tkinter、標準ライブラリのみ。`--runtime-dir` / `--config` は manage と同じ）。単語登録・学習・設定・状態の 4 タブ。
+設定ウィンドウ（2026-11-13、旧称 管理ウィンドウ）: `python -m yuragi.ime.admin_ui`（tkinter、標準ライブラリのみ。`--runtime-dir` / `--config` は manage と同じ）。単語登録・学習・設定・状態の 4 タブ。同梱ランタイム（Python 埋め込み版）には tkinter が無いので、リリースが同じ版の通常版 Python から取った tkinter 一式（`python-<版>-tkinter-amd64.zip`）を添え、setup.ps1 がランタイムに展開する（v0.1.0 は無しで、設定ウィンドウが開かなかった）。
 
 - 単語登録: 個人辞書（`personal_file`）の一覧・登録（読み・単語・品詞・コスト）・削除。動いている変換サーバには次の変換から効く
 - 学習: 学習履歴の一覧と検索、選択した組の忘却（Shift+F6 と同じ抑制）、単語登録への昇格（履歴を消しても残る）、学習の一時停止／再開、件数。学習ファイルが無い（学習オフ）ときは一時停止も忘却もできない

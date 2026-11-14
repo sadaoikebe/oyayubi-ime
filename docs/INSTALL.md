@@ -22,7 +22,7 @@
 %LOCALAPPDATA%\yuragi-ime\                 利用者の権限で動くものだけ
     versions\<tag>\app\                     Python のソース
     versions\<tag>\engine.json              ブローカーがエンジンを起動するための道順
-    shared\runtime\<版とハッシュ>\           同梱 Python 3.13 + torch CPU + 依存
+    shared\runtime\<版とハッシュ>\           同梱 Python 3.13 + tkinter + torch CPU + 依存
     shared\dict\<上流コミット>\              Mozc 辞書（マニフェストの SHA-256 で照合済み）
     shared\cache\<マニフェストのハッシュ>.pkl  辞書キャッシュ（エンジンが作る）
     shared\model\<リビジョン>\               LM モデル
