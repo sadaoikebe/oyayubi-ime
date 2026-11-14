@@ -1,4 +1,4 @@
-oyayubi-ime のインストール (詳しくは docs/INSTALL.md)
+yuragi-ime のインストール (詳しくは docs/INSTALL.md)
 
 持ち込むのは setup.ps1 だけです。本体・辞書・LM・モデルは、setup.ps1 が
 対象 PC の側で公式の場所から取得して構築します。
@@ -10,8 +10,8 @@ oyayubi-ime のインストール (詳しくは docs/INSTALL.md)
   (IME の登録)。途中で失敗しても、それまでの版がそのまま動きます。
 
 アンインストール:
-    powershell -ExecutionPolicy Bypass -File %LOCALAPPDATA%\oyayubi-ime\versions\<tag>\app\packaging\uninstall.ps1
-  学習した内容・登録した単語・設定 (%USERPROFILE%\.oyayubi-ime) は残ります。
+    powershell -ExecutionPolicy Bypass -File %LOCALAPPDATA%\yuragi-ime\versions\<tag>\app\packaging\uninstall.ps1
+  学習した内容・登録した単語・設定 (%USERPROFILE%\.yuragi-ime) は残ります。
   消すときは -RemoveData を付けます。
 
 このフォルダ:

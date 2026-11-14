@@ -1,4 +1,4 @@
-# oyayubi-broker（REDESIGN §5）
+# yuragi-broker（REDESIGN §5）
 
 サインインごとに 1 つ動く小さな常駐プログラム。変換エンジン（`python -m yuragi.engine`）を
 起動・見張り・決まった回数だけ起動し直し、TIP からの打鍵を名前付きパイプで受けてエンジンへ渡す。
@@ -17,10 +17,10 @@
 ```
 cmake -S src/broker -B build/broker -DCMAKE_BUILD_TYPE=Release
 cmake --build build/broker && ctest --test-dir build/broker
-python -m unittest tests.test_broker          # Windows では OYAYUBI_BROKER=dist\oyayubi-broker.exe
+python -m unittest tests.test_broker          # Windows では YURAGI_BROKER=dist\yuragi-broker.exe
 ```
 
-`engine.json`（インストーラが `%LOCALAPPDATA%\oyayubi-ime\versions\<tag>\` に書く）:
+`engine.json`（インストーラが `%LOCALAPPDATA%\yuragi-ime\versions\<tag>\` に書く）:
 
 ```json
 {"format": 1, "python": "<python.exe の絶対パス>", "pythonw": "<pythonw.exe>",
@@ -28,4 +28,4 @@ python -m unittest tests.test_broker          # Windows では OYAYUBI_BROKER=di
  "admin_args": ["-m", "yuragi.ime.admin_ui"]}
 ```
 
-ログは `%USERPROFILE%\.oyayubi-ime\logs\`（`broker.log`、`engine.log`、`notices.log`。各 1MB × 2 世代）。
+ログは `%USERPROFILE%\.yuragi-ime\logs\`（`broker.log`、`engine.log`、`notices.log`。各 1MB × 2 世代）。

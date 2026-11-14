@@ -1,4 +1,4 @@
-# oyayubi-ime 全体再設計（2026-11-13）
+# yuragi-ime 全体再設計（2026-11-13）
 
 `docs/DEFENSIVE_CODE_AUDIT.md`（監査）で見つかった問題を、個別の修理ではなく構造から直すための設計書。
 実装者（Opus）がこの文書だけで作業に入れるように書く。監査の項目番号（A-1 など）はそのまま参照する。
@@ -104,19 +104,19 @@
 
 | 部品 | 実体 | 数 | 誰が起動するか |
 |---|---|---|---|
-| TIP | `NicolaIME3.dll`（C++） | アプリのスレッドごと | Windows |
-| ブローカー | `oyayubi-broker.exe`（C++、ウィンドウなし） | サインインごとに 1 | サインイン時（Run キー）。無ければ TIP が条件付きで（§7.3） |
+| TIP | `yuragi_tip.dll`（C++） | アプリのスレッドごと | Windows |
+| ブローカー | `yuragi-broker.exe`（C++、ウィンドウなし） | サインインごとに 1 | サインイン時（Run キー）。無ければ TIP が条件付きで（§7.3） |
 | エンジン | 同梱 Python で `python -m yuragi.engine` | ブローカーごとに 1 | ブローカーだけ |
 | 設定ウィンドウ | `pythonw -m yuragi.ime.admin_ui` | 利用者が開いたとき | ブローカー（TIP のメニューから依頼） |
 
 ### 4.2 置き場所
 
 ```
-%ProgramFiles%\oyayubi-ime\<tag>\          管理者だけが書ける。全アプリに読み込まれるものはここ（A-13）
-    NicolaIME3.dll
-    oyayubi-broker.exe
+%ProgramFiles%\yuragi-ime\<tag>\          管理者だけが書ける。全アプリに読み込まれるものはここ（A-13）
+    yuragi_tip.dll
+    yuragi-broker.exe
 
-%LOCALAPPDATA%\oyayubi-ime\                 利用者の権限で動くものだけ。管理者権限では決して実行しない
+%LOCALAPPDATA%\yuragi-ime\                 利用者の権限で動くものだけ。管理者権限では決して実行しない
     versions\<tag>\app\                     Python のソース
     versions\<tag>\engine.json              このタグが使う共有物への道順（下）
     shared\runtime\<id>\                    同梱 Python + torch + 依存。id = 版とハッシュ
@@ -125,14 +125,14 @@
     shared\model\<リビジョン>\              LM モデル
     staging\                                更新の作業場。成功したら versions へ移す
 
-%USERPROFILE%\.oyayubi-ime\                 利用者のデータ。更新でもアンインストールでも触らない
+%USERPROFILE%\.yuragi-ime\                 利用者のデータ。更新でもアンインストールでも触らない
     config.json  tip.json
     learning.jsonl  personal_lexicon.jsonl
     logs\broker.log  logs\engine.log  logs\engine.prev.log
 
-HKLM  CLSID・TIP 登録 → %ProgramFiles%\oyayubi-ime\<tag>\NicolaIME3.dll
-HKCU\Software\oyayubi-ime   Tag = <tag>     「この利用者には、この版が入っている」の唯一の印
-HKCU\…\CurrentVersion\Run   oyayubi-ime = "…\<tag>\oyayubi-broker.exe"
+HKLM  CLSID・TIP 登録 → %ProgramFiles%\yuragi-ime\<tag>\yuragi_tip.dll
+HKCU\Software\yuragi-ime   Tag = <tag>     「この利用者には、この版が入っている」の唯一の印
+HKCU\…\CurrentVersion\Run   yuragi-ime = "…\<tag>\yuragi-broker.exe"
 ```
 
 要点:
@@ -141,7 +141,7 @@ HKCU\…\CurrentVersion\Run   oyayubi-ime = "…\<tag>\oyayubi-broker.exe"
   読み込まれている DLL には触らない。だからアプリを開いたまま更新できる（P-7）。
 - **大きいもの（ランタイム・辞書・モデル）は中身で名前を付けて共有する。** 中身が同じなら更新で取り直さない。
 - **学習履歴と個人辞書をプログラムのフォルダから出す**（A-15）。既存の `app\data\learning.jsonl` と
-  `personal_lexicon.jsonl` は、初回の更新時に `~\.oyayubi-ime\` へ移す。
+  `personal_lexicon.jsonl` は、初回の更新時に `~\.yuragi-ime\` へ移す。
 - **Python の経路は同梱ランタイム 1 本。** venv 経路とシステム Python の探索は削除する。
 
 ---
@@ -160,11 +160,11 @@ HKCU\…\CurrentVersion\Run   oyayubi-ime = "…\<tag>\oyayubi-broker.exe"
 ### 5.2 起動と終了
 
 - サブシステムは WINDOWS（コンソールを持たない）。ウィンドウは通知用の非表示ウィンドウ 1 枚だけ。
-- 二重起動は名前付きミューテックス `Local\oyayubi-ime-broker` で防ぐ。取れなければ黙って終了コード 0。
-- 起動したら `HKCU\Software\oyayubi-ime\Tag` を読み、自分のタグと違えば黙って終了（古い版が残っていた場合）。
-- `%LOCALAPPDATA%\oyayubi-ime\versions\<tag>\engine.json` が無ければ、状態を `not-installed` にして
+- 二重起動は名前付きミューテックス `Local\yuragi-ime-broker` で防ぐ。取れなければ黙って終了コード 0。
+- 起動したら `HKCU\Software\yuragi-ime\Tag` を読み、自分のタグと違えば黙って終了（古い版が残っていた場合）。
+- `%LOCALAPPDATA%\yuragi-ime\versions\<tag>\engine.json` が無ければ、状態を `not-installed` にして
   パイプだけ開く（同じ PC の別の利用者。知らせない、何も起動しない）。
-- 保守中の印（§8.1 のミューテックス `Local\oyayubi-ime-maintenance`）が立っていたら、エンジンを起動せず終了する。
+- 保守中の印（§8.1 のミューテックス `Local\yuragi-ime-maintenance`）が立っていたら、エンジンを起動せず終了する。
 - 終了するのは: パイプで `quit` を受けたとき（インストーラ）、サインアウト。
 
 ### 5.3 エンジンの起動のしかた
@@ -213,7 +213,7 @@ HKCU\…\CurrentVersion\Run   oyayubi-ime = "…\<tag>\oyayubi-broker.exe"
 
 ### 5.5 TIP との通信（名前付きパイプ）
 
-- 名前: `\\.\pipe\oyayubi-ime-<利用者の SID>-<セッション番号>`。バイト単位、1 行 1 JSON（UTF-8、`\n` 区切り）。
+- 名前: `\\.\pipe\yuragi-ime-<利用者の SID>-<セッション番号>`。バイト単位、1 行 1 JSON（UTF-8、`\n` 区切り）。
 - アクセス権: その利用者に読み書き。加えて「すべてのアプリパッケージ」（`S-1-15-2-1`）に読み書き
   ——スタートメニューの検索欄など、サンドボックス内のアプリからも**接続だけは**できるようにする
   【実装時に確認: 整合性レベルのラベルも必要か】。他の利用者・ネットワークからは不可（`PIPE_REJECT_REMOTE_CLIENTS`）。
@@ -382,7 +382,7 @@ LM は `local_files_only=True` で読む。**エンジンはネットワーク�
 
 ---
 
-## 7. TIP（`oyayubi_tip.cpp`、通信と生存管理を書き直す）
+## 7. TIP（`yuragi_tip.cpp`、通信と生存管理を書き直す）
 
 TSF とのやりとり（キーの受け取り、変換中の文字の描画、表示属性、候補ウィンドウ、言語バー、
 トグルキー）は、動いているので骨格を残す。**消すものと、入れ替えるものを明確にする。**
@@ -416,16 +416,16 @@ TSF とのやりとり（キーの受け取り、変換中の文字の描画、�
 
 パイプが無かったとき、**次の全部が成り立つ場合に限り**、ブローカーを 1 回起動する。
 
-1. `HKCU\Software\oyayubi-ime\Tag` が、この DLL のタグ（ビルド時に埋め込む）と同じ。
+1. `HKCU\Software\yuragi-ime\Tag` が、この DLL のタグ（ビルド時に埋め込む）と同じ。
    ——アンインストール済み・更新済みの古い DLL は、ここで必ず止まる。
-2. 保守中の印 `Local\oyayubi-ime-maintenance` が無い。——インストーラの作業中は誰も起動しない（A-5）。
+2. 保守中の印 `Local\yuragi-ime-maintenance` が無い。——インストーラの作業中は誰も起動しない（A-5）。
 3. このプロセスが、サンドボックスの中でなく、管理者権限でもない（整合性レベルが「中」）。
    ——ブローカーが変な権限で動かないように（A-8）。条件に合わないプロセスは**接続するだけ**。
 4. このサインインの間に TIP が起動した回数が `BROKER_MAX_SPAWNS`（3）未満。回数は、サインアウトで消える
-   場所に置く（`HKCU\Software\oyayubi-ime\Session`、揮発キー）【実装時に確認: 揮発キーが消える時点】。
-   読み書きはミューテックス `Local\oyayubi-ime-spawn` で直列にする。ブローカーは READY が 60 秒続いたら回数を 0 に戻す。
+   場所に置く（`HKCU\Software\yuragi-ime\Session`、揮発キー）【実装時に確認: 揮発キーが消える時点】。
+   読み書きはミューテックス `Local\yuragi-ime-spawn` で直列にする。ブローカーは READY が 60 秒続いたら回数を 0 に戻す。
 
-起動のしかた: 実行ファイルは**この DLL と同じフォルダ**の `oyayubi-broker.exe`（`Program Files` の中なので
+起動のしかた: 実行ファイルは**この DLL と同じフォルダ**の `yuragi-broker.exe`（`Program Files` の中なので
 書き換えられない）。フラグは `CREATE_NO_WINDOW | CREATE_BREAKAWAY_FROM_JOB`、ハンドルは引き継がない、
 環境は `CreateEnvironmentBlock` で作ったもの。ジョブからの離脱が許されず起動に失敗したら、**やり直さない**
 （回数だけ数える。別のアプリの TIP が次の機会に試す）。
@@ -494,7 +494,7 @@ TIP 本体は TSF の中でしか動かないが、**判断の部分は切り出
 ### 8.1 共通の仕組み
 
 - **保守中の印**: `setup.ps1` と `uninstall.ps1` は、最初に（管理者権限でない側で）ミューテックス
-  `Local\oyayubi-ime-maintenance` を作って持つ。スクリプトが終われば、成功でも失敗でも強制終了でも、
+  `Local\yuragi-ime-maintenance` を作って持つ。スクリプトが終われば、成功でも失敗でも強制終了でも、
   Windows が自動で消す。**消し忘れが起こりえない。** この印がある間、TIP はブローカーを起動せず、
   ブローカーはエンジンを起動しない。
 - **管理者権限で行うのは 3 つだけ**（UAC は 1 回）: ①`Program Files` への 2 ファイルの配置、
@@ -515,9 +515,9 @@ TIP 本体は TSF の中でしか動かないが、**判断の部分は切り出
 |---|---|---|
 | 1 | 保守中の印を立てる | — |
 | 2 | `staging\<tag>\` に取得・照合・展開。足りない共有物（ランタイム・辞書・モデル）だけ `shared\` に作る。共有物は「作りかけの名前で作って、完成したら改名」 | 何も変わっていない。旧版が動き続ける。やり直せば続きから |
-| 3 | **本物のブローカーで試運転**: `oyayubi-broker.exe --selftest <staging の engine.json>`。エンジンを実際に起動し、変換を 1 回行い、ウィンドウが出ないことを確かめて終了コードを返す | 同上 |
+| 3 | **本物のブローカーで試運転**: `yuragi-broker.exe --selftest <staging の engine.json>`。エンジンを実際に起動し、変換を 1 回行い、ウィンドウが出ないことを確かめて終了コードを返す | 同上 |
 | 4 | `staging\<tag>` を `versions\<tag>` へ改名（一瞬） | 同上 |
-| 5 | 管理者権限: `Program Files\oyayubi-ime\<tag>\` に配置、登録を新しい DLL に付け替え、読み返して確認 | 旧版の登録のまま。旧版が動き続ける |
+| 5 | 管理者権限: `Program Files\yuragi-ime\<tag>\` に配置、登録を新しい DLL に付け替え、読み返して確認 | 旧版の登録のまま。旧版が動き続ける |
 | 6 | 旧ブローカーに `quit`。`HKCU\…\Tag` と Run キーを新しい版に書き換え、言語一覧に追加 | — |
 | 7 | 新ブローカーを起動し、`ready` を待って確認（最大 60 秒）。印を下ろす | 理由を表示。次のサインインでも起動を試みる |
 | 8 | 旧版の片付け: `versions\` と `shared\` の使われていないもの。`Program Files` 側の旧版は 5 の管理者権限の中で消し、使用中の DLL は「次の Windows 起動時に削除」に予約 | 片付けの失敗はインストールの失敗にしない。次回の setup がまた試す |
@@ -533,13 +533,13 @@ TIP 本体は TSF の中でしか動かないが、**判断の部分は切り出
 1. 保守中の印。
 2. `HKCU\…\Tag` と Run キーを消す（**最初に。**これで残った DLL は何も起動しなくなる）。言語一覧から外す。
 3. ブローカーに `quit`（エンジンも終了する）。
-4. 管理者権限: 登録解除、読み返して確認。`Program Files\oyayubi-ime\` を削除。使用中の DLL は
+4. 管理者権限: 登録解除、読み返して確認。`Program Files\yuragi-ime\` を削除。使用中の DLL は
    「次の Windows 起動時に削除」に予約。
-5. `%LOCALAPPDATA%\oyayubi-ime\` を削除（ここには、もう使用中のファイルは無い）。
+5. `%LOCALAPPDATA%\yuragi-ime\` を削除（ここには、もう使用中のファイルは無い）。
 6. 結果を表示する。使用中の DLL が残ったときは「アプリを開いたままでも問題ありません。
    残り 1 ファイルは、次に Windows を起動したとき自動で消えます」と伝える。**サインアウトや再起動を求めない。**
 
-`~\.oyayubi-ime\`（学習履歴・個人辞書・設定）は**残す**。消すのは `-RemoveData` を付けたときだけで、
+`~\.yuragi-ime\`（学習履歴・個人辞書・設定）は**残す**。消すのは `-RemoveData` を付けたときだけで、
 そのときも消す前に場所と大きさを表示する（I-7）。`-KeepData` は廃止。
 
 ### 8.4 開発時（`dev-build.ps1`）
@@ -553,7 +553,7 @@ TIP 本体は TSF の中でしか動かないが、**判断の部分は切り出
 
 ## 9. 利用者に見えるもの
 
-原則: **普通の利用者は、「お」と「N」以外のものを見ない。** 見せるのは、利用者が何かしないと
+原則: **普通の利用者は、「ゆ」と「Y」以外のものを見ない。** 見せるのは、利用者が何かしないと
 直らないときだけ。見せるときは、何が起きたか・文字は無事か・どうすればよいか、を 1 つの文で言う。
 どれも**フォーカスを取らず、クリックしなくても消える。**
 
@@ -561,10 +561,10 @@ TIP 本体は TSF の中でしか動かないが、**判断の部分は切り出
 
 | 状態 | タスクバー | 打鍵 | いつ |
 |---|---|---|---|
-| 通常 | 「お」／「N」 | 変換される | ほぼ常に |
-| 準備中 | 「お」（薄く） | 預かって、準備ができたら順に入る | サインイン直後の数秒、エンジンの起動し直し中 |
+| 通常 | 「ゆ」／「Y」 | 変換される | ほぼ常に |
+| 準備中 | 「ゆ」（薄く） | 預かって、準備ができたら順に入る | サインイン直後の数秒、エンジンの起動し直し中 |
 | 停止 | 「!」 | そのまま通る（直接入力と同じ） | 自動で直せなかったとき |
-| 対象外 | 「N」 | そのまま通る | 更新作業中、この利用者には未インストール、アプリの開き直し待ち |
+| 対象外 | 「Y」 | そのまま通る | 更新作業中、この利用者には未インストール、アプリの開き直し待ち |
 
 ### 9.2 カーソルの近くに出す小さな表示
 
@@ -576,13 +576,13 @@ TIP 本体は TSF の中でしか動かないが、**判断の部分は切り出
 | 返事を 1 秒以上待っている | `変換の準備をしています…` | 返事が来たら |
 | 停止中に、かな入力のつもりで文字キーを押した（フォーカスごとに 1 回） | `日本語変換が止まっています。タスクバーの「!」を押してください` | 4 秒 |
 | 入力が上限に達した | `長すぎます。いったん確定してください` | 次の確定 |
-| プロトコルが合わない | `oyayubi-ime を更新しました。このアプリを開き直すと使えます` | 4 秒（フォーカスごとに 1 回） |
+| プロトコルが合わない | `ゆらぎを更新しました。このアプリを開き直すと使えます` | 4 秒（フォーカスごとに 1 回） |
 
 ### 9.3 通知（ブローカーが出す。停止に入ったときに 1 回だけ）
 
 Windows の通知（`Shell_NotifyIcon` の通知。フォーカスを取らない【実装時に確認】）で:
 
-> **oyayubi-ime: 日本語変換が止まりました**
+> **ゆらぎ: 日本語変換が止まりました**
 > 入力済みの文字はそのまま残っています。ここを押すと、原因と直し方を表示します。
 
 押すと、ブローカーが小さな案内（ネイティブのダイアログ。Python に頼らない——Python が壊れているときにも
@@ -598,7 +598,7 @@ Windows の通知（`Shell_NotifyIcon` の通知。フォーカスを取らな�
 停止していても起動はできている軽い異常（設定ファイルが読めず既定値で動いている、LM が使えない、
 学習を保存できない）は、「注意」として同じ通知の仕組みで**原因ごとに 1 サインイン 1 回**:
 
-> **oyayubi-ime: 設定ファイルを読めませんでした**
+> **ゆらぎ: 設定ファイルを読めませんでした**
 > 標準の設定で動いています。変換は使えます。ここを押すと詳しく表示します。
 
 ### 9.4 タスクバーのメニュー（右クリック）

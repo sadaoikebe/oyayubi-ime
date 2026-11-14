@@ -1,4 +1,4 @@
-# oyayubi-ime
+# ゆらぎ（yuragi-ime）
 
 横長スペースバーの一般キーボード（作者の常用は US ANSI + NICOLA-A）で、左右あいまいな親指シフトを、普通の Windows IME として使う個人プロジェクトです。
 
@@ -8,27 +8,28 @@ Windows 10/11（64bit）の、管理者ではない普段の PowerShell で、�
 アプリを開いたままで構いません。
 
 ```powershell
-iwr -UseBasicParsing https://github.com/sadaoikebe/oyayubi-ime/releases/latest/download/setup.ps1 -OutFile $env:TEMP\oyayubi-setup.ps1; powershell -ExecutionPolicy Bypass -File $env:TEMP\oyayubi-setup.ps1
+iwr -UseBasicParsing https://github.com/sadaoikebe/yuragi-ime/releases/latest/download/setup.ps1 -OutFile $env:TEMP\yuragi-setup.ps1; powershell -ExecutionPolicy Bypass -File $env:TEMP\yuragi-setup.ps1
 ```
 
 - 取得するもの（約 1GB、2 回目からは差分だけ）を表示して確認してから進みます。IME の登録で管理者の確認が 1 回出ます。
-- 終わったら Win+Space で oyayubi-ime を選びます。タスクバーの「お/N」をクリックで直接入力と切り替え、右クリックの「設定を開く」で設定ウィンドウ。
+- 終わったら Win+Space で「ゆらぎ」を選びます。タスクバーの「ゆ/Y」をクリックで直接入力と切り替え、右クリックの「設定を開く」で設定ウィンドウ。
 - 途中で失敗しても、それまでの版がそのまま動きます。もう一度実行すると続きから進みます。
-- 学習した内容・登録した単語・設定は `%USERPROFILE%\.oyayubi-ime` にあり、更新でもアンインストールでも残ります。
+- 学習した内容・登録した単語・設定は `%USERPROFILE%\.yuragi-ime` にあり、更新でもアンインストールでも残ります。
+  旧名（oyayubi-ime）の版から更新すると、`%USERPROFILE%\.oyayubi-ime` の中身をここへ移します（旧い方は消しません）。
 - 置き場所と手順は [docs/INSTALL.md](docs/INSTALL.md)、全体の設計は [docs/REDESIGN.md](docs/REDESIGN.md)。
 
 タスクバーの表示:
 
 | 表示 | 意味 |
 |---|---|
-| 「お」／「N」 | かな入力／直接入力 |
-| 薄い「お」 | 変換の準備中（サインイン直後の数秒など）。打った文字は預かって、準備ができたら順に入ります |
+| 「ゆ」／「Y」 | かな入力／直接入力 |
+| 薄い「ゆ」 | 変換の準備中（サインイン直後の数秒など）。打った文字は預かって、準備ができたら順に入ります |
 | 「!」 | 日本語変換が止まっています。右クリック →「もう一度試す」「原因を表示」 |
 
 アンインストール（`<tag>` は入れた版。学習データなども消すときは末尾に `-RemoveData`）:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File $env:LOCALAPPDATA\oyayubi-ime\versions\<tag>\app\packaging\uninstall.ps1
+powershell -ExecutionPolicy Bypass -File $env:LOCALAPPDATA\yuragi-ime\versions\<tag>\app\packaging\uninstall.ps1
 ```
 
 ## 開発
