@@ -1,9 +1,15 @@
-"""Pin the pre-refactor `_refresh(rescore=True)` result with the real LM (test 9).
+"""Check the hand-written LM conversion cases (test 9) against this IME.
 
-Run once from the repo root with torch/transformers and the model cached:
+tests/fixtures/lm_conversion_expected.json holds 30 sentences written for this
+project. Each case's `composition` and `segments` were written first as the
+correct Japanese; cases the IME (dictionary + LM rescoring) did not produce
+were replaced by other sentences, not by the IME's output. The test never
+regenerates the file.
+
+Run from the repo root with torch/transformers and the model cached to list
+the cases the IME does not produce:
   HF_HUB_OFFLINE=1 ../fable-experiments/.venv/bin/python \
       tests/fixtures/make_lm_conversion_fixture.py
-Writes tests/fixtures/lm_conversion_expected.json. The test never regenerates it.
 """
 import json
 import sys
@@ -16,10 +22,7 @@ from yuragi.chord.fsm import AmbShift, Plain  # noqa: E402
 from yuragi.ime.lm_rescore import CausalLmScorer, LmRescorer  # noqa: E402
 from yuragi.ime.session import ImeSession, Literal  # noqa: E402
 from yuragi.lattice.table import load_table, reverse_table  # noqa: E402
-from tools.wp0.fetch_ajimee import DATA  # noqa: E402
-from tools.wp0.run_ajimee_eval import hiragana  # noqa: E402
 
-LIMIT = 30
 OUT = Path(__file__).with_name("lm_conversion_expected.json")
 
 
@@ -34,12 +37,6 @@ def session_tokens(reading: str, reverse: dict) -> list:
         else:
             out.append(AmbShift(token["key"]))
     return out
-
-
-def cases() -> list[dict]:
-    items = json.loads(DATA.read_bytes())[:LIMIT]
-    return [{"input": hiragana(item["input"]), "context": item.get("context_text") or ""}
-            for item in items]
 
 
 def convert(sess: ImeSession, case: dict, reverse: dict) -> dict:
@@ -57,11 +54,15 @@ def main() -> None:
     sess = ImeSession(learning_path=None)
     sess.load()
     sess.lm = LmRescorer(CausalLmScorer())
-    rows = []
-    for case in cases():
-        rows.append({**case, **convert(sess, case, reverse)})
-    OUT.write_text(json.dumps(rows, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-    print(f"wrote {len(rows)} cases to {OUT}")
+    rows = json.loads(OUT.read_text(encoding="utf-8"))
+    misses = 0
+    for row in rows:
+        got = convert(sess, row, reverse)
+        if got != {"composition": row["composition"], "segments": row["segments"]}:
+            misses += 1
+            print(f"expected: {' / '.join(s[2] for s in row['segments'])}")
+            print(f"     got: {' / '.join(s[2] for s in got['segments'])}")
+    print(f"{len(rows) - misses} of {len(rows)} cases match")
 
 
 if __name__ == "__main__":

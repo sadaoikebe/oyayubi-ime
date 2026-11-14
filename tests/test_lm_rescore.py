@@ -153,14 +153,14 @@ class RealModelTest(unittest.TestCase):
     def test_variants_match_naive(self):
         cands = ["記憶にない", "既読にない", "記憶に泣い", "既読", "きどくにない", "記"]
         variants = [self.make(), self.make(incremental=False)]
-        for ctx in ("", "***REMOVED***", "***REMOVED***"):
+        for ctx in ("", "昨日は駅前の本屋で、", "昨日は駅前の本屋で、友人"):
             ref = self.ref.nll(ctx, cands)
             for v in variants:
                 for a, b in zip(v.nll(ctx, cands), ref):
                     self.assertAlmostEqual(a, b, delta=1e-3)
 
     def test_conversion_picks_match_pinned_refresh(self):
-        """Pinned before the refactor from _refresh(rescore=True) at 75703b8."""
+        """Hand-written cases (see make_lm_conversion_fixture.py) on both refresh paths."""
         from tests.fixtures.make_lm_conversion_fixture import OUT, session_tokens
         from yuragi.lattice.table import load_table, reverse_table
         rows = json.loads(OUT.read_text(encoding="utf-8"))
@@ -191,7 +191,7 @@ class RealModelTest(unittest.TestCase):
         cands = ["記憶にない", "既読にない", "既読"]
         cold = self.make()
         primed = self.make()
-        for ctx in ("***REMOVED***", "***REMOVED***"):
+        for ctx in ("昨日は駅前の本屋で、", "昨日は駅前の本屋で、友人"):
             primed.prime(ctx)
             for a, b in zip(primed.nll(ctx, cands), cold.nll(ctx, cands)):
                 self.assertAlmostEqual(a, b, delta=1e-3)

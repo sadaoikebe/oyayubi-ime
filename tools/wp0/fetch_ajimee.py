@@ -1,4 +1,6 @@
-"""Fetch AJIMEE-Bench JWTD_v2/v1 (CC BY-SA 3.0); no data is bundled.
+"""Fetch AJIMEE-Bench JWTD_v2/v1 (CC BY-SA 3.0).
+
+The dataset is not in git.
 
 Run: python3 -m tools.wp0.fetch_ajimee
 See docs/EVALUATION.md for attribution, license and evaluation limits.

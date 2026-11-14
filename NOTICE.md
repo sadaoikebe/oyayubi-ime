@@ -8,6 +8,11 @@ items only. None of them is stored in this repository or attached to a
 release: `setup.ps1` downloads each one on the user's PC from the source
 named below.
 
+One thing that is stored in this repository (and so is in the release's
+source zip) is also not MIT: a list of 157 entries taken from the Mozc
+dictionary (`docs/zero-row-entries.tsv`, under the Mozc dictionary terms
+below).
+
 This project does **not** include GPL code. The QMK NICOLA implementation
 (`nicola.c`) was used only as a specification of behavior; it is not copied
 here. RIME/Weasel and similar GPL IME hosts are not linked.
@@ -21,8 +26,13 @@ All files (`dictionary*.txt`, `connection_single_column.txt`, `suffix.txt`,
 `id.def`, `evaluation.tsv`, `README.txt`, `README.md`) are fetched from
 `src/data/dictionary_oss/` at the upstream commit pinned in
 `data/dictionary-manifest.json` by `python -m tools.wp0.fetch_mozc_dict`
-and checked against the SHA-256 in that manifest. None of them is stored
-in git. Runtime conversion uses this dictionary.
+and checked against the SHA-256 in that manifest. None of these files is
+stored in git. Runtime conversion uses this dictionary.
+
+One excerpt is stored in git: `docs/zero-row-entries.tsv` lists 157 entries
+of this dictionary (reading, surface form, ids, cost) with their
+part-of-speech names from `id.def`, as the record of a check described in
+`docs/ZERO_ROW_PENALTY.md`. The terms below apply to that file too.
 
 Upstream: https://github.com/google/mozc  
 The Mozc project itself is BSD-3-Clause (Google Inc.). Dictionary sources
@@ -160,26 +170,30 @@ below. Each package keeps the license files its own wheel carries, in
 | transformers | 4.57.1 | Apache-2.0 | PyPI |
 | sentencepiece | 0.2.1 | not stated in the wheel's metadata; see https://github.com/google/sentencepiece | PyPI |
 
+The Python embeddable package carries its own `LICENSE.txt` (the PSF
+License Agreement and the licenses of the software incorporated into
+Python); it stays at the top of the runtime folder.
+
 The packages above are pinned (`$TorchVersion` in `packaging/setup.ps1`,
 `packaging/requirements.txt`). pip resolves their dependencies at install
-time; those versions are not pinned. For reference, a Linux install of the
-same pins on 2026-11-14 resolved these, with the licenses their wheels
-declare:
+time; those versions are not pinned. For reference, an installation of
+release v0.1.0 on Windows on 2026-11-14 resolved these, with the licenses
+their wheels declare:
 
 | Package | License declared by the wheel |
 | --- | --- |
-| huggingface_hub, tokenizers, safetensors, hf-xet, requests | Apache-2.0 |
+| huggingface_hub, tokenizers, safetensors, requests | Apache-2.0 |
 | regex | Apache-2.0 AND CNRI-Python |
 | packaging | Apache-2.0 OR BSD-2-Clause |
-| numpy | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 |
+| numpy | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0; its license file also lists the libraries the Windows wheel bundles (OpenBLAS and LAPACK, BSD-style; the GCC runtime library, GPL-3.0-or-later WITH GCC-exception-3.1) |
 | fsspec, idna, markupsafe, networkx | BSD-3-Clause |
-| jinja2, mpmath, sympy | BSD |
+| colorama, jinja2, mpmath, sympy | BSD |
 | certifi | MPL-2.0 |
 | tqdm | MPL-2.0 AND MIT |
 | filelock, urllib3, charset-normalizer, PyYAML, setuptools | MIT |
 | typing_extensions | PSF-2.0 |
 
-On Windows, tqdm additionally depends on colorama (not in the list above).
+The `sentencepiece` and `tokenizers` wheels carry no license file.
 
 ## Language model rinna/japanese-gpt2-small (fetched at install time)
 

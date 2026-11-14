@@ -66,7 +66,8 @@ SHA-256: `e9eb668fd6aa14b1e26436f429b5550108af0a1dfd443b8cea0bcb3ab3028fca`。
 由来で、配布元が指定するライセンスは **CC BY-SA 3.0**。
 配布元の `utils.py` / `test_utils.py` は CC0 1.0 と別記されている。
 この取得スクリプトはデータと出典・ライセンスを記載した README の原本を
-git 対象外の `data/cache/ajimee/` に保存する。データや配布元コードは同梱しない。
+git 対象外の `data/cache/ajimee/` に保存する。配布元コードは同梱しない。
+データはリポジトリに同梱しない。
 データを再配布・改変する場合は、出典・ライセンス表示、改変表示、継承条件を守る。
 [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) も参照。
 
