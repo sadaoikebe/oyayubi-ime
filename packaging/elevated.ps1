@@ -50,7 +50,7 @@ function Remove-OrSchedule([string]$path) {
         try { Remove-Item -LiteralPath $item.FullName -Force -Recurse -ErrorAction Stop; continue } catch { }
         # MOVEFILE_DELAY_UNTIL_REBOOT
         if ([YuragiElevated.Native]::MoveFileEx($item.FullName, $null, 4)) { [void]$pending.Add($item.FullName) }
-        else { throw "cannot remove or schedule $($item.FullName)" }
+        else { throw "$($item.FullName) を消せず、次の Windows の起動時に消す予約もできませんでした" }
     }
 }
 
@@ -62,7 +62,7 @@ function Place([string]$source, [string]$sha256, [string]$dest) {
     Copy-Item -LiteralPath $source -Destination $tmp -Force
     if ((Get-Sha256 $tmp) -ne $sha256.ToLower()) {
         Remove-Item -LiteralPath $tmp -Force
-        throw "SHA-256 mismatch for $(Split-Path $dest -Leaf)"
+        throw "$(Split-Path $dest -Leaf) が壊れています (中身が記録と一致しません)"
     }
     Move-Item -LiteralPath $tmp -Destination $dest -Force
 }
@@ -83,9 +83,9 @@ try {
         # uninstall.ps1 runs this copy: only administrators can change it there.
         Place $ScriptSource $ScriptSha256 (Join-Path $dir "elevated.ps1")
         $proc = Start-Process "$env:SystemRoot\System32\regsvr32.exe" -ArgumentList @("/s", "`"$dll`"") -Wait -PassThru
-        if ($proc.ExitCode -ne 0) { Write-Result $false "regsvr32 failed with exit code $($proc.ExitCode)" }
+        if ($proc.ExitCode -ne 0) { Write-Result $false "登録 (regsvr32) が失敗しました (終了コード $($proc.ExitCode))" }
         # I-6: registered is what the registry says, read back.
-        if ((Registered) -ne $dll) { Write-Result $false "the registry does not name $dll after registering" }
+        if ((Registered) -ne $dll) { Write-Result $false "登録したのに、レジストリに $dll が載っていません" }
         foreach ($old in @(Get-ChildItem -LiteralPath $Root -Directory | Where-Object { $_.Name -ne $Tag })) {
             Remove-OrSchedule $old.FullName
         }
@@ -94,7 +94,7 @@ try {
         if ($dll) {
             $proc = Start-Process "$env:SystemRoot\System32\regsvr32.exe" -ArgumentList @("/u", "/s", "`"$dll`"") -Wait -PassThru
             if ($proc.ExitCode -ne 0 -or (Registered)) {
-                Write-Result $false "unregistering $dll failed (regsvr32 exit code $($proc.ExitCode))"
+                Write-Result $false "$dll の登録を外せませんでした (regsvr32 の終了コード $($proc.ExitCode))"
             }
         }
         Remove-OrSchedule $Root

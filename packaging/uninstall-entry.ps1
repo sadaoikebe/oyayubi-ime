@@ -26,7 +26,7 @@ if (-not $tag) {
     if ($dll -and (Split-Path (Split-Path $dll)) -eq $ProgramRoot) { $tag = Split-Path (Split-Path $dll) -Leaf }
 }
 if ($tag -eq "dev") {
-    Write-Host "開発用の登録 (dev) です。リポジトリの packaging\uninstall.ps1 で外してください。"
+    Write-Host "開発用に登録したゆらぎ (dev) です。リポジトリの packaging\uninstall.ps1 で外してください。"
     exit 1
 }
 $body = Join-Path $env:LOCALAPPDATA "yuragi-ime\versions\$tag\app\packaging\uninstall.ps1"

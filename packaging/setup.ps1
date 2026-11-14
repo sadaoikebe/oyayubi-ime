@@ -60,23 +60,23 @@ $Utf8NoBom = New-Object Text.UTF8Encoding($false)
 function Say([string]$msg) { Write-Host $msg }
 function Fail([string]$msg) {
     Write-Host "中止: $msg" -ForegroundColor Red
-    Write-Host "動いている版はそのままです。やり直すと続きから進みます。"
+    Write-Host "ゆらぎがすでに入っていれば、その版はそのまま使えます。もう一度実行すると、続きから進みます。"
     exit 1
 }
 function Ask([string]$question) {
-    if ($Yes) { Say "$question -> はい (-Yes)"; return $true }
+    if ($Yes) { Say "$question → はい (-Yes が付いているので)"; return $true }
     $ans = Read-Host "$question [Y/n]"
     return ($ans -eq "" -or $ans -match "^[Yy]")
 }
 function Invoke-Checked([string]$name, [scriptblock]$body) {
     Say "== $name"
     & $body
-    if ($LASTEXITCODE -ne 0) { Fail "$name に失敗しました (終了コード $LASTEXITCODE)。" }
+    if ($LASTEXITCODE -ne 0) { Fail "「$name」で失敗しました (終了コード $LASTEXITCODE)。" }
 }
 
 # ---------------------------------------------------------------- 1 保守中の印
 if ($Tag -like "__*" -or $EmbedPythonSha256 -like "__*") {
-    Fail "この setup.ps1 にはリリースの刻印がありません。リリースページの setup.ps1 を使ってください。"
+    Fail "この setup.ps1 は、リリースのページで配っているものではありません。リリースのページの setup.ps1 を使ってください。"
 }
 $createdNew = $false
 $maintenance = New-Object System.Threading.Mutex($true, "Local\yuragi-ime-maintenance", [ref]$createdNew)
@@ -84,21 +84,23 @@ if (-not $createdNew) { Fail "別のインストールかアンインストー�
 
 Say "ゆらぎ $Tag のインストール"
 Say ""
-Say "== 環境チェック"
+Say "== この PC で使えるかの確認"
 $arch = $env:PROCESSOR_ARCHITECTURE
 if ($env:PROCESSOR_ARCHITEW6432) { $arch = $env:PROCESSOR_ARCHITEW6432 }
 if ($arch -eq "ARM64") { Fail "ARM 版の Windows には、まだ対応していません。" }
-if (-not [Environment]::Is64BitOperatingSystem) { Fail "64bit 版 Windows が必要です。" }
+if (-not [Environment]::Is64BitOperatingSystem) { Fail "64bit 版の Windows が必要です。" }
 $os = [Environment]::OSVersion.Version
-if ($os.Major -lt 10) { Fail "Windows 10 以降が必要です (検出: $os)。" }
+if ($os.Major -lt 10) { Fail "Windows 10 以降が必要です (この PC は $os)。" }
 $free = (Get-PSDrive ($env:LOCALAPPDATA.Substring(0, 1))).Free
-if ($free -lt 3GB) { Fail "空き容量が足りません (必要 3GB、現在 $([math]::Round($free / 1GB, 1))GB)。" }
-Say "  Windows $($os.Major).$($os.Minor) 64bit、空き $([math]::Round($free / 1GB, 1))GB OK"
+if ($free -lt 3GB) { Fail "ディスクの空きが足りません。3GB 必要ですが、今は $([math]::Round($free / 1GB, 1))GB です。" }
+Say "  Windows $($os.Major).$($os.Minor) (64bit)、ディスクの空き $([math]::Round($free / 1GB, 1))GB。問題ありません。"
 Say ""
-Say "次を取得します (足りないものだけ。2 回目からは大半を取り直しません):"
-Say "  GitHub Releases: 本体 (約 30MB)、TIP とブローカー、設定ウィンドウ用の tkinter 一式 (約 5MB)"
-Say "  python.org: Python $EmbedPythonVersion 埋め込み版 (約 30MB) / PyTorch 公式: torch CPU 版 (約 200MB) / PyPI: 依存"
-Say "  github.com (google/mozc): 辞書 (約 93MB) / HuggingFace: LM モデル (約 500MB)"
+Say "インターネットから次のものを取得します。"
+Say "すでに入っているものは取得しないので、2 回目からは、ほとんど取得しません。"
+Say "  ・ゆらぎのプログラム (約 35MB)"
+Say "  ・ゆらぎを動かすための Python $EmbedPythonVersion と、計算用の部品 (PyTorch など。約 230MB)"
+Say "  ・かな漢字変換の辞書 (Google の日本語入力 Mozc の辞書。約 93MB)"
+Say "  ・候補の順番を決める言語モデル (約 500MB)"
 if (-not (Ask "続けますか？")) { Fail "取り消しました。" }
 
 function Get-Verified([string]$url, [string]$dest) {
@@ -107,8 +109,8 @@ function Get-Verified([string]$url, [string]$dest) {
     if ($expected -is [byte[]]) { $expected = [Text.Encoding]::ASCII.GetString($expected) }
     $expected = $expected.Trim().ToLower()
     $actual = (Get-FileHash -LiteralPath $dest -Algorithm SHA256).Hash.ToLower()
-    if ($actual -ne $expected) { Fail "SHA-256 が一致しません: $(Split-Path $dest -Leaf)" }
-    Say "  照合 OK: $(Split-Path $dest -Leaf)"
+    if ($actual -ne $expected) { Fail "取得した $(Split-Path $dest -Leaf) が壊れています (中身が記録と一致しません)。" }
+    Say "  $(Split-Path $dest -Leaf) を取得しました (中身が正しいことを確かめました)"
     return $expected
 }
 
@@ -142,7 +144,7 @@ function Write-EngineJson([string]$path, [string]$app, [string[]]$extra) {
 
 # ---------------------------------------------------------------- 2 staging
 Say ""
-Say "== 取得と照合 (staging)"
+Say "== ゆらぎのプログラムの取得"
 $Stage = Join-Path $StagingRoot $Tag
 # staging は自分の作業場: 前回の途中のものがあれば消して作り直す (A-16)。
 if (Test-Path -LiteralPath $Stage) { Remove-Item -LiteralPath $Stage -Recurse -Force }
@@ -167,11 +169,11 @@ $runtimeId = "py$EmbedPythonVersion-tk-torch$TorchVersion-$reqHash"
 $Runtime = Join-Path $Shared "runtime\$runtimeId"
 New-Shared $Runtime {
     param($dir)
-    Say "== 同梱ランタイム ($runtimeId)"
+    Say "== ゆらぎを動かすための Python の準備"
     $embedZip = Join-Path $Download "python-embed.zip"
     Invoke-WebRequest -UseBasicParsing "https://www.python.org/ftp/python/$EmbedPythonVersion/python-$EmbedPythonVersion-embed-amd64.zip" -OutFile $embedZip
     if ((Get-FileHash -LiteralPath $embedZip -Algorithm SHA256).Hash.ToLower() -ne $EmbedPythonSha256.ToLower()) {
-        Fail "Python 埋め込み版の SHA-256 が一致しません。"
+        Fail "取得した Python が壊れています (中身が記録と一致しません)。"
     }
     Expand-Archive -LiteralPath $embedZip -DestinationPath $dir
     # 埋め込み版に無い tkinter 一式 (_tkinter.pyd と Tcl/Tk の DLL は直下、tcl\、Lib\tkinter\)。
@@ -184,14 +186,14 @@ New-Shared $Runtime {
     $py = Join-Path $dir "python.exe"
     $getPip = Join-Path $Download "get-pip.py"
     Invoke-WebRequest -UseBasicParsing "https://bootstrap.pypa.io/get-pip.py" -OutFile $getPip
-    Invoke-Checked "pip (公式 get-pip.py)" { & $py $getPip --no-warn-script-location }
-    Invoke-Checked "torch CPU 版 (PyTorch 公式インデックス)" {
+    Invoke-Checked "Python の部品を入れる道具 (pip) の取得" { & $py $getPip --no-warn-script-location }
+    Invoke-Checked "言語モデルの計算に使う部品 (PyTorch) の取得" {
         & $py -m pip install --no-warn-script-location --index-url https://download.pytorch.org/whl/cpu "torch==$TorchVersion"
     }
-    Invoke-Checked "依存パッケージ (PyPI、バージョン固定)" {
+    Invoke-Checked "そのほかの Python の部品の取得" {
         & $py -m pip install --no-warn-script-location -r $requirements
     }
-    Invoke-Checked "依存の読み込み確認" {
+    Invoke-Checked "取得した部品が使えるかの確認" {
         & $py -c "import torch, transformers, sentencepiece, huggingface_hub, tkinter; tkinter.Tcl()"
     }
 }
@@ -201,10 +203,10 @@ $manifest = Get-Content -LiteralPath (Join-Path $StageApp "data\dictionary-manif
 $script:Dict = Join-Path $Shared "dict\$($manifest.upstream_commit)"
 New-Shared $script:Dict {
     param($dir)
-    Invoke-Checked "辞書の取得 (google/mozc、上流コミット固定)" {
+    Invoke-Checked "辞書の取得" {
         Invoke-App $script:Python $StageApp @("tools.wp0.fetch_mozc_dict", "--out", $dir)
     }
-    Invoke-Checked "辞書の照合 (SHA-256)" {
+    Invoke-Checked "辞書が壊れていないかの確認" {
         Invoke-App $script:Python $StageApp @("yuragi.lattice.dict_manifest", "verify", "--dict-dir", $dir)
     }
 }
@@ -212,7 +214,7 @@ $revision = (Select-String -LiteralPath (Join-Path $StageApp "packaging\fetch_mo
 $script:Model = Join-Path $Shared "model\$revision"
 New-Shared $script:Model {
     param($dir)
-    Invoke-Checked "LM モデルの取得 (HuggingFace、リビジョン固定)" {
+    Invoke-Checked "言語モデルの取得" {
         & $script:Python (Join-Path $StageApp "packaging\fetch_model.py") $dir
     }
 }
@@ -226,14 +228,14 @@ New-Item -ItemType Directory -Force $selftestData | Out-Null
 $stageEngine = Join-Path $Stage "engine.json"
 Write-EngineJson $stageEngine $StageApp @("--data-dir", $selftestData)
 Say ""
-Say "== 試運転 (本物のブローカーでエンジンを起動し、1 回変換。初回は辞書の準備に数分)"
+Say "== 試しに 1 回変換する (初めてのときは、辞書の準備に数分かかります)"
 $selftestOut = Join-Path $Stage "selftest.txt"
 $proc = Start-Process -FilePath $brokerPath -ArgumentList @("--selftest", "`"$stageEngine`"", "--data-dir", "`"$selftestData`"") `
     -Wait -PassThru -RedirectStandardOutput $selftestOut
 if ($proc.ExitCode -ne 0) {
-    Fail "試運転に失敗しました (終了コード $($proc.ExitCode))。記録: $(Join-Path $selftestData 'logs')"
+    Fail "試しの変換に失敗しました (終了コード $($proc.ExitCode))。記録 (ログ) の場所: $(Join-Path $selftestData 'logs')"
 }
-Say "  試運転 OK"
+Say "  変換できました"
 
 # ---------------------------------------------------------------- 旧ブローカー
 # 旧名の版のブローカーは、パイプが oyayubi-ime-…、プロセスが oyayubi-broker。
@@ -265,9 +267,9 @@ function Stop-Broker([string]$pipePrefix = "yuragi-ime", [string]$processName = 
     $brokers = @(Get-Process -Name $processName -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq $session })
     foreach ($b in $brokers) {
         if (-not $b.WaitForExit(15000)) {
-            Say "  ブローカーが終わらないので終了させます (PID $($b.Id))。"
+            Say "  ゆらぎの常駐プログラムが終わらないので、強制的に終了します (PID $($b.Id))。"
             Stop-Process -Id $b.Id -Force
-            if (-not $b.WaitForExit(5000)) { Fail "ブローカー (PID $($b.Id)) を終了できませんでした。" }
+            if (-not $b.WaitForExit(5000)) { Fail "ゆらぎの常駐プログラム (PID $($b.Id)) を終了できませんでした。" }
         }
     }
 }
@@ -279,7 +281,7 @@ function Move-UserData([string]$from, [string]$to) {
     foreach ($item in @(Get-ChildItem -LiteralPath $from -Force)) {
         $dest = Join-Path $to $item.Name
         if (Test-Path -LiteralPath $dest) {
-            $notes += "$($item.Name) は両方にあるので、旧い方 ($($item.FullName)) を残しました"
+            $notes += "$($item.Name) は新旧両方の場所にあるので、旧い方 ($($item.FullName)) はそのまま残しました"
         } else {
             Move-Item -LiteralPath $item.FullName -Destination $dest
         }
@@ -331,37 +333,37 @@ function Invoke-Elevated([string[]]$arguments) {
         $p = Start-Process "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Verb RunAs -Wait -PassThru `
             -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", $encoded)
     } catch {
-        Fail "管理者権限での作業が取り消されました。"
+        Fail "管理者の確認が取り消されました。"
     }
-    if (-not (Test-Path -LiteralPath $resultFile)) { Fail "管理者権限での作業の結果がありません (終了コード $($p.ExitCode))。" }
-    $result = Get-Content -LiteralPath $resultFile -Raw | ConvertFrom-Json
+    if (-not (Test-Path -LiteralPath $resultFile)) { Fail "管理者として行う作業が、結果を残さずに終わりました (終了コード $($p.ExitCode))。" }
+    $result = Get-Content -LiteralPath $resultFile -Raw -Encoding UTF8 | ConvertFrom-Json
     Remove-Item -LiteralPath $resultFile -Force
     return $result
 }
 
 Say ""
-Say "== 配置と登録 (管理者権限の確認が 1 回出ます)"
+Say "== Windows への組み込み (管理者の確認が 1 回出ます)"
 $result = Invoke-Elevated @("-Action", "install", "-Tag", $Tag, "-DllSource", (Join-Path $Version "download\yuragi_tip.dll"),
     "-DllSha256", $DllSha, "-BrokerSource", (Join-Path $Version "download\yuragi-broker.exe"),
     "-BrokerSha256", $BrokerSha, "-ScriptSource", $ElevatedPath, "-ScriptSha256", $ElevatedSha,
     "-Leftover", $leftover)
-if (-not $result.ok) { Fail "配置と登録に失敗しました: $($result.message)" }
+if (-not $result.ok) { Fail "Windows への組み込みに失敗しました: $($result.message)" }
 $DllFinal = Join-Path $ProgramRoot "$Tag\yuragi_tip.dll"
 $BrokerFinal = Join-Path $ProgramRoot "$Tag\yuragi-broker.exe"
 # I-6: 「登録した」と言うのは、読み返して確かめてから。
 $registered = (Get-ItemProperty -LiteralPath "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Classes\CLSID\$Clsid\InprocServer32" -ErrorAction SilentlyContinue).'(default)'
-if ($registered -ne $DllFinal) { Fail "登録を読み返すと $registered でした ($DllFinal のはず)。" }
-Say "  登録 OK: $DllFinal"
+if ($registered -ne $DllFinal) { Fail "組み込んだあとで確かめると、登録されていたのは $DllFinal ではなく「$registered」でした。" }
+Say "  組み込みました: $DllFinal"
 $pendingDelete = @($result.pending_delete)
 
 # ---------------------------------------------------------------- 6 切り替え
 Say ""
-Say "== 切り替え"
+Say "== 新しい版への切り替え"
 Stop-Broker
 New-Item -Force $ProductKey | Out-Null
 Set-ItemProperty -LiteralPath $ProductKey -Name "Tag" -Value $Tag
 Set-ItemProperty -LiteralPath $RunKey -Name "yuragi-ime" -Value "`"$BrokerFinal`""
-if ((Get-ItemProperty -LiteralPath $ProductKey).Tag -ne $Tag) { Fail "HKCU の Tag を書けませんでした。" }
+if ((Get-ItemProperty -LiteralPath $ProductKey).Tag -ne $Tag) { Fail "入っている版の記録を、レジストリに書けませんでした。" }
 # 旧版 (v0.1.0) が利用者側に書いた COM 登録は、HKLM の登録より優先されるので消す。
 $oldUserClsid = "HKCU:\Software\Classes\CLSID\$Clsid"
 if (Test-Path -LiteralPath $oldUserClsid) { Remove-Item -LiteralPath $oldUserClsid -Recurse -Force }
@@ -369,7 +371,7 @@ Add-Type -Namespace YuragiSetup -Name Input -MemberDefinition @'
 [DllImport("input.dll", CharSet = CharSet.Unicode)]
 public static extern bool InstallLayoutOrTip(string profile, uint flags);
 '@
-if (-not [YuragiSetup.Input]::InstallLayoutOrTip($Layout, 0)) { Fail "言語一覧に追加できませんでした。" }
+if (-not [YuragiSetup.Input]::InstallLayoutOrTip($Layout, 0)) { Fail "Windows の入力方法の一覧に追加できませんでした。" }
 
 # 旧名の版 (開発用の登録): 製品のキーを消すと、旧 DLL を読み込んだアプリは何も起動しなくなる。
 # そのうえで旧ブローカーを止める (利用者データのファイルを開いているので、移す前に)。
@@ -396,7 +398,7 @@ if (Test-Path -LiteralPath $oldData) {
             Move-Item -LiteralPath $from -Destination $to
             $migrationNotes += "$name を $UserData へ移しました"
         } elseif (Test-Path -LiteralPath $from) {
-            $migrationNotes += "$name は両方にあるので、旧い方 ($from) を残しました"
+            $migrationNotes += "$name は新旧両方の場所にあるので、旧い方 ($from) はそのまま残しました"
         }
     }
     if ($config -ne $null) {
@@ -406,7 +408,10 @@ if (Test-Path -LiteralPath $oldData) {
             $state = $null
             if (Test-Path -LiteralPath (Join-Path $oldData "learning.jsonl.paused")) { $state = "paused" }
             elseif (-not (Test-Path -LiteralPath (Join-Path $UserData "learning.jsonl"))) { $state = "off" }
-            if ($state) { $config | Add-Member -NotePropertyName "learning" -NotePropertyValue $state; $migrationNotes += "学習: $state (旧版の設定を引き継ぎ)" }
+            if ($state) {
+                $config | Add-Member -NotePropertyName "learning" -NotePropertyValue $state
+                $migrationNotes += "学習の設定「$(@{ paused = '一時停止'; off = '使わない' }[$state])」を旧版から引き継ぎました"
+            }
         }
         # 旧版の setup が書いたモデルの場所は旧配置の中: 新しい版は engine.json で渡す。
         if (($names -contains "lm_model") -and ([string]$config.lm_model).StartsWith($OldApp)) {
@@ -414,7 +419,7 @@ if (Test-Path -LiteralPath $oldData) {
         }
         [IO.File]::WriteAllText($configPath, ($config | ConvertTo-Json -Depth 4), $Utf8NoBom)
     } else {
-        $migrationNotes += "config.json を読めなかったので変えていません"
+        $migrationNotes += "設定ファイル (config.json) を読めなかったので、変えていません"
     }
 }
 
@@ -439,11 +444,13 @@ if ($conn) {
     $conn.Pipe.Dispose()
 }
 if ($state -ne "ready") {
-    Write-Host "変換エンジンが起動しませんでした (状態: $(if ($state) { $state } else { '応答なし' }))。" -ForegroundColor Red
-    Write-Host "記録: $(Join-Path $UserData 'logs')。次のサインインでも起動を試みます。"
+    $why = @{ starting = '60 秒たっても起動の途中でした'; down = '起動に失敗して止まりました'; 'not-installed' = '必要なファイルが見つかりませんでした' }[$state]
+    if (-not $why) { $why = '応答がありませんでした' }
+    Write-Host "変換エンジンが起動しませんでした ($why)。" -ForegroundColor Red
+    Write-Host "記録 (ログ) の場所: $(Join-Path $UserData 'logs')。次にサインインしたときも、起動を試みます。"
     exit 1
 }
-Say "  起動 OK"
+Say "  起動しました"
 
 # ---------------------------------------------------------------- 8 片付け
 # 失敗はインストールの失敗にしない。次回の setup がまた試す。
@@ -471,16 +478,16 @@ foreach ($item in $cleanup) {
 }
 
 Say ""
-Say "完了しました ($Tag)。"
+Say "ゆらぎ $Tag のインストールが完了しました。"
 foreach ($note in $migrationNotes) { Say "  $note" }
 if ($pendingDelete.Count) {
-    Say "  旧版のファイルが $($pendingDelete.Count) 個、使用中のため残っています。次に Windows を起動したとき自動で消えます。"
+    Say "  旧版のファイルが $($pendingDelete.Count) 個、使用中のため残っています。次に Windows を起動したとき、自動で消えます。"
 }
-if ($left.Count) { Say "  片付けられなかったもの ($($left.Count) 件) は、次の setup でまた片付けます。" }
+if ($left.Count) { Say "  使わなくなったファイルのうち $($left.Count) 件は、消せませんでした。次に更新するとき、また消します。" }
 Say "入力切替 (Win+Space) で「ゆらぎ」を選ぶと、タスクバーに「ゆ」が出ます。"
 Say "開いていたアプリもそのまま使えます。"
-Say "更新: このコマンドをもう一度実行してください。"
-Say "アンインストール (PowerShell で次の 1 行):"
+Say "更新するときは、インストールと同じ 1 行をもう一度実行してください。"
+Say "アンインストールするときは、PowerShell で次の 1 行を実行します:"
 Say "  iwr -UseBasicParsing https://github.com/$Repo/releases/download/$Tag/uninstall.ps1 -OutFile `$env:TEMP\yuragi-uninstall.ps1; powershell -ExecutionPolicy Bypass -File `$env:TEMP\yuragi-uninstall.ps1"
 Say "  学習した内容・登録した単語・設定 ($UserData) は残ります。"
 exit 0

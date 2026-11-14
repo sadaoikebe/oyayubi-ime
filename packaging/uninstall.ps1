@@ -43,7 +43,7 @@ $registeredDll = (Get-ItemProperty -LiteralPath $InprocKey -ErrorAction Silently
 if ($registeredDll) {
     $elevatedPath = Join-Path (Split-Path $registeredDll) "elevated.ps1"
     if (-not (Test-Path -LiteralPath $elevatedPath)) {
-        Write-Host "中止: $elevatedPath がありません (この版の setup で入れたものではありません)。" -ForegroundColor Red
+        Write-Host "中止: この PC のゆらぎは、インストールの 1 行で入れたものではないので、ここでは外せません ($elevatedPath がありません)。" -ForegroundColor Red
         exit 1
     }
     $ElevatedScript = [IO.File]::ReadAllText($elevatedPath)
@@ -76,10 +76,10 @@ if ($RemoveData -and (Test-Path -LiteralPath $UserData)) {
 }
 
 # ---------------------------------------------------------------- 2
-Say "== 登録の取り消し (この利用者)"
+Say "== 自動起動と入力方法の一覧から外す (この利用者)"
 if (Test-Path -LiteralPath $ProductKey) { Remove-ItemProperty -LiteralPath $ProductKey -Name "Tag" -ErrorAction SilentlyContinue }
 Remove-ItemProperty -LiteralPath $RunKey -Name "yuragi-ime" -ErrorAction SilentlyContinue
-if ((Test-Path -LiteralPath $ProductKey) -and (Get-ItemProperty -LiteralPath $ProductKey).Tag) { Fail "HKCU の Tag を消せませんでした。" }
+if ((Test-Path -LiteralPath $ProductKey) -and (Get-ItemProperty -LiteralPath $ProductKey).Tag) { Fail "入っている版の記録を、レジストリから消せませんでした。" }
 $oldUserClsid = "HKCU:\Software\Classes\CLSID\$Clsid"   # v0.1.0 が書いたもの
 if (Test-Path -LiteralPath $oldUserClsid) { Remove-Item -LiteralPath $oldUserClsid -Recurse -Force }
 Add-Type -Namespace YuragiUninstall -Name Input -MemberDefinition @'
@@ -87,10 +87,10 @@ Add-Type -Namespace YuragiUninstall -Name Input -MemberDefinition @'
 public static extern bool InstallLayoutOrTip(string profile, uint flags);
 '@
 # ILOT_UNINSTALL
-if (-not [YuragiUninstall.Input]::InstallLayoutOrTip($Layout, 1)) { Say "  言語一覧には入っていませんでした。" }
+if (-not [YuragiUninstall.Input]::InstallLayoutOrTip($Layout, 1)) { Say "  入力方法の一覧には入っていませんでした。" }
 
 # ---------------------------------------------------------------- 3
-Say "== ブローカーの終了"
+Say "== ゆらぎの常駐プログラムを終了"
 $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $session = (Get-Process -Id $PID).SessionId
 $pipe = New-Object System.IO.Pipes.NamedPipeClientStream(".", "yuragi-ime-$sid-$session", [IO.Pipes.PipeDirection]::InOut)
@@ -105,10 +105,10 @@ try {
 foreach ($b in @(Get-Process -Name "yuragi-broker" -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq $session })) {
     if (-not $b.WaitForExit(15000)) {
         Stop-Process -Id $b.Id -Force
-        if (-not $b.WaitForExit(5000)) { Fail "ブローカー (PID $($b.Id)) を終了できませんでした。" }
+        if (-not $b.WaitForExit(5000)) { Fail "ゆらぎの常駐プログラム (PID $($b.Id)) を終了できませんでした。" }
     }
 }
-Say "  終了 OK"
+Say "  終了しました"
 
 # ---------------------------------------------------------------- 4
 $leftover = ""
@@ -116,22 +116,22 @@ $oldApp = Join-Path $env:LOCALAPPDATA "oyayubi-ime\app"   # v0.1.0 の配置: DL
 if (Test-Path -LiteralPath $oldApp) { $leftover = $oldApp }
 $result = [pscustomobject]@{ ok = $true; message = "not registered"; pending_delete = @() }
 if ($ElevatedScript) {
-Say "== 登録解除と削除 (管理者権限の確認が 1 回出ます)"
+Say "== Windows から取り外して、プログラムを消す (管理者の確認が 1 回出ます)"
 $resultFile = Join-Path $env:TEMP ("yuragi-elevated-" + [Guid]::NewGuid().ToString("N") + ".json")
 $encoded = New-ElevatedCommand $ElevatedScript @("-Action", "uninstall", "-ResultFile", $resultFile, "-Leftover", $leftover)
 try {
     $p = Start-Process "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Verb RunAs -Wait -PassThru `
         -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", $encoded)
-} catch { Fail "管理者権限での作業が取り消されました。この利用者ではもう起動しません。もう一度実行すると続きから進みます。" }
-if (-not (Test-Path -LiteralPath $resultFile)) { Fail "管理者権限での作業の結果がありません (終了コード $($p.ExitCode))。" }
-$result = Get-Content -LiteralPath $resultFile -Raw | ConvertFrom-Json
+} catch { Fail "管理者の確認が取り消されました。この利用者では、もうゆらぎは起動しません。もう一度実行すると、続きから進みます。" }
+if (-not (Test-Path -LiteralPath $resultFile)) { Fail "管理者として行う作業が、結果を残さずに終わりました (終了コード $($p.ExitCode))。" }
+$result = Get-Content -LiteralPath $resultFile -Raw -Encoding UTF8 | ConvertFrom-Json
 Remove-Item -LiteralPath $resultFile -Force
-if (-not $result.ok) { Fail "登録解除に失敗しました: $($result.message)" }
+if (-not $result.ok) { Fail "Windows からの取り外しに失敗しました: $($result.message)" }
 $registered = Get-ItemProperty -LiteralPath $InprocKey -ErrorAction SilentlyContinue
-if ($registered) { Fail "登録が残っています ($($registered.'(default)'))。" }
-Say "  登録解除 OK"
+if ($registered) { Fail "取り外したはずの登録が残っています ($($registered.'(default)'))。" }
+Say "  取り外しました"
 } else {
-    Say "== この PC には登録されていませんでした (登録解除は不要)。"
+    Say "== この PC の Windows には組み込まれていませんでした (取り外しは要りません)。"
     if ($leftover) {
         # 管理者権限なしでは予約削除ができない: 旧 DLL が使用中なら丸ごと残す
         # (半分だけ消すと、旧 DLL が壊れたサーバーを起動し続ける。A-4)。
@@ -141,7 +141,7 @@ Say "  登録解除 OK"
             try { [IO.File]::Move($oldDll, "$oldDll.unused"); [IO.File]::Move("$oldDll.unused", $oldDll) } catch { $free = $false }
         }
         if ($free) { Remove-Item -LiteralPath $leftover -Recurse -Force }
-        else { Say "  旧版 ($leftover) の DLL が使用中なので、旧版のフォルダを残しました。アプリを閉じてからもう一度実行すると消えます。" }
+        else { Say "  旧版のファイルがアプリに使われているので、旧版のフォルダ ($leftover) を残しました。アプリをすべて閉じてから、もう一度実行すると消えます。" }
     }
 }
 
@@ -169,11 +169,11 @@ if ($RemoveData -and (Test-Path -LiteralPath $UserData)) {
 Say ""
 Say "アンインストールが完了しました。"
 if (@($result.pending_delete).Count) {
-    Say "アプリを開いたままでも問題ありません。残り $(@($result.pending_delete).Count) 個のファイルは、次に Windows を起動したとき自動で消えます。"
+    Say "アプリを開いたままでも問題ありません。使用中だった $(@($result.pending_delete).Count) 個のファイルは、次に Windows を起動したとき、自動で消えます。"
 }
-if ($left.Count) { Say "消せなかったもの: $($left -join ', ')" }
+if ($left.Count) { Say "消せなかったファイル: $($left -join ', ')" }
 if (-not $RemoveData) {
     Say "学習した内容・登録した単語・設定は残っています: $UserData"
-    Say "  (消すときは -RemoveData を付けて実行してください)"
+    Say "  (これらも消すときは、末尾に -RemoveData を付けて、もう一度実行してください)"
 }
 exit 0
