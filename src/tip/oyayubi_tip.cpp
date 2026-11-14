@@ -744,8 +744,10 @@ static void PlaceBelow(TfEditCookie ec, ITfContext* ctx, ITfRange* caret, HWND w
     if (SUCCEEDED(ctx->GetActiveView(&view))) {
         RECT rect{};
         BOOL clipped = FALSE;
-        // S_OK with an empty rectangle means the text is not visible.
-        if (SUCCEEDED(view->GetTextExt(ec, caret, &rect, &clipped)) && !IsRectEmpty(&rect)) {
+        // S_OK with no height means the text is not visible. The caret range is
+        // collapsed, so a visible caret may come back zero wide (Notepad does):
+        // IsRectEmpty would call that empty.
+        if (SUCCEEDED(view->GetTextExt(ec, caret, &rect, &clipped)) && rect.bottom > rect.top) {
             SetWindowPos(window, HWND_TOPMOST, rect.left, rect.bottom + 4, 0, 0,
                          SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
             positioned = true;
