@@ -1021,7 +1021,7 @@ static HICON MakeModeIcon(const wchar_t* glyph, bool faint) {
 static const wchar_t* NoticeText(Notice n) {
     switch (n) {
         case Notice::Preparing: return L"変換の準備をしています…";
-        case Notice::Stopped: return L"日本語変換が止まっています。タスクバーの「!」を押してください";
+        case Notice::Stopped: return L"日本語変換が止まっています。タスクバーの「!」を右クリックしてください";
         case Notice::TooLong: return L"長すぎます。いったん確定してください";
         case Notice::Reopen: return L"ゆらぎを更新しました。このアプリを開き直すと使えます";
         case Notice::None: break;

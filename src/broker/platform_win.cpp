@@ -269,9 +269,9 @@ Texts TextsFor(const Notice& n) {
                         L"辞書の準備ができませんでした。ディスクの空きを確認してください"
                         L"（約 300MB 必要です）。"};
             case Stop::Hang:
-                return {stopped_title, stopped_body, L"変換プログラムが反応しなくなりました。"};
+                return {stopped_title, stopped_body, L"変換エンジンが反応しなくなりました。"};
             default:
-                return {stopped_title, stopped_body, L"変換プログラムが繰り返し止まりました。"};
+                return {stopped_title, stopped_body, L"変換エンジンが繰り返し止まりました。"};
         }
     }
     if (n.warning == "config")
@@ -280,15 +280,15 @@ Texts TextsFor(const Notice& n) {
                 L"読めなかった項目は標準の値で動いています。設定ウィンドウの「設定」タブで直せます。"};
     if (n.warning == "lm")
         return {L"ゆらぎ: 言語モデルを使えません", L"辞書だけで変換しています。",
-                L"変換の候補を選び直す言語モデルを読み込めませんでした。"
+                L"候補の順番を決める言語モデルを読み込めませんでした。"
                 L"辞書だけで変換しています。入れ直すと直ることがあります。"};
     if (n.warning == "learning-read")
-        return {L"ゆらぎ: 学習の記録を読めませんでした", L"学習なしで動いています。",
-                L"学習の記録（.yuragi-ime\\learning.jsonl）を読めませんでした。"
+        return {L"ゆらぎ: 学習履歴を読めませんでした", L"学習なしで動いています。",
+                L"学習履歴（.yuragi-ime\\learning.jsonl）を読めませんでした。"
                 L"ほかのプログラムが開いている可能性があります。次に起動したとき、もう一度読みます。"};
     if (n.warning == "learning-write")
-        return {L"ゆらぎ: 学習を保存できませんでした", L"覚えた内容はこの間だけ有効です。",
-                L"学習の記録を書き込めませんでした。ディスクの空きを確認してください。"};
+        return {L"ゆらぎ: 学習を保存できませんでした", L"覚えた内容は保存されず、今だけ有効です。",
+                L"学習履歴を書き込めませんでした。ディスクの空きを確認してください。"};
     return {L"ゆらぎ: 注意", L"", L""};
 }
 
