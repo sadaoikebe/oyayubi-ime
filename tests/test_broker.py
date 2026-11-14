@@ -418,7 +418,9 @@ class ProcessTest(BrokerCase):
     def test_one_broker_per_user(self):
         self.plan("normal")
         self.start()
-        self.tip().hello()
+        tip = self.tip()
+        tip.hello()
+        tip.wait_state("ready")  # the first broker's engine has started and is counted
         other = self.address + "-other"
         second = subprocess.run([str(broker_binary()), "--data-dir", str(self.data),
                                  "--pipe" if WINDOWS else "--socket", other,
