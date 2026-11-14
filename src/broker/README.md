@@ -10,6 +10,7 @@
 | `support.h/.cpp` | 両 OS 共通: 上限付きログ、`engine.json` の読み込み、`--selftest` |
 | `platform_win.cpp` | Windows: 名前付きパイプ + IOCP、ジョブ、環境ブロック、通知とダイアログ |
 | `platform_posix.cpp` | 試験用の POSIX 版: UNIX ドメインソケット、`PR_SET_PDEATHSIG` |
+| `broker.rc` `broker.manifest` | Windows の exe に入れるもの: マニフェスト（Common Controls 6、asInvoker）と製品アイコン（`assets/icon/yuragi.ico`） |
 | `tests/broker_core_test.cpp` | 中核の単体試験（偽の Platform と時計） |
 | `tests/fake_engine.py` | §5.7 の偽エンジン（起動ごとの振る舞いを `plan.json` で決める） |
 | `../../tests/test_broker.py` | §5.7 の試験。偽 TIP と偽エンジンを実プロセスで動かす |

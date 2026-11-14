@@ -1,3 +1,8 @@
 // The manifest: Common Controls 6 for TaskDialog, run as invoker.
 #include <winuser.h>
 CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "broker.manifest"
+
+// The product icon, shown for yuragi-broker.exe in Explorer and Task Manager.
+// The notification-area notices keep the system information/warning icons.
+#define IDI_YURAGI 101
+IDI_YURAGI ICON "../../assets/icon/yuragi.ico"
