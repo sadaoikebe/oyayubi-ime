@@ -5,6 +5,8 @@
 - The elevated part gets exactly the arguments setup/uninstall meant, however
   odd the paths (spaces, quotes, Japanese): the -EncodedCommand round trip.
 - Old user data (.oyayubi-ime) is moved to .yuragi-ime, never deleted.
+- The release's uninstall.ps1 (packaging/uninstall-entry.ps1) says so and
+  changes nothing when no version is installed.
 - engine.json says what the broker needs, and its "-c" bootstrap really runs a
   module from the working directory when Python is isolated (the bundled
   runtime's ._pth leaves the working directory off sys.path).
@@ -118,6 +120,16 @@ class PowerShellTest(unittest.TestCase):
                     got = json.loads(result.read_text(encoding="utf-8-sig"))
                     self.assertEqual(got, {"Action": "install", **odd})
                     result.unlink()
+
+    def test_uninstall_entry_when_nothing_is_installed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {**os.environ, "LOCALAPPDATA": tmp, "ProgramFiles": str(Path(tmp) / "pf")}
+            run = subprocess.run([PWSH, "-NoProfile", "-NonInteractive", "-File",
+                                  str(ROOT / "packaging" / "uninstall-entry.ps1"), "-Yes"],
+                                 capture_output=True, text=True, timeout=120, env=env)
+            self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+            self.assertIn("入っていません", run.stdout)
+            self.assertEqual(list(Path(tmp).iterdir()), [])
 
     def test_engine_json(self):
         func = function_text(ROOT / "packaging" / "setup.ps1", "Write-EngineJson")

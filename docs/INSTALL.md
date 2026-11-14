@@ -64,9 +64,23 @@ ARM 版の Windows には、まだ対応していない（setup が最初に止�
 
 ## アンインストール（`uninstall.ps1`）
 
+README の 1 行で、リリースの `uninstall.ps1` を取得して実行する。インストールと同じ形で、
+入れた版の名前を知らなくてよい。
+
 ```powershell
-powershell -ExecutionPolicy Bypass -File $env:LOCALAPPDATA\yuragi-ime\versions\<tag>\app\packaging\uninstall.ps1
+iwr -UseBasicParsing https://github.com/sadaoikebe/yuragi-ime/releases/latest/download/uninstall.ps1 -OutFile $env:TEMP\yuragi-uninstall.ps1; powershell -ExecutionPolicy Bypass -File $env:TEMP\yuragi-uninstall.ps1
 ```
+
+リリースの `uninstall.ps1` は入口（`packaging/uninstall-entry.ps1`）で、入っている版を見つけて、
+その版の本体（`versions\<tag>\app\packaging\uninstall.ps1`）を呼ぶ。引数（`-RemoveData` `-Yes`）は
+そのまま本体に渡す。
+
+- 入っている版は、HKCU の Tag で見つける。Tag が無ければ、Program Files に登録が残っている版
+  （本体は Tag を最初に消すので、途中で止まったアンインストールのやり直しはこちらで見つかる）。
+- 入っていなければ、そう表示して何もせずに終わる。
+- 開発用の登録（タグ `dev`）は、リポジトリの `packaging\uninstall.ps1` で外す（[DEVENV.md](DEVENV.md)）。
+
+本体がすること:
 
 1. 保守中の印。
 2. HKCU の Tag と Run キーを消す（最初に。残った DLL はこれで何も起動しなくなる）。言語一覧から外す。

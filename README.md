@@ -26,10 +26,10 @@ iwr -UseBasicParsing https://github.com/sadaoikebe/yuragi-ime/releases/latest/do
 | 薄い「ゆ」 | 変換の準備中（サインイン直後の数秒など）。打った文字は預かって、準備ができたら順に入ります |
 | 「!」 | 日本語変換が止まっています。右クリック →「もう一度試す」「原因を表示」 |
 
-アンインストール（`<tag>` は入れた版。学習データなども消すときは末尾に `-RemoveData`）:
+アンインストール（学習データなども消すときは末尾に ` -RemoveData`）:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File $env:LOCALAPPDATA\yuragi-ime\versions\<tag>\app\packaging\uninstall.ps1
+iwr -UseBasicParsing https://github.com/sadaoikebe/yuragi-ime/releases/latest/download/uninstall.ps1 -OutFile $env:TEMP\yuragi-uninstall.ps1; powershell -ExecutionPolicy Bypass -File $env:TEMP\yuragi-uninstall.ps1
 ```
 
 ## 開発

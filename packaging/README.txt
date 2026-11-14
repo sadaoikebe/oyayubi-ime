@@ -9,14 +9,16 @@ yuragi-ime のインストール (詳しくは docs/INSTALL.md)
   取得するものを表示して確認してから進みます。管理者の確認は 1 回だけ
   (IME の登録)。途中で失敗しても、それまでの版がそのまま動きます。
 
-アンインストール:
-    powershell -ExecutionPolicy Bypass -File %LOCALAPPDATA%\yuragi-ime\versions\<tag>\app\packaging\uninstall.ps1
+アンインストール (リリースの uninstall.ps1。入っている版を見つけて、その版の本体を呼ぶ):
+    powershell -ExecutionPolicy Bypass -File uninstall.ps1
+  入っていなければ、そう表示して何もせずに終わります。
   学習した内容・登録した単語・設定 (%USERPROFILE%\.yuragi-ime) は残ります。
   消すときは -RemoveData を付けます。
 
 このフォルダ:
   setup.ps1      インストールと更新 (リリース時にタグとハッシュが刻まれる)
-  uninstall.ps1  アンインストール
+  uninstall.ps1  アンインストールの本体 (各版に入る)
+  uninstall-entry.ps1  アンインストールの入口 (リリースには uninstall.ps1 の名前で置く)
   elevated.ps1   管理者権限で動く部分 (配置・登録・削除の 3 つだけ)
   fetch_model.py LM モデルを固定リビジョンで取得する
   requirements.txt  依存の固定

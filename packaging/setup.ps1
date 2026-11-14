@@ -472,6 +472,7 @@ if ($left.Count) { Say "  片付けられなかったもの ($($left.Count) 件)
 Say "入力切替 (Win+Space) で「ゆらぎ」を選ぶと、タスクバーに「ゆ」が出ます。"
 Say "開いていたアプリもそのまま使えます。"
 Say "更新: このコマンドをもう一度実行してください。"
-Say "アンインストール: powershell -ExecutionPolicy Bypass -File `"$(Join-Path $App 'packaging\uninstall.ps1')`""
+Say "アンインストール (PowerShell で次の 1 行):"
+Say "  iwr -UseBasicParsing https://github.com/$Repo/releases/download/$Tag/uninstall.ps1 -OutFile `$env:TEMP\yuragi-uninstall.ps1; powershell -ExecutionPolicy Bypass -File `$env:TEMP\yuragi-uninstall.ps1"
 Say "  学習した内容・登録した単語・設定 ($UserData) は残ります。"
 exit 0

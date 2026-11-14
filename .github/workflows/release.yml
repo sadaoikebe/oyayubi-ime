@@ -1,7 +1,7 @@
 # リリース作成 (docs/INSTALL.md、REDESIGN §8): タグ v* を push すると、Windows ランナーで
 # TIP とブローカーをタグ入りの Release でビルド・試験し、依存ピン留めを実地検証し、setup が
 # 取得するアセット (DLL・ブローカー・ソース zip・各 SHA-256・タグ/ハッシュを刻んだ setup.ps1)
-# を公開する。検証が1つでも失敗すればリリースは出ない。
+# と、アンインストールの入口 uninstall.ps1 を公開する。検証が1つでも失敗すればリリースは出ない。
 name: release
 
 on:
@@ -61,11 +61,13 @@ jobs:
           $setup = $setup -replace "__TAG__", $env:GITHUB_REF_NAME -replace "__EMBED_SHA256__", $embedHash
           # 利用者が実行するのは Windows PowerShell 5.1。BOM が無いと ANSI として読まれる。
           $setup | Set-Content setup.ps1 -Encoding utf8BOM
+          # アンインストールの入口 (入っている版を見つけて、その版の本体を呼ぶ)。
+          Copy-Item packaging/uninstall-entry.ps1 uninstall.ps1
 
       - name: スクリプトの構文チェック (刻印後の実物も、利用者と同じ Windows PowerShell 5.1 で)
         shell: powershell
         run: |
-          foreach ($f in @("packaging/setup.ps1", "packaging/uninstall.ps1", "packaging/elevated.ps1", "setup.ps1")) {
+          foreach ($f in @("packaging/setup.ps1", "packaging/uninstall.ps1", "packaging/uninstall-entry.ps1", "packaging/elevated.ps1", "setup.ps1", "uninstall.ps1")) {
             $head = [IO.File]::ReadAllBytes((Resolve-Path $f)) | Select-Object -First 3
             if (($head -join ",") -ne "239,187,191") { throw "$f : missing UTF-8 BOM (Windows PowerShell 5.1 would read it as ANSI)" }
             $tokens = $null; $errors = $null
@@ -81,9 +83,10 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           prerelease: true
-          body: "インストール・更新・アンインストールは README の「インストール・更新」を参照してください。"
+          body: "インストール・更新・アンインストールは README を参照してください。"
           files: |
             setup.ps1
+            uninstall.ps1
             yuragi_tip.dll
             yuragi_tip.dll.sha256
             yuragi-broker.exe
@@ -93,7 +96,8 @@ jobs:
 
   # 公開したプレリリースの setup.ps1 で、まっさらなランナーに実際に入れる (経路は 1 本)。
   # インストール → 動作 (ブローカーが ready) → 同じ版の入れ直し (学習データが残るか)
-  # → アンインストール (プログラムは全部消え、利用者のデータは残るか)。
+  # → リリースの uninstall.ps1 でアンインストール (プログラムは全部消え、利用者のデータは残るか)
+  # → もう一度 uninstall.ps1 (入っていないと伝えて、何もせずに終わるか)。
   install-test:
     needs: build
     runs-on: windows-latest
@@ -108,6 +112,8 @@ jobs:
           $ErrorActionPreference = "Stop"
           $setup = Join-Path $env:RUNNER_TEMP "yuragi-setup.ps1"
           Invoke-WebRequest -UseBasicParsing "https://github.com/$env:REPO/releases/download/$env:TAG/setup.ps1" -OutFile $setup
+          $uninstall = Join-Path $env:RUNNER_TEMP "yuragi-uninstall.ps1"
+          Invoke-WebRequest -UseBasicParsing "https://github.com/$env:REPO/releases/download/$env:TAG/uninstall.ps1" -OutFile $uninstall
           $program = Join-Path $env:ProgramFiles "yuragi-ime\$env:TAG"
           $local = Join-Path $env:LOCALAPPDATA "yuragi-ime"
           $userData = Join-Path $env:USERPROFILE ".yuragi-ime"
@@ -160,8 +166,8 @@ jobs:
           if ((Get-Content $learning -Raw).Trim() -ne $marker) { throw "learning data changed during the reinstall" }
           Write-Host "reinstall OK (learning data kept)"
 
-          $uninstall = Join-Path $local "versions\$env:TAG\app\packaging\uninstall.ps1"
-          Invoke-Logged "uninstall" @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $uninstall, "-Yes")
+          $uninstallArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $uninstall, "-Yes")
+          Invoke-Logged "uninstall" $uninstallArgs
           if (Test-Path $inproc) { throw "TIP registration remains after uninstall" }
           if (Test-Path $local) { throw "$local remains after uninstall" }
           if (Test-Path (Join-Path $env:ProgramFiles "yuragi-ime")) { throw "Program Files\yuragi-ime remains (nothing had the DLL loaded)" }
@@ -169,3 +175,7 @@ jobs:
           if (Get-Process -Name "yuragi-broker" -ErrorAction SilentlyContinue) { throw "a broker is still running" }
           if (-not (Test-Path $learning)) { throw "uninstall removed the learning history (I-7)" }
           Write-Host "uninstall OK (user data kept)"
+
+          Invoke-Logged "uninstall again (nothing installed)" $uninstallArgs
+          if (-not (Test-Path $learning)) { throw "the second uninstall removed the learning history" }
+          Write-Host "uninstall again OK (nothing to do)"
