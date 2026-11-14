@@ -136,6 +136,15 @@ Public Domain Dataです。使用・変更・配布に関しては一切の制�
 商品などに組み込むことも自由に行なってください。すでにいくつかの辞書には沖縄辞書が採用されています。
 勝手ながら、沖縄辞書に寄贈された辞書も in the Public Domain' 扱いとさせていただきます。
 
+## Product icon (hand-drawn)
+
+Location: `assets/icon/`
+
+The product icon is a hand-drawn hiragana 「あ」. A pencil drawing was taken
+from a photo and traced into an outline (`assets/icon/src/glyph.json`); the
+`.svg` / `.ico` files are made from that outline and are also compiled into
+`yuragi_tip.dll` and `yuragi-broker.exe`. No font outline is used.
+
 ## Other references (not copied)
 
 | 何 | 扱い |
