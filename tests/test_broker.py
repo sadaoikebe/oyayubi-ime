@@ -233,11 +233,10 @@ class BrokerCase(unittest.TestCase):
             "app": str(app or self.dir), "args": args,
             "admin_args": [str(self.dir / "admin.py")]}), encoding="utf-8")
 
-    def start(self, *extra, engine_json=True) -> subprocess.Popen:
+    def start(self, *extra) -> subprocess.Popen:
         argv = [str(broker_binary()), "--data-dir", str(self.data),
-                "--pipe" if WINDOWS else "--socket", self.address, "--test-hooks", *extra]
-        if engine_json:
-            argv += ["--engine-json", str(self.engine_json)]
+                "--pipe" if WINDOWS else "--socket", self.address, "--test-hooks", *extra,
+                "--engine-json", str(self.engine_json)]
         proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.addCleanup(self.stop, proc)
         return proc
@@ -428,7 +427,10 @@ class ProcessTest(BrokerCase):
         self.assertEqual(self.starts(), 1)
 
     def test_not_installed_starts_nothing_and_says_so(self):
-        self.start(engine_json=False)
+        # No engine.json where it is named. (Without --engine-json the Windows broker
+        # runs only for the version installed for this user, §5.2, and leaves at
+        # once where there is none, as on a CI runner.)
+        self.start()
         tip = self.tip()
         self.assertEqual(tip.hello()["state"], "not-installed")
         tip.key(1)
