@@ -7,9 +7,10 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 from oyayubi.chord.fsm import Plain
-from oyayubi.ime import config, manage
+from oyayubi.ime import broker_client, config, manage
 from oyayubi.ime.bunsetsu import Candidate
 from oyayubi.ime.learning import LearningStore, pause_marker
 from oyayubi.ime.personal import PersonalLexicon, add_word
@@ -31,6 +32,11 @@ class TempDir(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         self.dir = Path(tmp.name)
         self.config = self.dir / "config.json"
+        # Never the broker of the machine running the tests.
+        for name, answer in (("status", None), ("retry", False)):
+            patcher = mock.patch.object(broker_client, name, return_value=answer)
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
     def write_config(self, **values):
         self.config.write_text(json.dumps(values, ensure_ascii=False), encoding="utf-8")

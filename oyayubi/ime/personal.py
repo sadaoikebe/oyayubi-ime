@@ -47,11 +47,11 @@ class Word:
 
 def validate(reading: str, surface: str, pos: str) -> None:
     if not reading or is_literal_face(reading):
-        raise ValueError("the reading must be hiragana (and ー)")
+        raise ValueError("読みはひらがな（と ー）で入力してください")
     if not surface or surface != surface.strip():
-        raise ValueError("the surface must be nonempty, without surrounding spaces")
+        raise ValueError("単語を入力してください（前後に空白は入れられません）")
     if pos not in POS_IDS:
-        raise ValueError(f"unknown part of speech {pos!r}; one of: {', '.join(POS_IDS)}")
+        raise ValueError(f"品詞「{pos}」は使えません。次から選んでください: {'、'.join(POS_IDS)}")
 
 
 def read_words(path: Path) -> list[Word]:
