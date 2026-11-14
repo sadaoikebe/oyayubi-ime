@@ -2109,12 +2109,16 @@ static HRESULT RegisterProfile(BOOL add) {
         hr = mgr->RegisterProfile(CLSID_OyayubiTip, ja, GUID_OyayubiProfile, L"NicolaIME",
                                   (ULONG)wcslen(L"NicolaIME"), path.c_str(), (ULONG)path.size(), 0,
                                   nullptr, 0, TRUE, 0);
-    } else {
-        hr = mgr->UnregisterProfile(CLSID_OyayubiTip, ja, GUID_OyayubiProfile, TF_URP_ALLPROFILES);
+        mgr->Release();
+        HRESULT categories = RegisterCategories(TRUE);
+        return FAILED(hr) ? hr : categories;
     }
+    // Categories first: UnregisterProfile deletes the TIP's whole key, categories
+    // included, after which UnregisterCategory fails with E_FAIL.
+    HRESULT categories = RegisterCategories(FALSE);
+    hr = mgr->UnregisterProfile(CLSID_OyayubiTip, ja, GUID_OyayubiProfile, TF_URP_ALLPROFILES);
     mgr->Release();
-    HRESULT categories = RegisterCategories(add);
-    return FAILED(hr) ? hr : categories;
+    return FAILED(categories) ? categories : hr;
 }
 
 BOOL APIENTRY DllMain(HINSTANCE h, DWORD reason, LPVOID) {
