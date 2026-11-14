@@ -4,6 +4,7 @@
   5.1 reads a file without one as ANSI).
 - The elevated part gets exactly the arguments setup/uninstall meant, however
   odd the paths (spaces, quotes, Japanese): the -EncodedCommand round trip.
+- Old user data (.oyayubi-ime) is moved to .yuragi-ime, never deleted.
 - engine.json says what the broker needs, and its "-c" bootstrap really runs a
   module from the working directory when Python is isolated (the bundled
   runtime's ._pth leaves the working directory off sys.path).
@@ -138,6 +139,31 @@ class PowerShellTest(unittest.TestCase):
         self.assertEqual(engine["args"][3:], ["--dict-dir", "D", "--cache-dir", "C",
                                               "--lm-model", "M", "--data-dir", "X"])
         self.assertEqual(engine["admin_args"], ["-c", boot_string(), "yuragi.ime.admin_ui"])
+
+    def test_old_user_data_is_moved_never_deleted(self):
+        """.oyayubi-ime -> .yuragi-ime: what is only in the old folder moves; a name
+        both have stays in both; the old folder goes only once it is empty."""
+        func = function_text(ROOT / "packaging" / "setup.ps1", "Move-UserData")
+        with tempfile.TemporaryDirectory() as tmp:
+            old, new = Path(tmp) / ".oyayubi-ime", Path(tmp) / ".yuragi-ime"
+            (old / "logs").mkdir(parents=True)
+            (old / "logs" / "broker.log").write_text("log", encoding="utf-8")
+            (old / "learning.jsonl").write_text("old learning", encoding="utf-8")
+            (old / "config.json").write_text("old config", encoding="utf-8")
+            new.mkdir()
+            (new / "config.json").write_text("new config", encoding="utf-8")
+            notes = pwsh(f"$ErrorActionPreference = 'Stop'\n{func}\nMove-UserData '{old}' '{new}'")
+            self.assertEqual((new / "learning.jsonl").read_text(encoding="utf-8"), "old learning")
+            self.assertEqual((new / "logs" / "broker.log").read_text(encoding="utf-8"), "log")
+            self.assertEqual((new / "config.json").read_text(encoding="utf-8"), "new config")
+            self.assertEqual((old / "config.json").read_text(encoding="utf-8"), "old config")
+            self.assertEqual(sorted(p.name for p in old.iterdir()), ["config.json"])
+            self.assertIn("config.json", notes)
+
+            (new / "config.json").unlink()
+            pwsh(f"$ErrorActionPreference = 'Stop'\n{func}\nMove-UserData '{old}' '{new}'")
+            self.assertFalse(old.exists())
+            self.assertEqual((new / "config.json").read_text(encoding="utf-8"), "old config")
 
 
 class BootstrapTest(unittest.TestCase):

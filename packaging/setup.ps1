@@ -9,7 +9,9 @@
 #   3 本物のブローカーで試運転 (--selftest)
 #   4 staging\<tag> を versions\<tag> へ
 #   5 管理者権限 (UAC 1 回): Program Files への配置、登録、読み返し、旧版の削除
-#   6 旧ブローカーに quit、HKCU の Tag と Run キー、言語一覧、利用者データの移動 (初回のみ)
+#   6 旧ブローカーに quit、HKCU の Tag と Run キー、言語一覧、利用者データの移動 (初回のみ)。
+#     旧名 (oyayubi-ime) の版からは、その製品のキーを消して旧ブローカーを止め、
+#     %USERPROFILE%\.oyayubi-ime の中身を移す
 #   7 印を下ろし、新ブローカーを起動して ready を確認
 #   8 使われていないものの片付け (失敗しても次回また試す)
 # 利用者のデータ (%USERPROFILE%\.yuragi-ime) は移すだけで、消さない (I-7)。
@@ -45,6 +47,8 @@ $ProgramRoot = Join-Path $env:ProgramFiles "yuragi-ime"
 $UserData = Join-Path $env:USERPROFILE ".yuragi-ime"
 # 旧名 (oyayubi-ime) の版の置き場所。移行と旧版の片付けにだけ使う。
 $OldLocal = Join-Path $env:LOCALAPPDATA "oyayubi-ime"
+$OldUserData = Join-Path $env:USERPROFILE ".oyayubi-ime"
+$OldProductKey = "HKCU:\Software\oyayubi-ime"
 $Clsid = "{A7C4E201-0B3A-4F11-9E61-0C1A0B7E0A01}"
 $Layout = "0x0411:$Clsid{A7C4E202-0B3A-4F11-9E61-0C1A0B7E0A01}"
 $ProductKey = "HKCU:\Software\yuragi-ime"
@@ -224,10 +228,11 @@ if ($proc.ExitCode -ne 0) {
 Say "  試運転 OK"
 
 # ---------------------------------------------------------------- 旧ブローカー
-function Connect-Broker([int]$timeoutMs) {
+# 旧名の版のブローカーは、パイプが oyayubi-ime-…、プロセスが oyayubi-broker。
+function Connect-Broker([int]$timeoutMs, [string]$pipePrefix = "yuragi-ime") {
     $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
     $session = (Get-Process -Id $PID).SessionId
-    $pipe = New-Object System.IO.Pipes.NamedPipeClientStream(".", "yuragi-ime-$sid-$session", [IO.Pipes.PipeDirection]::InOut)
+    $pipe = New-Object System.IO.Pipes.NamedPipeClientStream(".", "$pipePrefix-$sid-$session", [IO.Pipes.PipeDirection]::InOut)
     try { $pipe.Connect($timeoutMs) } catch { $pipe.Dispose(); return $null }
     $writer = New-Object IO.StreamWriter($pipe, $Utf8NoBom)
     $writer.AutoFlush = $true
@@ -241,15 +246,15 @@ function Read-BrokerLine($conn, [int]$timeoutMs) {
     if ($task.Wait($timeoutMs)) { return $task.Result }
     return $null
 }
-function Stop-Broker {
-    $conn = Connect-Broker 1000
+function Stop-Broker([string]$pipePrefix = "yuragi-ime", [string]$processName = "yuragi-broker") {
+    $conn = Connect-Broker 1000 $pipePrefix
     if ($conn) {
         [void](Read-BrokerLine $conn 2000)
         try { $conn.Writer.WriteLine('{"op":"quit"}') } catch { }
         $conn.Pipe.Dispose()
     }
     $session = (Get-Process -Id $PID).SessionId
-    $brokers = @(Get-Process -Name "yuragi-broker" -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq $session })
+    $brokers = @(Get-Process -Name $processName -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq $session })
     foreach ($b in $brokers) {
         if (-not $b.WaitForExit(15000)) {
             Say "  ブローカーが終わらないので終了させます (PID $($b.Id))。"
@@ -257,6 +262,25 @@ function Stop-Broker {
             if (-not $b.WaitForExit(5000)) { Fail "ブローカー (PID $($b.Id)) を終了できませんでした。" }
         }
     }
+}
+
+# 利用者データを $from から $to へ、中身ごと移す。移すだけで消さない (I-7): $to に同じ名前が
+# あれば旧い方を残す。空になった $from だけ消す。返すのは利用者に見せる記録。
+function Move-UserData([string]$from, [string]$to) {
+    $notes = @()
+    foreach ($item in @(Get-ChildItem -LiteralPath $from -Force)) {
+        $dest = Join-Path $to $item.Name
+        if (Test-Path -LiteralPath $dest) {
+            $notes += "$($item.Name) は両方にあるので、旧い方 ($($item.FullName)) を残しました"
+        } else {
+            Move-Item -LiteralPath $item.FullName -Destination $dest
+        }
+    }
+    if (@(Get-ChildItem -LiteralPath $from -Force).Count -eq 0) {
+        Remove-Item -LiteralPath $from -Force   # 空のときだけ (-Recurse なし)
+        $notes += "$from の中身を $to へ移しました"
+    }
+    return $notes
 }
 
 # ---------------------------------------------------------------- 4 versions へ
@@ -339,11 +363,19 @@ public static extern bool InstallLayoutOrTip(string profile, uint flags);
 '@
 if (-not [YuragiSetup.Input]::InstallLayoutOrTip($Layout, 0)) { Fail "言語一覧に追加できませんでした。" }
 
-# 学習履歴と個人辞書は %USERPROFILE%\.yuragi-ime へ (A-15、§4.2)。移すだけで消さない。
+# 旧名の版 (開発用の登録): 製品のキーを消すと、旧 DLL を読み込んだアプリは何も起動しなくなる。
+# そのうえで旧ブローカーを止める (利用者データのファイルを開いているので、移す前に)。
+if (Test-Path -LiteralPath $OldProductKey) { Remove-Item -LiteralPath $OldProductKey -Recurse -Force }
+Stop-Broker "oyayubi-ime" "oyayubi-broker"
+
 New-Item -ItemType Directory -Force $UserData | Out-Null
+$migrationNotes = @()
+# 旧名の版の利用者データ (%USERPROFILE%\.oyayubi-ime) を .yuragi-ime へ。
+if (Test-Path -LiteralPath $OldUserData) { $migrationNotes += @(Move-UserData $OldUserData $UserData) }
+
+# 学習履歴と個人辞書は %USERPROFILE%\.yuragi-ime へ (A-15、§4.2)。移すだけで消さない。
 $configPath = Join-Path $UserData "config.json"
 $oldData = Join-Path $OldApp "data"
-$migrationNotes = @()
 if (Test-Path -LiteralPath $oldData) {
     $config = [pscustomobject]@{}
     if (Test-Path -LiteralPath $configPath) {
@@ -422,13 +454,12 @@ foreach ($kind in @("runtime", "dict", "model")) {
 }
 if ($cacheName) { $cleanup += @(Get-ChildItem -LiteralPath $script:Cache -File | Where-Object { $_.Name -ne $cacheName }) }
 if (Test-Path -LiteralPath $StagingRoot) { $cleanup += @(Get-Item -LiteralPath $StagingRoot) }
+# 旧名の版の %LOCALAPPDATA%\oyayubi-ime (v0.1.0 の install-manifest.json、開発用の登録の
+# versions\dev)。v0.1.0 の app が次の Windows 起動時の削除待ちなら、次の setup で消す。
+if ((Test-Path -LiteralPath $OldLocal) -and -not (Test-Path -LiteralPath $OldApp)) { $cleanup += @(Get-Item -LiteralPath $OldLocal) }
 $left = @()
 foreach ($item in $cleanup) {
     try { Remove-Item -LiteralPath $item.FullName -Recurse -Force -ErrorAction Stop } catch { $left += $item.FullName }
-}
-foreach ($old in @("install-manifest.json")) {
-    $path = Join-Path $OldLocal $old
-    if ((Test-Path -LiteralPath $path) -and -not (Test-Path -LiteralPath $OldApp)) { Remove-Item -LiteralPath $path -Force }
 }
 
 Say ""
