@@ -20,6 +20,7 @@ import argparse
 from dataclasses import dataclass
 from datetime import datetime
 import json
+import os
 from pathlib import Path
 import sys
 
@@ -42,7 +43,11 @@ class SettingText:
     label: str
     help: str
     values: dict[str, str]  # stored text -> shown; {} for free text
-    unset: str = ""  # shown when the built-in default is "decided by the engine"
+    # The built-in default is None for some settings, which the engine reads as a
+    # value of its own: implied is that value as stored text (offered for editing),
+    # unset what is shown when it has no stored form (an empty field means it).
+    implied: str = ""
+    unset: str = ""
 
 
 ON_OFF = {"true": "オン", "false": "オフ"}
@@ -52,7 +57,7 @@ SETTINGS: dict[str, SettingText] = {
     "learning": SettingText(
         "学習", "確定した変換を覚えて、次から上位に出します。一時停止中は、覚えた内容は"
         "使いますが、新しくは覚えません。",
-        {"on": "学習する", "paused": "一時停止", "off": "使わない"}, "学習する"),
+        {"on": "学習する", "paused": "一時停止", "off": "使わない"}, implied="on"),
     "prediction": SettingText(
         "入力の予測", "変換する前の入力中に Tab キーを押すと、学習した内容と辞書から"
         "続きの候補を出します。",
@@ -60,7 +65,7 @@ SETTINGS: dict[str, SettingText] = {
     "lm_rescore": SettingText(
         "言語モデル", "変換するとき、言語モデルで候補の順位を見直します。使わないときは"
         "辞書だけで変換します。",
-        {"true": "使う", "false": "使わない"}, "使う"),
+        {"true": "使う", "false": "使わない"}, implied="true"),
     "lm_prefetch": SettingText(
         "言語モデルの先読み", "変換を速くするため、変換キーを押す前から言語モデルの"
         "計算を始めておきます。",
@@ -76,15 +81,18 @@ SETTINGS: dict[str, SettingText] = {
         "先読みを始めるまで（ミリ秒）", "「親指キーを押したとき」の先読みで、親指キーを"
         "押してから計算を始めるまでの時間です。", {}),
     "lm_model": SettingText(
-        "言語モデルの種類", "使う言語モデル（Hugging Face のモデル名か、モデルのフォルダ）。",
-        {}, "標準のモデル"),
+        "言語モデルの種類", "使う言語モデル（Hugging Face のモデル名か、モデルのフォルダ）。"
+        "空欄なら標準のモデルを使います。",
+        {}, unset="標準のモデル"),
     "lm_alpha": SettingText(
-        "言語モデルの重み", "大きいほど、辞書より言語モデルの判断を重く見ます。", {}, "1.0"),
+        "言語モデルの重み", "大きいほど、辞書より言語モデルの判断を重く見ます。", {},
+        implied="1.0"),
     "lm_k": SettingText(
         "言語モデルで比べる候補の数", "辞書の候補のうち、上位いくつを言語モデルで比べるか。",
-        {}, "8"),
+        {}, implied="8"),
     "lm_threads": SettingText(
-        "言語モデルの CPU スレッド数", "言語モデルの計算に使う CPU のスレッド数。", {}, "自動"),
+        "言語モデルの CPU スレッド数", "言語モデルの計算に使う CPU のスレッド数。"
+        "空欄にすると自動で決めます。", {}, unset="自動"),
     "personal_file": SettingText(
         "個人辞書のファイル", "「単語登録」で登録した単語を保存するファイル。", {}),
     "learning_file": SettingText(
@@ -269,9 +277,9 @@ class AdminModel:
         for name, text in SETTINGS.items():
             action = actions[name]
             value = stored[name] if name in stored else action.default
-            raw = _stored_text(value)
-            shown = text.values.get(raw, raw) if raw else text.unset
-            edit = shown if raw else ""
+            raw = _stored_text(value) or text.implied
+            edit = text.values.get(raw, raw)
+            shown = edit if raw else text.unset
             if name not in stored:
                 shown += "（既定）"
             rows.append(SettingRow(name, text.label, shown, edit, list(text.values.values()),
@@ -382,6 +390,21 @@ def declare_dpi_aware() -> None:
         ctypes.OleDLL("shcore").SetProcessDpiAwareness(1)  # PROCESS_SYSTEM_DPI_AWARE
 
 
+def application_in_front() -> bool:
+    """Whether the foreground window belongs to this process (always, off Windows)."""
+    if sys.platform != "win32":
+        return True
+    import ctypes
+    from ctypes import wintypes
+    user32 = ctypes.WinDLL("user32")
+    user32.GetForegroundWindow.restype = wintypes.HWND
+    user32.GetForegroundWindow.argtypes = []
+    user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+    pid = wintypes.DWORD()
+    user32.GetWindowThreadProcessId(user32.GetForegroundWindow(), ctypes.byref(pid))
+    return pid.value == os.getpid()
+
+
 class AdminWindow:
     """Widgets only: every button calls AdminModel and redraws from it."""
 
@@ -391,6 +414,7 @@ class AdminWindow:
         self.tk, self.ttk, self.root, self.model = tk, ttk, root, model
         self._rows = {}  # tree -> {item id: row as given}
         self._setting_rows = {}  # settings tree item id -> SettingRow
+        self._comboboxes = []
         # Pixel sizes below are at 96 dpi; the window is dpi aware (declare_dpi_aware).
         self.scale = root.winfo_fpixels("1i") / 96
         root.title("oyayubi-ime 管理")
@@ -410,10 +434,35 @@ class AdminWindow:
             notebook.add(frame, text=title)
         self.notebook, self.status_frame = notebook, frame
         notebook.bind("<<NotebookTabChanged>>", lambda e: self._tab_changed())
+        root.bind_class("ComboboxPopdown", "<Map>", lambda e: self._close_lists_when_left(),
+                        add="+")
         self.refresh()
 
     def px(self, pixels: int) -> int:
         return round(pixels * self.scale)
+
+    def _combobox(self, parent, variable, values, width):
+        box = self.ttk.Combobox(parent, textvariable=variable, values=values, state="readonly",
+                                width=width)
+        self._comboboxes.append(box)
+        return box
+
+    def _close_lists_when_left(self):
+        # An open Combobox list holds Tk's grab, and on Windows Tk then reports no
+        # FocusOut (nor Deactivate) when the user switches to another application:
+        # Tk's own "close on FocusOut" never runs and the list stays on screen over
+        # the other windows. While a list is open, watch the foreground window.
+        tcl = self.root.tk
+        posted = [box for box in self._comboboxes
+                  if tcl.call("winfo", "exists", f"{box}.popdown")
+                  and tcl.call("winfo", "ismapped", f"{box}.popdown")]
+        if not posted:
+            return
+        if application_in_front():
+            self.root.after(200, self._close_lists_when_left)
+            return
+        for box in posted:
+            tcl.call("ttk::combobox::Unpost", str(box))
 
     # helpers
     def _table(self, parent, columns, widths):
@@ -469,8 +518,7 @@ class AdminWindow:
             ttk.Label(form, text=label).pack(side="left")
             ttk.Entry(form, textvariable=var, width=width).pack(side="left", padx=(2, self.px(8)))
         ttk.Label(form, text="品詞").pack(side="left")
-        ttk.Combobox(form, textvariable=self.w_pos, values=POS_NAMES, state="readonly",
-                     width=9).pack(side="left", padx=(2, self.px(8)))
+        self._combobox(form, self.w_pos, POS_NAMES, 9).pack(side="left", padx=(2, self.px(8)))
         ttk.Label(form, text="コスト").pack(side="left")
         ttk.Entry(form, textvariable=self.w_cost, width=6).pack(side="left", padx=(2, self.px(8)))
         ttk.Button(form, text="登録", command=self._add_word).pack(side="left")
@@ -511,8 +559,7 @@ class AdminWindow:
         actions.pack(side="bottom", fill="x", pady=(self.px(6), 0))
         ttk.Button(actions, text="選択を忘れる", command=self._forget).pack(side="left")
         ttk.Label(actions, text="品詞").pack(side="left", padx=(self.px(16), 2))
-        ttk.Combobox(actions, textvariable=self.l_pos, values=POS_NAMES, state="readonly",
-                     width=9).pack(side="left", padx=(0, self.px(4)))
+        self._combobox(actions, self.l_pos, POS_NAMES, 9).pack(side="left", padx=(0, self.px(4)))
         ttk.Button(actions, text="選択を単語登録", command=self._promote).pack(side="left")
         self.learning_tree = self._table(
             frame, ("読み", "変換", "文脈数", "最終確定", "単語として覚えた"),
@@ -534,8 +581,13 @@ class AdminWindow:
         edit.pack(side="bottom", fill="x", pady=(self.px(6), 0))
         self.s_name, self.s_label, self.s_value = "", tk.StringVar(), tk.StringVar()
         ttk.Label(edit, textvariable=self.s_label).pack(side="left")
-        self.s_box = ttk.Combobox(edit, textvariable=self.s_value, width=30)
-        self.s_box.pack(side="left", padx=self.px(4))
+        # A list for settings with choices, a text field for numbers and paths.
+        field = ttk.Frame(edit)
+        field.pack(side="left", padx=self.px(4))
+        self.s_box = self._combobox(field, self.s_value, [], 30)
+        self.s_box.configure(state="disabled")  # until an item is picked
+        self.s_entry = ttk.Entry(field, textvariable=self.s_value, width=32)
+        self.s_box.pack()
         ttk.Button(edit, text="保存", command=self._save_setting).pack(side="left")
         ttk.Button(edit, text="既定に戻す", command=self._reset_setting
                    ).pack(side="left", padx=self.px(4))
@@ -556,7 +608,13 @@ class AdminWindow:
         self.s_label.set(row.label)
         self.s_help.set(row.help)
         self.s_value.set(row.edit)
-        self.s_box.configure(values=row.choices, state="readonly" if row.choices else "normal")
+        if row.choices:
+            self.s_entry.pack_forget()
+            self.s_box.configure(values=row.choices, state="readonly")
+            self.s_box.pack()
+        else:
+            self.s_box.pack_forget()
+            self.s_entry.pack()
 
     def _save_setting(self):
         if self.s_name:

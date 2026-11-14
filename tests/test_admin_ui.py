@@ -164,11 +164,17 @@ class SettingsTest(Base):
         self.assertEqual(rows["lm_prefetch"].value, "親指キーを押したとき（既定）")
         self.assertEqual(rows["lm_prefetch"].choices,
                          ["親指キーを押したとき", "キーを打つたび", "先読みしない"])
-        self.assertEqual((rows["lm_rescore"].value, rows["lm_rescore"].edit), ("使う（既定）", ""))
         self.assertEqual(rows["log_text"].value, "オフ（既定）")
-        self.assertEqual(rows["lm_alpha"].value, "1.0（既定）")  # None: the engine decides
-        self.assertEqual(rows["learning"].value, "学習する（既定）")
+        # A default of None is what the engine acts as: shown, and offered for editing.
+        for name, value, edit in (("learning", "学習する（既定）", "学習する"),
+                                  ("lm_rescore", "使う（既定）", "使う"),
+                                  ("lm_alpha", "1.0（既定）", "1.0"),
+                                  ("lm_k", "8（既定）", "8"),
+                                  ("lm_threads", "自動（既定）", ""),  # empty means automatic
+                                  ("lm_model", "標準のモデル（既定）", "")):
+            self.assertEqual((rows[name].value, rows[name].edit), (value, edit), name)
         self.assertEqual(rows["lm_k"].choices, [])  # free text
+        self.assertIn(rows["learning"].edit, rows["learning"].choices)
 
     def test_edit_round_trips_through_the_engine_parser(self):
         for name, shown in (("lm_deadline_ms", "250"), ("lm_prefetch", "キーを打つたび"),
@@ -333,7 +339,7 @@ class WidgetLayerTest(Base):
         self.assertEqual([p.surface for p in self.model.learned()], ["肩"])
         w.settings_tree.selection.return_value = (str(list(SETTINGS).index("lm_k")),)
         w._pick_setting()
-        self.assertEqual((w.s_label.get(), w.s_value.get()), ("言語モデルで比べる候補の数", ""))
+        self.assertEqual((w.s_label.get(), w.s_value.get()), ("言語モデルで比べる候補の数", "8"))
         self.assertEqual(w.s_help.get(), SETTINGS["lm_k"].help)  # whole, not cut by the column
         w.s_value.set("4")
         w._save_setting()
