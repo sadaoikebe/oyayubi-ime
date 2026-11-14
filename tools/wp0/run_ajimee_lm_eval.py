@@ -21,13 +21,13 @@ from pathlib import Path
 import statistics
 import time
 
-from oyayubi.ime.lm_rescore import DEFAULT_MODEL, CausalLmScorer, LmRescorer
+from yuragi.ime.lm_rescore import DEFAULT_MODEL, CausalLmScorer, LmRescorer
 
 from .fetch_ajimee import DATA
-from oyayubi.lattice.mozc_dict import BOS_ID, left_id_after, load_lex
+from yuragi.lattice.mozc_dict import BOS_ID, left_id_after, load_lex
 from .run_ajimee_eval import chunks, hiragana
-from oyayubi.lattice.table import load_table, reverse_table
-from oyayubi.lattice.token_viterbi import decode_tokens
+from yuragi.lattice.table import load_table, reverse_table
+from yuragi.lattice.token_viterbi import decode_tokens
 
 
 def pct(values: list[float], q: float) -> float:

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from oyayubi.lattice.mozc_dict import load_lex
-from oyayubi.lattice.table import load_table, reverse_table
-from oyayubi.lattice.token_viterbi import decode_tokens, nbest_tokens
+from yuragi.lattice.mozc_dict import load_lex
+from yuragi.lattice.table import load_table, reverse_table
+from yuragi.lattice.token_viterbi import decode_tokens, nbest_tokens
 
 
 def main() -> int:

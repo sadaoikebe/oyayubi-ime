@@ -476,7 +476,7 @@ class ProcessTest(BrokerCase):
     def test_management_tools_name_the_real_pipe(self):
         # It once raised (ERROR_INVALID_HANDLE) and the window showed "not running"
         # beside a running broker.
-        from oyayubi.ime import broker_client
+        from yuragi.ime import broker_client
         sid = subprocess.run(["whoami", "/user", "/fo", "csv", "/nh"], capture_output=True,
                              text=True, check=True).stdout.strip().split(",")[-1].strip('"')
         prefix = rf"\\.\pipe\oyayubi-ime-{sid}-"
@@ -486,7 +486,7 @@ class ProcessTest(BrokerCase):
 
     @unittest.skipIf(WINDOWS, "the management tools find the real pipe by the user's SID")
     def test_management_tools_reach_the_broker(self):
-        from oyayubi.ime import broker_client
+        from yuragi.ime import broker_client
         self.assertIsNone(broker_client.status(self.address))  # nothing listening yet
         self.plan({"warnings": ["lm"]}, "normal")
         self.start()
@@ -520,21 +520,21 @@ class SelfTestTest(BrokerCase):
         data = self.dir / "user"
         data.mkdir()
         (data / "config.json").write_text('{"lm_rescore": false}', encoding="utf-8")
-        self.write_engine_json(["-m", "oyayubi.engine", "--data-dir", str(data)], app=ROOT)
+        self.write_engine_json(["-m", "yuragi.engine", "--data-dir", str(data)], app=ROOT)
         result = self.selftest()
         self.assertEqual(result.returncode, 0, result.stdout + self.log())
         self.assertIn("selftest passed", result.stdout)
         self.assertIn("selftest: converted", self.log())
 
     def test_real_engine_through_the_installers_bootstrap(self):
-        """engine.json as setup.ps1 writes it: "-c <$Boot> oyayubi.engine ...", with
+        """engine.json as setup.ps1 writes it: "-c <$Boot> yuragi.engine ...", with
         Python isolated (-I) as the bundled runtime's ._pth makes it."""
         from tests.test_installer_scripts import boot_string
-        from oyayubi.lattice import mozc_dict
+        from yuragi.lattice import mozc_dict
         data = self.dir / "user data"
         data.mkdir()
         (data / "config.json").write_text('{"lm_rescore": false}', encoding="utf-8")
-        self.write_engine_json(["-I", "-c", boot_string(), "oyayubi.engine", "--data-dir", str(data),
+        self.write_engine_json(["-I", "-c", boot_string(), "yuragi.engine", "--data-dir", str(data),
                                 "--dict-dir", str(mozc_dict.DICT_DIR),
                                 "--cache-dir", str(mozc_dict.CACHE.parent)], app=ROOT)
         result = self.selftest()

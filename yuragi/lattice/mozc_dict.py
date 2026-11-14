@@ -14,8 +14,9 @@ ROOT = Path(__file__).resolve().parents[2]
 DICT_DIR = ROOT / "third_party" / "mozc_oss_dict"
 MANIFEST = ROOT / "data" / "dictionary-manifest.json"
 # v1 caches discarded homonyms after the eighth entry; v2 pickles name the old
-# module path tools.wp0.mozc_dict. Each version bump rebuilds the cache once.
-CACHE_FORMAT = "mozc_lex_v3"
+# module path tools.wp0.mozc_dict, v3 the old package name oyayubi. Each version
+# bump rebuilds the cache once.
+CACHE_FORMAT = "mozc_lex_v4"
 
 
 def cache_name(manifest: Path = MANIFEST) -> str:

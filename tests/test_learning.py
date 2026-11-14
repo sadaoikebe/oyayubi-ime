@@ -7,15 +7,15 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from oyayubi.chord.fsm import AmbShift, Plain
-from oyayubi.ime.bunsetsu import COST_WINDOW, Candidate, candidates
-from oyayubi.ime.learning import (CONTEXT_BONUS, HALF_LIFE_SECONDS, PAIR_BONUS,
+from yuragi.chord.fsm import AmbShift, Plain
+from yuragi.ime.bunsetsu import COST_WINDOW, Candidate, candidates
+from yuragi.ime.learning import (CONTEXT_BONUS, HALF_LIFE_SECONDS, PAIR_BONUS,
                                   Confirmation, LearningStore)
-from oyayubi.ime.server import dispatch
-from oyayubi.ime.session import ImeSession
-from oyayubi.lattice.mozc_dict import Entry, MozcLex, load_lex
-from oyayubi.lattice.table import reverse_table
-from oyayubi.lattice.token_viterbi import decode_tokens, end_cost, nbest_tokens, spans_from, word_cost
+from yuragi.ime.server import dispatch
+from yuragi.ime.session import ImeSession
+from yuragi.lattice.mozc_dict import Entry, MozcLex, load_lex
+from yuragi.lattice.table import reverse_table
+from yuragi.lattice.token_viterbi import decode_tokens, end_cost, nbest_tokens, spans_from, word_cost
 from tests.test_bunsetsu import lexicon
 
 
@@ -325,7 +325,7 @@ class LearningTest(unittest.TestCase):
         s._learning = store
         self.type_reading(s, "こうせい")
         expected = s.composition
-        with patch("oyayubi.ime.learning.os.open", side_effect=PermissionError):
+        with patch("yuragi.ime.learning.os.open", side_effect=PermissionError):
             self.assertEqual(dispatch(s, {"op": "down", "vk": 13})["commit"], expected)
 
     def test_ordinary_decode_never_opens_learning_history(self):
@@ -497,7 +497,7 @@ class LearningTest(unittest.TestCase):
         self.type_reading(s, "こうせい")
         self.choose(s, "校正")
         before, composition = self.path.read_bytes(), s.composition
-        with patch("oyayubi.ime.learning.os.open", side_effect=PermissionError):
+        with patch("yuragi.ime.learning.os.open", side_effect=PermissionError):
             self.assertFalse(s.forget_candidate())
             self.assertFalse(s.undo_learning())
         self.assertEqual((self.path.read_bytes(), s.composition), (before, composition))

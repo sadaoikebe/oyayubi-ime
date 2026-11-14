@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import unittest
 
-from oyayubi.chord.fsm import Plain
-from oyayubi.ime.server import dispatch
-from oyayubi.ime.session import Literal
+from yuragi.chord.fsm import Plain
+from yuragi.ime.server import dispatch
+from yuragi.ime.session import Literal
 from tests.transcript import make_session
 
 

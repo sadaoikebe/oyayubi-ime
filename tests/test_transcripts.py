@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import unittest
 
-from oyayubi.lattice.mozc_dict import load_lex
+from yuragi.lattice.mozc_dict import load_lex
 from tests.transcript import run_transcript
 
 CASES = sorted((Path(__file__).parent / "transcripts").glob("*.json"))

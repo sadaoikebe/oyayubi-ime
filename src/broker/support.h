@@ -70,7 +70,7 @@ void RecordNotice(const fs::path& logs, const Notice& notice);
 // engine.json (REDESIGN §4.2): written by the installer next to the version.
 //  {"format":1, "python":"<abs python.exe>", "pythonw":"<abs pythonw.exe>",
 //   "app":"<abs app dir: the engine's working directory>",
-//   "args":["-m","oyayubi.engine", ...], "admin_args":["-m","oyayubi.ime.admin_ui"]}
+//   "args":["-m","yuragi.engine", ...], "admin_args":["-m","yuragi.ime.admin_ui"]}
 struct EngineConfig {
     std::string python, pythonw, app;  // UTF-8
     std::vector<std::string> args, admin_args;

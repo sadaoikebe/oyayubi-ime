@@ -127,9 +127,9 @@ function Write-EngineJson([string]$path, [string]$app, [string[]]$extra) {
         python = $script:Python
         pythonw = (Join-Path (Split-Path $script:Python) "pythonw.exe")
         app = $app
-        args = @("-c", $Boot, "oyayubi.engine", "--dict-dir", $script:Dict,
+        args = @("-c", $Boot, "yuragi.engine", "--dict-dir", $script:Dict,
                  "--cache-dir", $script:Cache, "--lm-model", $script:Model) + $extra
-        admin_args = @("-c", $Boot, "oyayubi.ime.admin_ui")
+        admin_args = @("-c", $Boot, "yuragi.ime.admin_ui")
     }
     [IO.File]::WriteAllText($path, ($engine | ConvertTo-Json -Depth 4), $Utf8NoBom)
 }
@@ -191,7 +191,7 @@ New-Shared $script:Dict {
         Invoke-App $script:Python $StageApp @("tools.wp0.fetch_mozc_dict", "--out", $dir)
     }
     Invoke-Checked "辞書の照合 (SHA-256)" {
-        Invoke-App $script:Python $StageApp @("oyayubi.lattice.dict_manifest", "verify", "--dict-dir", $dir)
+        Invoke-App $script:Python $StageApp @("yuragi.lattice.dict_manifest", "verify", "--dict-dir", $dir)
     }
 }
 $revision = (Select-String -LiteralPath (Join-Path $StageApp "packaging\fetch_model.py") -Pattern '^REVISION = "([0-9a-f]+)"').Matches[0].Groups[1].Value
@@ -409,7 +409,7 @@ $keep = @($Runtime, $script:Dict, $script:Model)
 $cacheName = ""
 try {
     Push-Location -LiteralPath $App
-    $cacheName = (& $script:Python -c "import os,sys; sys.path.insert(0, os.getcwd()); from oyayubi.lattice.mozc_dict import cache_name; print(cache_name())").Trim()
+    $cacheName = (& $script:Python -c "import os,sys; sys.path.insert(0, os.getcwd()); from yuragi.lattice.mozc_dict import cache_name; print(cache_name())").Trim()
     Pop-Location
 } catch { Pop-Location }
 $cleanup = @()

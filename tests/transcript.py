@@ -10,10 +10,10 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from oyayubi.ime.server import dispatch
-from oyayubi.ime.session import ImeSession
-from oyayubi.lattice.mozc_dict import Entry, MozcLex
-from oyayubi.lattice.table import load_table
+from yuragi.ime.server import dispatch
+from yuragi.ime.session import ImeSession
+from yuragi.lattice.mozc_dict import Entry, MozcLex
+from yuragi.lattice.table import load_table
 
 VISIBLE = {"composition", "candidates", "cand_index", "converted", "commit", "committed"}
 TRANSCRIPT_NOW = datetime(2026, 11, 12, 9, 30)  # a Thursday

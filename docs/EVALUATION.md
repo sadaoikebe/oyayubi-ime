@@ -46,7 +46,8 @@ Fable の E2 スクリプトにあった50件制限と
 旧キャッシュは8件以降を復元できないため、`data/cache/mozc_lex_v2.pkl` に再構築した。
 2026-11-12 に変換エンジン（`mozc_dict`／`token_viterbi`／`decode`／`expand`／`table`）を `tools/wp0/` から
 `oyayubi/lattice/` へ移したため、pickle のモジュール名が変わり、キャッシュは `mozc_lex_v3.pkl`（中身は v2 と同一）になった。
-初回だけ辞書テキストから再構築する。評価・回帰のコマンド（`python3 -m tools.wp0.…`）は変わらない。
+2026-11-14 にパッケージを `oyayubi` から `yuragi` へ改名したので、キャッシュは `mozc_lex_v4-….pkl` になった（中身は同一）。
+どちらも初回だけ辞書テキストから再構築する。評価・回帰のコマンド（`python3 -m tools.wp0.…`）は変わらない。
 候補列挙へ全エントリを渡す。Stage 5a の `nbest_tokens` は厳密 Viterbi＋後ろ向き A* で
 異なる表記を最小コスト順に列挙する。1-best の RID 枝刈りは維持する。
 単語の全候補を検査するときは `nbest_tokens(..., k=十分大きな値)` を使う。
@@ -106,7 +107,7 @@ Stage 2前半の入力・確定・resetプロトコルとトランスクリプ�
 NICOLAの句読点を追加しても、このオフライン評価の逆引きは従来どおりかなのみを対象にし、
 評価件数と比較条件を維持する。
 
-`python3 -m oyayubi.ime.server` は辞書ロード直後に `gc.freeze()` する。
+`python3 -m yuragi.ime.server` は辞書ロード直後に `gc.freeze()` する。
 標準出力は従来どおり TIP への JSON 返信であり、composition/commit を含む。
 標準エラーへの本文ログは既定オフ。診断が必要なときだけ `--log-text` を指定する。
 未処理例外は本文を含み得るメッセージを出さず、例外の型だけを報告する。

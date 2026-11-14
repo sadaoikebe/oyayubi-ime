@@ -19,12 +19,12 @@ import time
 import unittest
 import weakref
 
-from oyayubi.engine import Engine
-from oyayubi.ime.lm_async import LmWorker
-from oyayubi.ime.lm_rescore import LmRescorer
-from oyayubi.ime.session import ImeSession
-from oyayubi.lattice.mozc_dict import Entry, MozcLex
-from oyayubi.lattice.table import load_table
+from yuragi.engine import Engine
+from yuragi.ime.lm_async import LmWorker
+from yuragi.ime.lm_rescore import LmRescorer
+from yuragi.ime.session import ImeSession
+from yuragi.lattice.mozc_dict import Entry, MozcLex
+from yuragi.lattice.table import load_table
 
 SETTINGS = Namespace(log_text=False, lm_timing=False, lm_grace_ms=30, lm_deadline_ms=400,
                      lm_prefetch="thumb", lm_prefetch_delay_ms=30)

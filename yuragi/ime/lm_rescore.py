@@ -30,9 +30,9 @@ from dataclasses import dataclass, field
 import time
 from typing import Protocol, Sequence
 
-from oyayubi.lattice.decode import DecodeResult
-from oyayubi.lattice.mozc_dict import BOS_ID, MozcLex, left_id_after
-from oyayubi.lattice.token_viterbi import decode_tokens, nbest_tokens
+from yuragi.lattice.decode import DecodeResult
+from yuragi.lattice.mozc_dict import BOS_ID, MozcLex, left_id_after
+from yuragi.lattice.token_viterbi import decode_tokens, nbest_tokens
 
 from .bunsetsu import segments_from
 

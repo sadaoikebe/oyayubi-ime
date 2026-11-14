@@ -1,6 +1,6 @@
 """The management window: word registration, learning, settings, status (S4).
 
-  python -m oyayubi.ime.admin_ui [--runtime-dir DIR] [--config FILE]
+  python -m yuragi.ime.admin_ui [--runtime-dir DIR] [--config FILE]
 
 A thin shell over the same code as the manage CLI (personal, learning_admin,
 config), on the same files the engine uses. AdminModel holds everything the
@@ -330,7 +330,7 @@ class AdminModel:
 
     def status_rows(self) -> list[tuple[str, str]]:
         """What the 状態 tab shows (REDESIGN §9.4), in Japanese."""
-        from oyayubi.lattice import dict_manifest
+        from yuragi.lattice import dict_manifest
         rows = []
         broker = broker_client.status()
         if broker is None:
@@ -660,7 +660,7 @@ def main(argv=None) -> int:
     try:
         import tkinter as tk
     except ImportError:
-        print("tkinter is not available in this Python; use python -m oyayubi.ime.manage",
+        print("tkinter is not available in this Python; use python -m yuragi.ime.manage",
               file=sys.stderr)
         return 1
     declare_dpi_aware()

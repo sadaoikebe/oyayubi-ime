@@ -9,14 +9,14 @@ import tempfile
 import unittest
 from unittest import mock
 
-from oyayubi.chord.fsm import Plain
-from oyayubi.ime import broker_client, config, manage
-from oyayubi.ime.bunsetsu import Candidate
-from oyayubi.ime.learning import LearningStore, pause_marker
-from oyayubi.ime.personal import PersonalLexicon, add_word
-from oyayubi.ime.server import argument_parser
-from oyayubi.ime.session import ImeSession
-from oyayubi.lattice.mozc_dict import Entry, MozcLex
+from yuragi.chord.fsm import Plain
+from yuragi.ime import broker_client, config, manage
+from yuragi.ime.bunsetsu import Candidate
+from yuragi.ime.learning import LearningStore, pause_marker
+from yuragi.ime.personal import PersonalLexicon, add_word
+from yuragi.ime.server import argument_parser
+from yuragi.ime.session import ImeSession
+from yuragi.lattice.mozc_dict import Entry, MozcLex
 
 POS = 2000
 
@@ -55,7 +55,7 @@ class ServerTest(TempDir):
         self.assertIn("not running", out)
 
     def test_last_stop_comes_from_the_notices(self):
-        from oyayubi.ime import broker_client
+        from yuragi.ime import broker_client
         logs = self.dir / "logs"
         logs.mkdir()
         (logs / "notices.log").write_text(
@@ -222,7 +222,7 @@ class ManageTest(TempDir):
         self.assertEqual((code, out.splitlines()), (1, ["changed suffix.txt", "t: 1 problem(s)"]))
 
     def test_text_hash_ignores_crlf_checkout(self):
-        from oyayubi.lattice.dict_manifest import describe_text
+        from yuragi.lattice.dict_manifest import describe_text
         lf, crlf = self.dir / "lf.jsonl", self.dir / "crlf.jsonl"
         lf.write_bytes(b'{"a": 1}\n{"b": 2}\n')
         crlf.write_bytes(b'{"a": 1}\r\n{"b": 2}\r\n')
@@ -254,7 +254,7 @@ class LiveEffectTest(TempDir):
 
     def test_engine_sessions_share_the_word_list(self):
         from argparse import Namespace
-        from oyayubi.engine import Engine
+        from yuragi.engine import Engine
         engine = Engine(channel=None, args=Namespace(test_hooks=False))
         engine.loaded = self.session()
         self.assertIs(engine.new_session().personal, engine.loaded.personal)

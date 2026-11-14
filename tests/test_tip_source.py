@@ -16,7 +16,7 @@ REMOVED = [
     ("the respawn loop Server::Run and its Server struct", r"\bstruct Server\b|Server::Run"),
     ("SpawnResident / ResolvePython / FindPython / SpawnAdminUi",
      r"SpawnResident|ResolvePython|FindPython|SpawnAdminUi"),
-    ("any Python started by the TIP", r"oyayubi\.ime\.|pythonw?\.exe|py\.exe"),
+    ("any Python started by the TIP", r"yuragi\.ime\.|pythonw?\.exe|py\.exe"),
     ("the developer's own path", r"marur"),
     ("PATH search for a program", r"SearchPathW"),
     ("TCP and Winsock", r"winsock|ws2_32|WSAStartup|\bsocket\(|closesocket|\brecv\(|MSG_PEEK"),

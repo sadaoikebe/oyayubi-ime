@@ -10,7 +10,7 @@ import random
 import unittest
 from pathlib import Path
 
-from oyayubi.chord.fsm import AmbShift, ChordFsm, Plain, ThumbTap
+from yuragi.chord.fsm import AmbShift, ChordFsm, Plain, ThumbTap
 from tests import legacy_fsm
 from tools.replay_stage1 import read_log, replay
 

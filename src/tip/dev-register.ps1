@@ -3,7 +3,7 @@
 #   powershell -ExecutionPolicy Bypass -File .\src\tip\dev-register.ps1 [-Python <python.exe>]
 #
 # - HKCU の Tag を dev にし、%LOCALAPPDATA%\oyayubi-ime\versions\dev\engine.json を
-#   このリポジトリに向ける (エンジンは指定の Python で python -m oyayubi.engine)。
+#   このリポジトリに向ける (エンジンは指定の Python で python -m yuragi.engine)。
 # - DLL とブローカーは dist\ から読み込む (開発機に限り Program Files に置かない)。
 #   DLL は dist\NicolaIME3-a.dll / -b.dll / ... のうち、登録中でなく使用中でもないものに
 #   コピーして登録するので、古い DLL を読み込んだアプリを閉じなくても更新できる。
@@ -72,8 +72,8 @@ $engine = [ordered]@{
     python = $Python
     pythonw = (Join-Path (Split-Path $Python) 'pythonw.exe')
     app = $Repo
-    args = @('-m', 'oyayubi.engine')
-    admin_args = @('-m', 'oyayubi.ime.admin_ui')
+    args = @('-m', 'yuragi.engine')
+    admin_args = @('-m', 'yuragi.ime.admin_ui')
 }
 [IO.File]::WriteAllText((Join-Path $version 'engine.json'), ($engine | ConvertTo-Json -Depth 3), $Utf8NoBom)
 Add-Type -Namespace OyayubiDev -Name Input -MemberDefinition @'

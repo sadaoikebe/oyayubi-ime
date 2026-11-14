@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from oyayubi.lattice import mozc_dict
+from yuragi.lattice import mozc_dict
 
 
 class ZeroRowPenaltyTest(unittest.TestCase):
@@ -76,7 +76,7 @@ class MissingFileTest(unittest.TestCase):
         self.assertFalse(self.cache.exists())
 
     def test_pos_names_names_missing_id_def(self):
-        from oyayubi.ime import bunsetsu
+        from yuragi.ime import bunsetsu
         bunsetsu._pos_names.cache_clear()
         self.addCleanup(bunsetsu._pos_names.cache_clear)
         with patch.object(bunsetsu, "DICT_DIR", self.root):

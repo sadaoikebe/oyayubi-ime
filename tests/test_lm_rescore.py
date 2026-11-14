@@ -6,10 +6,10 @@ import json
 import os
 import unittest
 
-from oyayubi.chord.fsm import AmbShift, Plain, ThumbTap
-from oyayubi.ime.lm_rescore import LmRescorer, conversion_picks
-from oyayubi.ime.session import ImeSession
-from oyayubi.lattice.decode import DecodeResult
+from yuragi.chord.fsm import AmbShift, Plain, ThumbTap
+from yuragi.ime.lm_rescore import LmRescorer, conversion_picks
+from yuragi.ime.session import ImeSession
+from yuragi.lattice.decode import DecodeResult
 
 KIDOKU = [Plain("k"), AmbShift("j"), Plain("i")]  # き + (ど|お) + く
 
@@ -127,7 +127,7 @@ class SessionRescoreTest(unittest.TestCase):
         self.assertEqual(self.s._lm_context, "")
 
     def test_context_includes_earlier_runs_of_the_same_composition(self):
-        from oyayubi.ime.session import Literal
+        from yuragi.ime.session import Literal
         scorer = FakeScorer(set())
         self.s.lm = LmRescorer(scorer)
         self.s._note_commit("前")
@@ -146,7 +146,7 @@ class RealModelTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from oyayubi.ime.lm_rescore import CausalLmScorer
+        from yuragi.ime.lm_rescore import CausalLmScorer
         cls.make = CausalLmScorer
         cls.ref = CausalLmScorer(kv_cache=False)
 
@@ -162,7 +162,7 @@ class RealModelTest(unittest.TestCase):
     def test_conversion_picks_match_pinned_refresh(self):
         """Pinned before the refactor from _refresh(rescore=True) at 75703b8."""
         from tests.fixtures.make_lm_conversion_fixture import OUT, session_tokens
-        from oyayubi.lattice.table import load_table, reverse_table
+        from yuragi.lattice.table import load_table, reverse_table
         rows = json.loads(OUT.read_text(encoding="utf-8"))
         reverse = reverse_table(load_table())
         sess = ImeSession(learning_path=None)

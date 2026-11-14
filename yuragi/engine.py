@@ -1,6 +1,6 @@
 """The conversion engine (REDESIGN §6): one JSON object per line on stdin/stdout.
 
-Started only by the broker (src/broker), as ``python -m oyayubi.engine``. It has
+Started only by the broker (src/broker), as ``python -m yuragi.engine``. It has
 no other way to talk: no sockets, no files besides the user's data and its own
 program files. The broker reads stderr into logs/engine.log.
 
@@ -8,11 +8,11 @@ Broker → engine:
   {"op":"open","sid":3}                    a TIP connection's session
   {"op":"close","sid":3}
   {"sid":3,"seq":17,"op":"down","vk":74,"t":123456,"mods":[]}
-      op as for oyayubi.ime.server: down/up/timeout/reset/set_direct/toggle_direct/context
+      op as for yuragi.ime.server: down/up/timeout/reset/set_direct/toggle_direct/context
 Engine → broker:
   {"progress":"cache"}                     while the dictionary cache is rebuilt (every 5 s)
   {"ready":true,"proto":1,"warnings":[...]}
-  {"sid":3,"seq":17, ...the reply of oyayubi.ime.server...}   one per request, in order
+  {"sid":3,"seq":17, ...the reply of yuragi.ime.server...}   one per request, in order
       "error":true   the request raised; the session was started afresh (§6.4)
       "full":true    the input is at MAX_TOKENS; the key changed nothing (§6.5)
   {"event":"warning","warning":"lm"}       a problem found after ready (once each)
@@ -135,7 +135,7 @@ class Progress:
 
 
 def argument_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="python -m oyayubi.engine",
+    parser = argparse.ArgumentParser(prog="python -m yuragi.engine",
                                      description=__doc__.splitlines()[0])
     parser.add_argument("--data-dir", type=Path, default=DEFAULT_DATA_DIR,
                         help="the user's data: config.json, learning.jsonl, "
@@ -161,7 +161,7 @@ class Connection:
         self.pipeline = engine.new_pipeline(self.sess)
 
     def handle(self, msg: dict) -> dict:
-        from oyayubi.ime.server import process_request, snapshot
+        from yuragi.ime.server import process_request, snapshot
         if msg.get("op") == "test_raise" and self.engine.test_hooks:
             raise RuntimeError("test hook")
         if self.pipeline is not None:
@@ -181,7 +181,7 @@ class Connection:
 
     def recover(self) -> dict:
         """§6.4: drop the session that raised; continue from a clean one."""
-        from oyayubi.ime.server import snapshot
+        from yuragi.ime.server import snapshot
         direct = self.sess.direct
         self.close()
         self.sess = self.engine.new_session()
@@ -209,15 +209,15 @@ class Engine:
     # -- startup -----------------------------------------------------------------
     def load(self, args: argparse.Namespace) -> None:
         try:
-            from oyayubi.lattice import mozc_dict
+            from yuragi.lattice import mozc_dict
             if args.dict_dir is not None:
                 mozc_dict.DICT_DIR = args.dict_dir
             if args.cache_dir is not None:
                 mozc_dict.CACHE = args.cache_dir / mozc_dict.CACHE.name
             # Imported after the directories are set: some modules read them at import.
-            from oyayubi.ime import config, server
-            from oyayubi.ime.lm_async import LmWorker
-            from oyayubi.lattice import dict_manifest
+            from yuragi.ime import config, server
+            from yuragi.ime.lm_async import LmWorker
+            from yuragi.lattice import dict_manifest
         except (ImportError, SyntaxError, OSError, ValueError) as exc:
             log(where(exc))
             fatal(EXIT_PROGRAM, "program-files-unreadable")
@@ -301,7 +301,7 @@ class Engine:
 
     def warm_up(self) -> None:
         """§6.3: one conversion before ready, so the user's first key is not the slow one."""
-        from oyayubi.ime.server import process_request
+        from yuragi.ime.server import process_request
         start = time.perf_counter()
         sess = self.new_session()
         t = 0
@@ -317,7 +317,7 @@ class Engine:
 
     # -- sessions ----------------------------------------------------------------
     def new_session(self):
-        from oyayubi.ime.session import ImeSession
+        from yuragi.ime.session import ImeSession
         loaded = self.loaded
         return ImeSession(
             _table=loaded._table, _lex=loaded._lex, learning_path=loaded.learning_path,
@@ -327,7 +327,7 @@ class Engine:
     def new_pipeline(self, sess):
         if self.worker is None:
             return None
-        from oyayubi.ime.lm_async import ConnectionPipeline
+        from yuragi.ime.lm_async import ConnectionPipeline
         s = self.settings
         return ConnectionPipeline(sess, self.worker, log_text=s.log_text,
                                   lm_timing=s.lm_timing, grace_ms=s.lm_grace_ms,

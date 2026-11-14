@@ -8,8 +8,8 @@ import time
 import unittest
 from unittest.mock import patch
 
-from oyayubi.lattice.mozc_dict import Entry, MAX_WORD_MORA, MozcLex, UNK_COST
-from oyayubi.lattice.token_viterbi import decode_tokens, nbest_tokens
+from yuragi.lattice.mozc_dict import Entry, MAX_WORD_MORA, MozcLex, UNK_COST
+from yuragi.lattice.token_viterbi import decode_tokens, nbest_tokens
 from tools.wp0 import classify_mozc_errors as diagnostic
 from tools.wp0.run_mozc_eval import criterion_passes, parse_criterion
 

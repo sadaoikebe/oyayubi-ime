@@ -3,9 +3,9 @@ from __future__ import annotations
 from collections import defaultdict
 import unittest
 
-from oyayubi.ime.bunsetsu import COST_WINDOW, CandidateStream, candidates, content
-from oyayubi.lattice.mozc_dict import Entry, MozcLex
-from oyayubi.lattice.token_viterbi import spans_from
+from yuragi.ime.bunsetsu import COST_WINDOW, CandidateStream, candidates, content
+from yuragi.lattice.mozc_dict import Entry, MozcLex
+from yuragi.lattice.token_viterbi import spans_from
 
 
 def lexicon(entries, matrix):
@@ -85,7 +85,7 @@ class BunsetsuTest(unittest.TestCase):
         self.assertEqual(next(candidates([{'kind': 'plain', 'kana': 'か'}], lex, 0, 0)).surface, '高')
 
     def test_content_pos_matches_e7(self):
-        from oyayubi.ime.bunsetsu import _pos_names
+        from yuragi.ime.bunsetsu import _pos_names
         for lid, name in _pos_names().items():
             p = name.split(',')
             expected = (p[1] not in ('接尾', '非自立') if p[0] in ('名詞', '動詞', '形容詞')

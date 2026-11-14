@@ -6,9 +6,9 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from oyayubi.ime.personal import (DEFAULT_COST, POS_IDS, PersonalLexicon, add_word,
+from yuragi.ime.personal import (DEFAULT_COST, POS_IDS, PersonalLexicon, add_word,
                                   read_words, remove_word, scan_words)
-from oyayubi.lattice.mozc_dict import Entry, MozcLex
+from yuragi.lattice.mozc_dict import Entry, MozcLex
 
 
 def lex():
@@ -40,7 +40,7 @@ class PersonalFileTest(TempFile):
         self.assertEqual(len(read_words(self.path)), 1)
 
     def test_rejects_bad_input(self):
-        for args in (("oyayubi", "親指"), ("", "親指"), ("おや", ""), ("おや", " 親"),
+        for args in (("yuragi", "親指"), ("", "親指"), ("おや", ""), ("おや", " 親"),
                      ("おや", "親", "動詞")):
             with self.assertRaises(ValueError, msg=args):
                 add_word(self.path, *args)

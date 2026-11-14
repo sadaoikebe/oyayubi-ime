@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from oyayubi.chord.fsm import AmbShift, Plain
-from oyayubi.ime.session import ImeSession
+from yuragi.chord.fsm import AmbShift, Plain
+from yuragi.ime.session import ImeSession
 
 
 class SessionTest(unittest.TestCase):

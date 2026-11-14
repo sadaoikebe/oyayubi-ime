@@ -35,9 +35,9 @@ import sys
 import time
 from uuid import uuid4
 
-from oyayubi.lattice.alternation import Plan
-from oyayubi.lattice.expand import is_literal_face
-from oyayubi.lattice.mozc_dict import DEFAULT_NOUN_ID, Entry, MozcLex
+from yuragi.lattice.alternation import Plan
+from yuragi.lattice.expand import is_literal_face
+from yuragi.lattice.mozc_dict import DEFAULT_NOUN_ID, Entry, MozcLex
 from .bunsetsu import Candidate, content
 
 DEFAULT_LEARNING_PATH = Path.home() / ".oyayubi-ime" / "learning.jsonl"

@@ -44,13 +44,13 @@ powershell -ExecutionPolicy Bypass -File $env:LOCALAPPDATA\oyayubi-ime\versions\
 Notepad / VS Code 用 TSF は自前の小さい TIP（`src/tip`）。
 
 構成（[docs/REDESIGN.md](docs/REDESIGN.md)）: TIP（`src/tip`、アプリの中の DLL）→ 名前付きパイプ →
-ブローカー（`src/broker`、サインインごとに 1 つ）→ 標準入出力 → 変換エンジン（`python -m oyayubi.engine`）。
+ブローカー（`src/broker`、サインインごとに 1 つ）→ 標準入出力 → 変換エンジン（`python -m yuragi.engine`）。
 
 ```text
 python -m tools.wp0.fetch_mozc_dict   # 初回のみ。OSS 辞書テキスト
 python -m unittest $(ls tests/test_*.py | sed 's#/#.#;s#\.py$##')   # 全試験（Linux 可）
 cmake -S src/broker -B build/broker && cmake --build build/broker && ctest --test-dir build/broker
-python -m oyayubi.ime.host_win32      # 試験窓。TSF を通さない
+python -m yuragi.ime.host_win32      # 試験窓。TSF を通さない
 ```
 
 Windows でのビルドと登録は `src\tip\dev-build.ps1` と `src\tip\dev-register.ps1`（[docs/INSTALL.md](docs/INSTALL.md)）。

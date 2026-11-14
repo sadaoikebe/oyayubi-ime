@@ -35,8 +35,8 @@ from bisect import bisect_left
 from heapq import nsmallest
 from typing import Callable, Iterable
 
-from oyayubi.lattice.alternation import Plan
-from oyayubi.lattice.mozc_dict import MozcLex
+from yuragi.lattice.alternation import Plan
+from yuragi.lattice.mozc_dict import MozcLex
 from .bunsetsu import Candidate, content
 
 MODES = ("off", "tab")  # config "prediction"; tab: shown only when Tab asks

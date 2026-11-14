@@ -8,10 +8,10 @@ from heapq import heappop, heappush
 from itertools import count
 from typing import Iterator
 
-from oyayubi.lattice.alternation import Plan, admits, after
-from oyayubi.lattice.decode import Piece
-from oyayubi.lattice.mozc_dict import BOS_ID, DICT_DIR, UNK_COST, MozcLex, require_dict_files
-from oyayubi.lattice.token_viterbi import BOUNDARY_RID, end_cost, spans_from, word_cost
+from yuragi.lattice.alternation import Plan, admits, after
+from yuragi.lattice.decode import Piece
+from yuragi.lattice.mozc_dict import BOS_ID, DICT_DIR, UNK_COST, MozcLex, require_dict_files
+from yuragi.lattice.token_viterbi import BOUNDARY_RID, end_cost, spans_from, word_cost
 
 from .dates import date_spellings
 

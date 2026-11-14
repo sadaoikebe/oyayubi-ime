@@ -45,7 +45,7 @@ struct Message {
     bool has_seq = false;
     long long seq = 0;
     std::vector<std::string> warnings;
-    // The engine's reply (oyayubi.ime.server.snapshot).
+    // The engine's reply (yuragi.ime.server.snapshot).
     bool engine = false;  // carries the engine's state (not just {"seq","state"})
     std::string composition, commit;  // UTF-8
     bool direct = false, pass_through = false, converted = false, pending = false;

@@ -18,10 +18,10 @@ import statistics
 import time
 
 from .fetch_ajimee import DATA
-from oyayubi.lattice.mozc_dict import BOS_ID, left_id_after, load_lex
+from yuragi.lattice.mozc_dict import BOS_ID, left_id_after, load_lex
 from .run_ajimee_eval import chunks, hiragana
-from oyayubi.lattice.table import load_table, reverse_table
-from oyayubi.lattice.token_viterbi import decode_tokens, nbest_tokens
+from yuragi.lattice.table import load_table, reverse_table
+from yuragi.lattice.token_viterbi import decode_tokens, nbest_tokens
 
 
 def chunk_reaches(per_chunk: list[list[tuple[str, int]]], gold: str, k: int) -> bool:

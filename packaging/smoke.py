@@ -27,8 +27,8 @@ TRANSCRIPT = ROOT / "tests" / "transcripts" / "acceptance_real_dictionary.json"
 
 def main() -> int:
     sys.path.insert(0, str(ROOT))
-    from oyayubi.ime.server import dispatch
-    from oyayubi.ime.session import ImeSession
+    from yuragi.ime.server import dispatch
+    from yuragi.ime.session import ImeSession
 
     case = json.loads(TRANSCRIPT.read_text(encoding="utf-8"))
     session = ImeSession(learning_path=None)

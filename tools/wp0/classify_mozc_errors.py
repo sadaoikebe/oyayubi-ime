@@ -35,15 +35,15 @@ import time
 import traceback
 import unicodedata
 
-from oyayubi.ime.bunsetsu import PAGE_SIZE, candidates
-from oyayubi.lattice import mozc_dict
-from oyayubi.lattice.decode import DecodeResult, Piece
-from oyayubi.lattice.expand import is_literal_face
-from oyayubi.lattice.mozc_dict import (BOS_ID, CACHE, DICT_DIR, MAX_WORD_MORA, POS_KEEP, ROOT,
+from yuragi.ime.bunsetsu import PAGE_SIZE, candidates
+from yuragi.lattice import mozc_dict
+from yuragi.lattice.decode import DecodeResult, Piece
+from yuragi.lattice.expand import is_literal_face
+from yuragi.lattice.mozc_dict import (BOS_ID, CACHE, DICT_DIR, MAX_WORD_MORA, POS_KEEP, ROOT,
                                        UNK_COST, UNK_LID, USER_LEX, Entry, MozcLex,
                                        apply_user_lex)
-from oyayubi.lattice.table import DATA, load_table, reverse_table
-from oyayubi.lattice.token_viterbi import (BOUNDARY_RID, Word, decode_tokens, end_cost,
+from yuragi.lattice.table import DATA, load_table, reverse_table
+from yuragi.lattice.token_viterbi import (BOUNDARY_RID, Word, decode_tokens, end_cost,
                                            nbest_tokens, word_cost)
 from .run_mozc_eval import criterion_passes, parse_criterion
 
@@ -702,10 +702,10 @@ def main():
     if cache:
         inputs.append(cache)
     hashes = {str(path.resolve()): sha256(path) for path in inputs}
-    engine_files = [Path(__file__), ROOT / "oyayubi/lattice/mozc_dict.py",
-                    ROOT / "oyayubi/lattice/token_viterbi.py", ROOT / "tools/wp0/run_mozc_eval.py",
-                    ROOT / "oyayubi/lattice/expand.py", ROOT / "oyayubi/lattice/decode.py",
-                    ROOT / "oyayubi/lattice/table.py", ROOT / "oyayubi/ime/bunsetsu.py"]
+    engine_files = [Path(__file__), ROOT / "yuragi/lattice/mozc_dict.py",
+                    ROOT / "yuragi/lattice/token_viterbi.py", ROOT / "tools/wp0/run_mozc_eval.py",
+                    ROOT / "yuragi/lattice/expand.py", ROOT / "yuragi/lattice/decode.py",
+                    ROOT / "yuragi/lattice/table.py", ROOT / "yuragi/ime/bunsetsu.py"]
     git = lambda *parts: subprocess.check_output(["git", *parts], cwd=ROOT)
     manifest = {"format_version": 1, "python": platform.python_version(),
                 "code_head": git("rev-parse", "HEAD").decode().strip(),

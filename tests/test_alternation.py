@@ -5,15 +5,15 @@ from __future__ import annotations
 import unittest
 from types import SimpleNamespace
 
-from oyayubi.chord.fsm import AmbShift
-from oyayubi.ime.bunsetsu import BOS_ID, candidates
-from oyayubi.ime.learning import LearningView
-from oyayubi.ime.predict import typed_readings
-from oyayubi.ime.session import ImeSession
-from oyayubi.lattice.alternation import Plan, restrict
-from oyayubi.lattice.mozc_dict import load_lex
-from oyayubi.lattice.table import load_table
-from oyayubi.lattice.token_viterbi import decode_tokens, nbest_tokens, spans_from
+from yuragi.chord.fsm import AmbShift
+from yuragi.ime.bunsetsu import BOS_ID, candidates
+from yuragi.ime.learning import LearningView
+from yuragi.ime.predict import typed_readings
+from yuragi.ime.session import ImeSession
+from yuragi.lattice.alternation import Plan, restrict
+from yuragi.lattice.mozc_dict import load_lex
+from yuragi.lattice.table import load_table
+from yuragi.lattice.token_viterbi import decode_tokens, nbest_tokens, spans_from
 from tests.test_bunsetsu import lexicon
 from tests.test_press_tokens import type_events
 

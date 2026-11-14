@@ -8,8 +8,8 @@ No file means the built-in defaults, exactly as before.
 The TIP keeps its own ~/.oyayubi-ime/tip.json (read by the C++ side); the
 settings inventory below lists both so there is one place to look.
 
-  python -m oyayubi.ime.manage config show   # effective values and their source
-  python -m oyayubi.ime.admin_ui             # view and edit them in a window
+  python -m yuragi.ime.manage config show   # effective values and their source
+  python -m yuragi.ime.admin_ui             # view and edit them in a window
 
 The server reads the file when it starts: a changed setting takes effect at
 the next server start.

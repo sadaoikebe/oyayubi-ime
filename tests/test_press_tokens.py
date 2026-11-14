@@ -5,9 +5,9 @@ from __future__ import annotations
 import re
 import unittest
 
-from oyayubi.chord.keys import VK_SPACE, VK_TO_M
-from oyayubi.ime.session import ImeSession
-from oyayubi.lattice.table import load_table
+from yuragi.chord.keys import VK_SPACE, VK_TO_M
+from yuragi.ime.session import ImeSession
+from yuragi.lattice.table import load_table
 
 VK = {key: vk for vk, key in VK_TO_M.items()} | {"space": VK_SPACE}
 

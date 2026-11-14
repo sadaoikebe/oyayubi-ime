@@ -11,13 +11,13 @@ from dataclasses import dataclass, field
 import json
 from pathlib import Path
 
-from oyayubi.chord.fsm import AmbShift, ChordFsm, Plain, ThumbTap
-from oyayubi.chord.keys import (
+from yuragi.chord.fsm import AmbShift, ChordFsm, Plain, ThumbTap
+from yuragi.chord.keys import (
     SHIFT_VKS, SHORTCUT_VKS, VK_BACK, VK_ESCAPE, VK_RETURN, VK_SPACE,
     classify, literal_character,
 )
-from oyayubi.ime.recording import LEGACY_NEXT_PROMPT_VK, SCHEMA, VK_NEXT_PROMPT
-from oyayubi.lattice.table import load_table
+from yuragi.ime.recording import LEGACY_NEXT_PROMPT_VK, SCHEMA, VK_NEXT_PROMPT
+from yuragi.lattice.table import load_table
 
 LABELS = {
     "thumb_overlap_shift_loss": "親指の重なりでシフト消失（推定）",

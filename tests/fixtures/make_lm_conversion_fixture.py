@@ -12,10 +12,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from oyayubi.chord.fsm import AmbShift, Plain  # noqa: E402
-from oyayubi.ime.lm_rescore import CausalLmScorer, LmRescorer  # noqa: E402
-from oyayubi.ime.session import ImeSession, Literal  # noqa: E402
-from oyayubi.lattice.table import load_table, reverse_table  # noqa: E402
+from yuragi.chord.fsm import AmbShift, Plain  # noqa: E402
+from yuragi.ime.lm_rescore import CausalLmScorer, LmRescorer  # noqa: E402
+from yuragi.ime.session import ImeSession, Literal  # noqa: E402
+from yuragi.lattice.table import load_table, reverse_table  # noqa: E402
 from tools.wp0.fetch_ajimee import DATA  # noqa: E402
 from tools.wp0.run_ajimee_eval import hiragana  # noqa: E402
 

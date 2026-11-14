@@ -10,12 +10,12 @@ import tempfile
 import unittest
 from unittest import mock
 
-from oyayubi.ime import admin_ui, broker_client, config
-from oyayubi.ime.admin_ui import SETTINGS, AdminModel
-from oyayubi.ime.bunsetsu import Candidate
-from oyayubi.ime.learning import LearningStore, pause_marker
-from oyayubi.ime.personal import read_words
-from oyayubi.ime.server import argument_parser
+from yuragi.ime import admin_ui, broker_client, config
+from yuragi.ime.admin_ui import SETTINGS, AdminModel
+from yuragi.ime.bunsetsu import Candidate
+from yuragi.ime.learning import LearningStore, pause_marker
+from yuragi.ime.personal import read_words
+from yuragi.ime.server import argument_parser
 from tests.test_manage import small_lex
 
 

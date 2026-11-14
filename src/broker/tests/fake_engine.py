@@ -1,4 +1,4 @@
-"""A stand-in for oyayubi.engine in the broker tests (REDESIGN §5.7).
+"""A stand-in for yuragi.engine in the broker tests (REDESIGN §5.7).
 
     python fake_engine.py STATE_DIR
 

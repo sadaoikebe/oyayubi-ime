@@ -19,8 +19,8 @@ import os
 from pathlib import Path
 import threading
 
-from oyayubi.lattice.expand import is_literal_face
-from oyayubi.lattice.mozc_dict import Entry, MozcLex
+from yuragi.lattice.expand import is_literal_face
+from yuragi.lattice.mozc_dict import Entry, MozcLex
 
 DEFAULT_PERSONAL_PATH = Path.home() / ".oyayubi-ime" / "personal_lexicon.jsonl"
 # The median cost of the 71 hand-written entries in data/user_lexicon.jsonl:

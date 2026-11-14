@@ -19,9 +19,9 @@ import time
 import unittest
 from unittest.mock import patch
 
-from oyayubi.ime import learning
-from oyayubi.ime.bunsetsu import Candidate
-from oyayubi.ime.learning import (COMPACT_MIN_LINES, LEARN_EXPIRE_DAYS, Confirmation,
+from yuragi.ime import learning
+from yuragi.ime.bunsetsu import Candidate
+from yuragi.ime.learning import (COMPACT_MIN_LINES, LEARN_EXPIRE_DAYS, Confirmation,
                                   LearningStore, Suppression, Tombstone)
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -158,7 +158,7 @@ class IncrementalEqualsFullReadTest(unittest.TestCase):
         problems = []
         store = LearningStore(self.path, clock=lambda: self.now, on_problem=problems.append)
         c = Candidate("校正", "こうせい", 0, 1851, 1851, word_cost=5000)
-        with patch("oyayubi.ime.learning.os.write", side_effect=OSError(28, "No space")):
+        with patch("yuragi.ime.learning.os.write", side_effect=OSError(28, "No space")):
             self.assertEqual(store.confirm([(c, "")], None), [])  # nothing to undo
             store.confirm([(c, "x")], None)
         self.assertEqual(problems, ["learning-write"])
@@ -284,7 +284,7 @@ class CompactionTest(unittest.TestCase):
 KILL_SCRIPT = r"""
 import os, sys
 from unittest.mock import patch
-from oyayubi.ime.learning import LearningStore
+from yuragi.ime.learning import LearningStore
 path, point, now = sys.argv[1], sys.argv[2], float(sys.argv[3])
 def die(*a, **k):
     os._exit(9)  # like a kill: no finally blocks, no flushing

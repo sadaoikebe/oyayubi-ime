@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import unittest
 
-from oyayubi.ime.numbers import number_spellings, positional_kanji
-from oyayubi.ime.session import ImeSession
+from yuragi.ime.numbers import number_spellings, positional_kanji
+from yuragi.ime.session import ImeSession
 
 VK_SPACE, VK_RIGHT, VK_LEFT, VK_DOWN, VK_RETURN = 0x20, 0x27, 0x25, 0x28, 0x0D
 
@@ -88,7 +88,7 @@ class NumberSegmentTest(unittest.TestCase):
         self.assertEqual([(g["start"], g["end"]) for g in s.segment_snapshot()], [(0, 2)])
 
     def test_punctuation_is_still_a_fixed_literal(self):
-        from oyayubi.ime.session import Literal
+        from yuragi.ime.session import Literal
         s = self.session()
         s.tokens = [Literal("1"), Literal("0"), Literal("、"), Literal("2")]
         s._refresh()

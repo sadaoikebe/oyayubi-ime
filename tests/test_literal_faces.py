@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import unittest
 
-from oyayubi.ime.bunsetsu import Candidate, CandidateStream, candidates, segments_from
-from oyayubi.lattice.expand import is_literal_face
-from oyayubi.lattice.table import load_table, reverse_table
-from oyayubi.lattice.token_viterbi import decode_tokens, nbest_tokens
+from yuragi.ime.bunsetsu import Candidate, CandidateStream, candidates, segments_from
+from yuragi.lattice.expand import is_literal_face
+from yuragi.lattice.table import load_table, reverse_table
+from yuragi.lattice.token_viterbi import decode_tokens, nbest_tokens
 from tests.test_bunsetsu import lexicon
 
 
@@ -22,9 +22,9 @@ class BracketToutenTest(unittest.TestCase):
         # The author's QMK table sends KC_COMM from both P and LBRC; the
         # host IME rendered it as 、. Here the IME itself must do that
         # rendering, so "[" carries the same literal plain face as "p".
-        from oyayubi.chord.fsm import Plain
-        from oyayubi.chord.keys import VK_OEM_4, classify
-        from oyayubi.ime.session import to_lattice_token
+        from yuragi.chord.fsm import Plain
+        from yuragi.chord.keys import VK_OEM_4, classify
+        from yuragi.ime.session import to_lattice_token
 
         self.assertEqual(classify(VK_OEM_4), ("M", "["))
         table = load_table()

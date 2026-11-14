@@ -6,10 +6,10 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from oyayubi.ime import server
-from oyayubi.ime.session import ImeSession
-from oyayubi.lattice.mozc_dict import MozcLex
-from oyayubi.lattice.table import load_table
+from yuragi.ime import server
+from yuragi.ime.session import ImeSession
+from yuragi.lattice.mozc_dict import MozcLex
+from yuragi.lattice.table import load_table
 
 
 class Stream(io.StringIO):

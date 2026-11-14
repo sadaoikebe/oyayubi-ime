@@ -4,8 +4,8 @@ from itertools import product
 import random
 import unittest
 
-from oyayubi.lattice.mozc_dict import UNK_COST
-from oyayubi.lattice.token_viterbi import nbest_tokens, spans_from
+from yuragi.lattice.mozc_dict import UNK_COST
+from yuragi.lattice.token_viterbi import nbest_tokens, spans_from
 from tests.test_bunsetsu import lexicon
 from tools.wp0.run_ajimee_nbest_eval import chunk_reaches, sentence_candidates
 

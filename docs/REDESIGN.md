@@ -106,8 +106,8 @@
 |---|---|---|---|
 | TIP | `NicolaIME3.dll`（C++） | アプリのスレッドごと | Windows |
 | ブローカー | `oyayubi-broker.exe`（C++、ウィンドウなし） | サインインごとに 1 | サインイン時（Run キー）。無ければ TIP が条件付きで（§7.3） |
-| エンジン | 同梱 Python で `python -m oyayubi.engine` | ブローカーごとに 1 | ブローカーだけ |
-| 設定ウィンドウ | `pythonw -m oyayubi.ime.admin_ui` | 利用者が開いたとき | ブローカー（TIP のメニューから依頼） |
+| エンジン | 同梱 Python で `python -m yuragi.engine` | ブローカーごとに 1 | ブローカーだけ |
+| 設定ウィンドウ | `pythonw -m yuragi.ime.admin_ui` | 利用者が開いたとき | ブローカー（TIP のメニューから依頼） |
 
 ### 4.2 置き場所
 
@@ -281,7 +281,7 @@ TIP → ブローカー:
 `session.py`・打鍵 FSM・`lattice/`・`bunsetsu.py`・`predict.py` の**変換の中身は変えない**。
 変えるのは、入口（通信）・起動時の読み込み・学習履歴の保存・失敗の扱い。
 
-### 6.1 入口: `oyayubi/engine.py`（新規。`resident.py` と `client.py` を置き換える）
+### 6.1 入口: `yuragi/engine.py`（新規。`resident.py` と `client.py` を置き換える）
 
 - 標準入力から 1 行 1 JSON を読み、標準出力に 1 行 1 JSON を書く。それ以外の通信手段は持たない。
 - 起動直後に、本物の標準出力を通信専用に確保し、`sys.stdout` は標準エラーに向け直す

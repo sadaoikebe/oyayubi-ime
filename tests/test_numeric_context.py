@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import unittest
 
-from oyayubi.ime.lm_rescore import LmRescorer, conversion_picks
-from oyayubi.ime.session import ImeSession, Literal
-from oyayubi.lattice.mozc_dict import BOS_ID, NUMBER_ID, MozcLex, left_id_after, load_lex
-from oyayubi.lattice.table import load_table, reverse_table
-from oyayubi.lattice.token_viterbi import decode_tokens, nbest_tokens
+from yuragi.ime.lm_rescore import LmRescorer, conversion_picks
+from yuragi.ime.session import ImeSession, Literal
+from yuragi.lattice.mozc_dict import BOS_ID, NUMBER_ID, MozcLex, left_id_after, load_lex
+from yuragi.lattice.table import load_table, reverse_table
+from yuragi.lattice.token_viterbi import decode_tokens, nbest_tokens
 
 # Counters that the sentence-initial context got wrong (BOS: 際, お, 引き, おく).
 COUNTERS = {"さい": "歳", "ど": "度", "ひき": "匹", "おく": "億", "せんえん": "千円"}
@@ -60,7 +60,7 @@ class NumericContextTest(unittest.TestCase):
         return s
 
     def _token(self, kana):
-        from oyayubi.chord.fsm import AmbShift, Plain
+        from yuragi.chord.fsm import AmbShift, Plain
         t = self.reverse[kana]
         return Plain(t["key"]) if t["kind"] == "plain" else AmbShift(t["key"])
 

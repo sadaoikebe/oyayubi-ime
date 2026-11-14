@@ -33,7 +33,7 @@ jobs:
       - name: Mozc 辞書の取得と照合
         run: |
           python -m tools.wp0.fetch_mozc_dict
-          python -m oyayubi.lattice.dict_manifest verify
+          python -m yuragi.lattice.dict_manifest verify
 
       - name: ブローカーのビルドと中核の試験 (CTest)
         run: |
@@ -74,7 +74,7 @@ jobs:
         run: |
           python -m tools.wp0.fetch_mozc_dict
           if ($LASTEXITCODE -ne 0) { throw "dictionary fetch failed" }
-          python -m oyayubi.lattice.dict_manifest verify
+          python -m yuragi.lattice.dict_manifest verify
           if ($LASTEXITCODE -ne 0) { throw "dictionary does not match the manifest" }
 
       - name: ブローカーのビルド (MSVC, Release) と中核の試験

@@ -1,6 +1,6 @@
 """REDESIGN §6 / §10 stage 1: the engine process, run as the broker runs it.
 
-Each test starts ``python -m oyayubi.engine`` with pipes and the broker's
+Each test starts ``python -m yuragi.engine`` with pipes and the broker's
 environment, and talks the line protocol. The real dictionary is used (as for
 the other session tests); the LM is used when torch and a local model are
 present (OYAYUBI_LM_MODEL=<model directory>), otherwise the engine reports the
@@ -20,7 +20,7 @@ import threading
 import time
 import unittest
 
-from oyayubi.lattice import mozc_dict
+from yuragi.lattice import mozc_dict
 
 ROOT = Path(__file__).resolve().parents[1]
 START_TIMEOUT = 300  # a cache rebuild on a slow machine
@@ -38,7 +38,7 @@ def broker_environment(extra=None) -> dict:
 
 class EngineProcess:
     def __init__(self, data_dir: Path, *args, command=None, env=None, cwd=ROOT):
-        command = command or [sys.executable, "-m", "oyayubi.engine"]
+        command = command or [sys.executable, "-m", "yuragi.engine"]
         self.proc = subprocess.Popen(
             [*command, "--data-dir", str(data_dir), *map(str, args)],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -228,7 +228,7 @@ class DictionaryTest(EngineCase):
 
     def test_unreadable_program_files_exit_20(self):
         program = self.tmp / "program"
-        shutil.copytree(ROOT / "oyayubi", program / "oyayubi",
+        shutil.copytree(ROOT / "yuragi", program / "yuragi",
                         ignore=shutil.ignore_patterns("__pycache__"))
         (program / "data").mkdir()
         # The dictionary manifest is a program file; without it nothing can start.
@@ -245,8 +245,8 @@ def hook(event, args):
         detail = repr(args[1]) if event in ("socket.bind", "socket.connect") else ""
         os.write(fd, (event + " " + detail + "\n").encode())
 sys.addaudithook(hook)
-sys.argv[0] = "oyayubi.engine"
-runpy.run_module("oyayubi.engine", run_name="__main__", alter_sys=True)
+sys.argv[0] = "yuragi.engine"
+runpy.run_module("yuragi.engine", run_name="__main__", alter_sys=True)
 """
 
 SHIM = r"""

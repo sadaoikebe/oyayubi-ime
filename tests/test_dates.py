@@ -4,10 +4,10 @@ from __future__ import annotations
 import unittest
 from datetime import datetime
 
-from oyayubi.ime.bunsetsu import candidates
-from oyayubi.ime.dates import date_spellings
-from oyayubi.lattice.mozc_dict import BOS_ID, load_lex
-from oyayubi.lattice.table import load_table, reverse_table
+from yuragi.ime.bunsetsu import candidates
+from yuragi.ime.dates import date_spellings
+from yuragi.lattice.mozc_dict import BOS_ID, load_lex
+from yuragi.lattice.table import load_table, reverse_table
 
 NOW = datetime(2026, 11, 12, 9, 5)  # a Thursday
 

@@ -1,17 +1,17 @@
 """Looking after the IME's own data from a terminal (D1, D2, D3, S1-S3).
 
-  python -m oyayubi.ime.manage word add とうきょうとっきょ 東京特許 [--pos 固有名詞]
-  python -m oyayubi.ime.manage word remove とうきょうとっきょ 東京特許
-  python -m oyayubi.ime.manage word list
-  python -m oyayubi.ime.manage learning list [QUERY]
-  python -m oyayubi.ime.manage learning forget READING SURFACE
-  python -m oyayubi.ime.manage learning promote READING SURFACE [--pos 名詞]
-  python -m oyayubi.ime.manage learning compact
-  python -m oyayubi.ime.manage learning clear [--with-words]
-  python -m oyayubi.ime.manage learning pause | resume
-  python -m oyayubi.ime.manage dict verify [--deep] | write --label LABEL
-  python -m oyayubi.ime.manage config show | set KEY VALUE | unset KEY
-  python -m oyayubi.ime.manage status
+  python -m yuragi.ime.manage word add とうきょうとっきょ 東京特許 [--pos 固有名詞]
+  python -m yuragi.ime.manage word remove とうきょうとっきょ 東京特許
+  python -m yuragi.ime.manage word list
+  python -m yuragi.ime.manage learning list [QUERY]
+  python -m yuragi.ime.manage learning forget READING SURFACE
+  python -m yuragi.ime.manage learning promote READING SURFACE [--pos 名詞]
+  python -m yuragi.ime.manage learning compact
+  python -m yuragi.ime.manage learning clear [--with-words]
+  python -m yuragi.ime.manage learning pause | resume
+  python -m yuragi.ime.manage dict verify [--deep] | write --label LABEL
+  python -m yuragi.ime.manage config show | set KEY VALUE | unset KEY
+  python -m yuragi.ime.manage status
 
 The files are the ones the server uses: its settings file (config.json in the
 runtime directory) decides the paths, as for the server itself. A running
@@ -27,7 +27,7 @@ import json
 from pathlib import Path
 import sys
 
-from oyayubi.lattice import dict_manifest
+from yuragi.lattice import dict_manifest
 from . import config, learning_admin, personal
 
 

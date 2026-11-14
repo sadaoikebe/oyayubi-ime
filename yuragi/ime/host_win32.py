@@ -11,8 +11,8 @@ import ctypes
 import ctypes.wintypes as w
 from pathlib import Path
 
-from oyayubi.ime.session import ImeSession
-from oyayubi.ime.recording import PROMPTS_PATH, Recorder, load_prompts
+from yuragi.ime.session import ImeSession
+from yuragi.ime.recording import PROMPTS_PATH, Recorder, load_prompts
 
 user32 = ctypes.windll.user32
 kernel32 = ctypes.windll.kernel32

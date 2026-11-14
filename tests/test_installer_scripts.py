@@ -134,20 +134,20 @@ class PowerShellTest(unittest.TestCase):
         self.assertEqual(engine["python"], rt)
         self.assertEqual(engine["pythonw"], rt.replace("python.exe", "pythonw.exe"))
         self.assertEqual(engine["app"], "APP")
-        self.assertEqual(engine["args"][:3], ["-c", boot_string(), "oyayubi.engine"])
+        self.assertEqual(engine["args"][:3], ["-c", boot_string(), "yuragi.engine"])
         self.assertEqual(engine["args"][3:], ["--dict-dir", "D", "--cache-dir", "C",
                                               "--lm-model", "M", "--data-dir", "X"])
-        self.assertEqual(engine["admin_args"], ["-c", boot_string(), "oyayubi.ime.admin_ui"])
+        self.assertEqual(engine["admin_args"], ["-c", boot_string(), "yuragi.ime.admin_ui"])
 
 
 class BootstrapTest(unittest.TestCase):
     def test_boot_runs_a_module_from_the_working_directory_under_isolation(self):
         # -I: no working directory on sys.path, as with the runtime's ._pth.
-        plain = subprocess.run([sys.executable, "-I", "-m", "oyayubi.lattice.dict_manifest", "verify"],
+        plain = subprocess.run([sys.executable, "-I", "-m", "yuragi.lattice.dict_manifest", "verify"],
                                cwd=ROOT, capture_output=True, text=True)
         self.assertNotEqual(plain.returncode, 0)  # the module is not found without the boot
         booted = subprocess.run([sys.executable, "-I", "-c", boot_string(),
-                                 "oyayubi.lattice.dict_manifest", "verify"],
+                                 "yuragi.lattice.dict_manifest", "verify"],
                                 cwd=ROOT, capture_output=True, text=True)
         self.assertEqual(booted.returncode, 0, booted.stdout + booted.stderr)
         self.assertIn(": OK", booted.stdout)

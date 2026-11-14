@@ -13,13 +13,13 @@ import threading
 import time
 import unittest
 
-from oyayubi.chord.keys import VK_TO_M
-from oyayubi.ime.lm_async import ConnectionPipeline, Job, LmStats, LmWorker
-from oyayubi.ime.lm_rescore import LmRescorer, conversion_picks
-from oyayubi.ime.server import dispatch
-from oyayubi.ime.session import ImeSession
-from oyayubi.lattice.mozc_dict import Entry, MozcLex, load_lex
-from oyayubi.lattice.table import load_table, reverse_table
+from yuragi.chord.keys import VK_TO_M
+from yuragi.ime.lm_async import ConnectionPipeline, Job, LmStats, LmWorker
+from yuragi.ime.lm_rescore import LmRescorer, conversion_picks
+from yuragi.ime.server import dispatch
+from yuragi.ime.session import ImeSession
+from yuragi.lattice.mozc_dict import Entry, MozcLex, load_lex
+from yuragi.lattice.table import load_table, reverse_table
 from tests.transcript import make_session
 
 TRANSCRIPTS = sorted((Path(__file__).parent / "transcripts").glob("*.json"))

@@ -5,10 +5,10 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from oyayubi.ime.bunsetsu import Candidate
-from oyayubi.ime.learning import LearningStore
-from oyayubi.ime.learning_admin import clear_history, compact, forget, pairs, search
-from oyayubi.lattice.mozc_dict import Entry, MozcLex
+from yuragi.ime.bunsetsu import Candidate
+from yuragi.ime.learning import LearningStore
+from yuragi.ime.learning_admin import clear_history, compact, forget, pairs, search
+from yuragi.lattice.mozc_dict import Entry, MozcLex
 
 LEX = MozcLex({"かく": [Entry("書く", "かく", 1, 1, 3000)]}, {"か", "かく"}, [0] * 4, 2)
 

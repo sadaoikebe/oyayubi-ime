@@ -10,13 +10,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from oyayubi.chord.fsm import Plain
-from oyayubi.ime import predict as P
-from oyayubi.ime.bunsetsu import Candidate
-from oyayubi.ime.learning import LearningStore
-from oyayubi.ime.server import argument_parser, dispatch
-from oyayubi.ime.session import ImeSession
-from oyayubi.lattice.mozc_dict import load_lex
+from yuragi.chord.fsm import Plain
+from yuragi.ime import predict as P
+from yuragi.ime.bunsetsu import Candidate
+from yuragi.ime.learning import LearningStore
+from yuragi.ime.server import argument_parser, dispatch
+from yuragi.ime.session import ImeSession
+from yuragi.lattice.mozc_dict import load_lex
 
 VK_TAB, VK_RETURN, VK_ESCAPE, VK_BACK, VK_F7 = 0x09, 0x0D, 0x1B, 0x08, 0x76
 
@@ -278,7 +278,7 @@ class ConfigTest(unittest.TestCase):
             parser.parse_args(["--prediction", "auto"])
 
     def test_config_file_can_turn_it_off(self):
-        from oyayubi.ime import config
+        from yuragi.ime import config
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "config.json"
             path.write_text('{"prediction": "off"}', encoding="utf-8")
@@ -286,7 +286,7 @@ class ConfigTest(unittest.TestCase):
 
     def test_config_file_with_a_bom_is_read(self):
         # Windows PowerShell 5.1 (setup.ps1 before the fix) and Notepad write one.
-        from oyayubi.ime import config
+        from yuragi.ime import config
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "config.json"
             path.write_bytes(b"\xef\xbb\xbf" + b'{"prediction": "off"}')

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from oyayubi.chord.fsm import AmbShift, ChordFsm, Plain, ThumbTap
+from yuragi.chord.fsm import AmbShift, ChordFsm, Plain, ThumbTap
 
 
 def run(events: list[tuple[str, str, str, int]]):

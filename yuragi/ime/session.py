@@ -12,15 +12,15 @@ from pathlib import Path
 from typing import Callable
 import unicodedata
 
-from oyayubi.chord.fsm import AmbShift, ChordFsm, Plain, ThumbTap, Token
-from oyayubi.chord.keys import (
+from yuragi.chord.fsm import AmbShift, ChordFsm, Plain, ThumbTap, Token
+from yuragi.chord.keys import (
     SHIFT_VKS, SHORTCUT_VKS, VK_BACK, VK_ESCAPE, VK_RETURN, classify, literal_character,
 )
-from oyayubi.lattice.alternation import SIDES, Plan, restrict
-from oyayubi.lattice.expand import is_literal_face, literal_text
-from oyayubi.lattice.mozc_dict import MozcLex, left_id_after, load_lex
-from oyayubi.lattice.table import load_table
-from oyayubi.lattice.token_viterbi import decode_tokens
+from yuragi.lattice.alternation import SIDES, Plan, restrict
+from yuragi.lattice.expand import is_literal_face, literal_text
+from yuragi.lattice.mozc_dict import MozcLex, left_id_after, load_lex
+from yuragi.lattice.table import load_table
+from yuragi.lattice.token_viterbi import decode_tokens
 from .bunsetsu import (BOS_ID, PAGE_SIZE, Candidate, CandidateStream, Segment,
                        candidates, segments_from)
 from .learning import DEFAULT_LEARNING_PATH, LearningStore

@@ -6,8 +6,8 @@ module writes that manifest and verifies the working set against it: every
 required file present with the recorded size and hash, and no unrecorded
 dictionary*.txt (the loader globs them, so a stray file would change results).
 
-  python -m oyayubi.lattice.dict_manifest write --label local-snapshot-20261111
-  python -m oyayubi.lattice.dict_manifest verify [--deep]
+  python -m yuragi.lattice.dict_manifest write --label local-snapshot-20261111
+  python -m yuragi.lattice.dict_manifest verify [--deep]
 
 --deep also parses the text files and compares them with the pickle cache,
 which load_lex trusts without checking (the plan's "is the cache the text?").

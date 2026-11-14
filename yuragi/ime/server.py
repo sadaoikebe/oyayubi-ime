@@ -1,8 +1,8 @@
 """The engine's request protocol, and a stdio host for tests and evaluation.
 
-The product talks to the engine through oyayubi.engine (REDESIGN §6.1); this
+The product talks to the engine through yuragi.engine (REDESIGN §6.1); this
 module holds what both share: dispatch() applies one request to a session and
-returns the reply. ``python -m oyayubi.ime.server`` serves one session over
+returns the reply. ``python -m yuragi.ime.server`` serves one session over
 stdin/stdout for tests and evaluation only (not a product path).
 
 One JSON object per line:
@@ -30,13 +30,13 @@ import json
 import sys
 from pathlib import Path
 
-from oyayubi.ime.session import ImeSession
-from oyayubi.ime.learning import DEFAULT_LEARNING_PATH, LearningStore
-from oyayubi.ime.personal import DEFAULT_PERSONAL_PATH, PersonalLexicon
-from oyayubi.ime import config
-from oyayubi.ime.config import LEARNING_MODES
-from oyayubi.ime.lm_rescore import CONTEXT_CHARS
-from oyayubi.ime.predict import DEFAULT_MODE as DEFAULT_PREDICTION, MODES as PREDICTION_MODES
+from yuragi.ime.session import ImeSession
+from yuragi.ime.learning import DEFAULT_LEARNING_PATH, LearningStore
+from yuragi.ime.personal import DEFAULT_PERSONAL_PATH, PersonalLexicon
+from yuragi.ime import config
+from yuragi.ime.config import LEARNING_MODES
+from yuragi.ime.lm_rescore import CONTEXT_CHARS
+from yuragi.ime.predict import DEFAULT_MODE as DEFAULT_PREDICTION, MODES as PREDICTION_MODES
 
 
 def dispatch(sess: ImeSession, msg: dict) -> dict:
@@ -106,7 +106,7 @@ def argument_parser() -> argparse.ArgumentParser:
                              "history but record nothing; off: neither")
     parser.add_argument("--no-learning", action="store_true", help="disable confirmation learning")
     parser.add_argument("--personal-file", type=Path, default=DEFAULT_PERSONAL_PATH,
-                        help="the user's word list (JSONL; edit with python -m oyayubi.ime.manage word)")
+                        help="the user's word list (JSONL; edit with python -m yuragi.ime.manage word)")
     parser.add_argument("--prediction", choices=PREDICTION_MODES, default=DEFAULT_PREDICTION,
                         help="Tab on unconverted input offers continuations from history "
                              "and the dictionary (tab, the default) or does nothing (off)")
@@ -139,7 +139,7 @@ def argument_parser() -> argparse.ArgumentParser:
 
 def build_rescorer(args):
     """Import, construct and warm up the LM rescorer (raises without torch etc.)."""
-    from oyayubi.ime.lm_rescore import (DEFAULT_ALPHA, DEFAULT_K, DEFAULT_MODEL,
+    from yuragi.ime.lm_rescore import (DEFAULT_ALPHA, DEFAULT_K, DEFAULT_MODEL,
                                         CausalLmScorer, LmRescorer)
     rescorer = LmRescorer(
         CausalLmScorer(args.lm_model or DEFAULT_MODEL, threads=args.lm_threads),

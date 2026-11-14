@@ -5,11 +5,11 @@ from __future__ import annotations
 
 import unittest
 
-from oyayubi.chord.fsm import AmbShift, Plain
-from oyayubi.ime.server import dispatch
-from oyayubi.ime.session import ImeSession
-from oyayubi.lattice.mozc_dict import load_lex
-from oyayubi.lattice.table import load_table
+from yuragi.chord.fsm import AmbShift, Plain
+from yuragi.ime.server import dispatch
+from yuragi.ime.session import ImeSession
+from yuragi.lattice.mozc_dict import load_lex
+from yuragi.lattice.table import load_table
 
 VK_F6, VK_F7, VK_F8, VK_F9, VK_F10 = 0x75, 0x76, 0x77, 0x78, 0x79
 
@@ -154,7 +154,7 @@ class KanaKeyTest(unittest.TestCase):
     def test_alphanumerics_are_not_learned(self):
         import tempfile
         from pathlib import Path
-        from oyayubi.ime.learning import LearningStore
+        from yuragi.ime.learning import LearningStore
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "learning.jsonl"
             path.touch()

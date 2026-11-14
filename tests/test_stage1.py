@@ -10,8 +10,8 @@ import sys
 import tempfile
 import unittest
 
-from oyayubi.chord.fsm import AmbShift, Plain, ThumbTap
-from oyayubi.ime.recording import Prompt, Recorder, VK_NEXT_PROMPT, load_prompts
+from yuragi.chord.fsm import AmbShift, Plain, ThumbTap
+from yuragi.ime.recording import Prompt, Recorder, VK_NEXT_PROMPT, load_prompts
 from tools.replay_stage1 import (
     Native, Trace, evaluate_log, evaluate_trace, expected_tokens, read_log, replay,
 )

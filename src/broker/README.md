@@ -1,6 +1,6 @@
 # oyayubi-broker（REDESIGN §5）
 
-サインインごとに 1 つ動く小さな常駐プログラム。変換エンジン（`python -m oyayubi.engine`）を
+サインインごとに 1 つ動く小さな常駐プログラム。変換エンジン（`python -m yuragi.engine`）を
 起動・見張り・決まった回数だけ起動し直し、TIP からの打鍵を名前付きパイプで受けてエンジンへ渡す。
 エンジンが使えない間の打鍵は預かる。直らない故障は 1 回だけ通知する。
 
@@ -24,8 +24,8 @@ python -m unittest tests.test_broker          # Windows では OYAYUBI_BROKER=di
 
 ```json
 {"format": 1, "python": "<python.exe の絶対パス>", "pythonw": "<pythonw.exe>",
- "app": "<作業フォルダ>", "args": ["-m", "oyayubi.engine", "--dict-dir", "...", "--cache-dir", "..."],
- "admin_args": ["-m", "oyayubi.ime.admin_ui"]}
+ "app": "<作業フォルダ>", "args": ["-m", "yuragi.engine", "--dict-dir", "...", "--cache-dir", "..."],
+ "admin_args": ["-m", "yuragi.ime.admin_ui"]}
 ```
 
 ログは `%USERPROFILE%\.oyayubi-ime\logs\`（`broker.log`、`engine.log`、`notices.log`。各 1MB × 2 世代）。
