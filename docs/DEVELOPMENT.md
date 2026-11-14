@@ -20,33 +20,14 @@ TIP（src/tip、アプリの中の DLL）
 
 ## 技術文書
 
-方針の正本:
-
-- [STATUS.md](STATUS.md) — いまできていること、やめたこと
-- [REDESIGN.md](REDESIGN.md) — 全体の再設計（TIP・ブローカー・エンジン、置き場所、インストール手順）
+- [CONVERSION.md](CONVERSION.md) — 変換の仕様（打鍵の判定、トークン、変換、キー操作、文節と候補、学習、n-best、LM、返事の項目、設定）
+- [REDESIGN.md](REDESIGN.md) — 全体の設計（TIP・ブローカー・エンジン、通信、置き場所、インストールの手順、利用者に見えるもの、試験と合格条件、定数）
 - [INSTALL.md](INSTALL.md) — インストール・更新・アンインストールの置き場所と手順
-- [PLAN.md](PLAN.md) — 調査・設計・WBS・PR 計画（Draft r3、2026-08-16）
+- [EVALUATION.md](EVALUATION.md) — 変換の評価と診断、実打鍵の記録と再生
+- [ZERO_ROW_PENALTY.md](ZERO_ROW_PENALTY.md) — 連接表の全 0 行へのペナルティと、その確認
+- [DEVENV.md](DEVENV.md) — 開発環境、Windows でのビルドと登録
 
-段階ごとの記録:
-
-- [STAGE1.md](STAGE1.md) — ノート PC での実打鍵記録・Linux での再生評価
-- [STAGE2.md](STAGE2.md) — セッションの入力・確定・リセット
-- [STAGE3.md](STAGE3.md) — 常駐サーバと TIP
-- [STAGE4.md](STAGE4.md) — 確定学習の有効化・保存形式・候補の忘却／学習取消・全消去
-- [STAGE5A.md](STAGE5A.md) — 本物の k-best
-- [STAGE5B.md](STAGE5B.md) — LM リスコア
-
-調査と評価:
-
-- [WP0-investigation.md](WP0-investigation.md) — トークン列→漢字かな交じりのオフライン実証
-- [EVALUATION.md](EVALUATION.md) — 変換の評価と診断
-- [ZERO_ROW_PENALTY.md](ZERO_ROW_PENALTY.md) — 連接表の全0行へのペナルティ
-- [DEFENSIVE_CODE_AUDIT.md](DEFENSIVE_CODE_AUDIT.md) — 防御コードの棚卸し
-- [CANDIDATE_WINDOW.md](CANDIDATE_WINDOW.md)、[UNREGISTER.md](UNREGISTER.md) — 実機で見つけた不具合の記録
-
-同時打鍵 SM の挙動の正本は、IME リポジトリの外にあります。
-
-- 作者の qmk_userspace リポジトリの `docs/NICOLA-SPEC.md`
+同時打鍵の状態機械（S1〜S7）の表と各状態の出口は、`yuragi/chord/fsm.py` 冒頭の説明にあります。
 
 ## ビルドと試験
 
@@ -54,8 +35,19 @@ TIP（src/tip、アプリの中の DLL）
 python -m tools.wp0.fetch_mozc_dict   # 初回のみ。OSS 辞書テキスト
 python -m unittest $(ls tests/test_*.py | sed 's#/#.#;s#\.py$##')   # 全試験（Linux 可）
 cmake -S src/broker -B build/broker && cmake --build build/broker && ctest --test-dir build/broker
+cmake -S src/tip -B build/tip && cmake --build build/tip && ctest --test-dir build/tip   # TIP の判断の試験（Linux 可）
 python -m yuragi.ime.host_win32      # 試験窓。TSF を通さない
 ```
+
+管理の道具は 2 つあり、同じ関数で同じファイルを触ります。
+
+- 設定ウィンドウ `python -m yuragi.ime.admin_ui`（tkinter、標準ライブラリだけ）。ロジックは
+  tkinter に依存しない `AdminModel`（試験は `tests/test_admin_ui.py`）にあり、画面は薄い殻。
+  画面の文言はすべて日本語（`admin_ui.SETTINGS` などの表）。DPI 対応を申告する。
+- 端末 `python -m yuragi.ime.manage`（文言は英語）。`word`（add/remove/list）、
+  `learning`（list/forget/promote/compact/clear/pause/resume）、`dict`（verify/write）、
+  `config`（show/set/unset）、`status`、`server restart`。
+  どちらも `--runtime-dir` と `--config` で置き場所を変えられる。
 
 Windows でのビルドと登録は `src\tip\dev-build.ps1` と `src\tip\dev-register.ps1`（[DEVENV.md](DEVENV.md)）。
 TIP は [`src/tip/README.md`](../src/tip/README.md)、ブローカーは [`src/broker/README.md`](../src/broker/README.md)。
@@ -68,7 +60,7 @@ TIP は [`src/tip/README.md`](../src/tip/README.md)、ブローカーは [`src/b
 
 ## 禁止していること
 
-詳細は設計書にあります。
+詳細は [CONVERSION.md](CONVERSION.md) §1 にあります。
 
 - 左右あいまい打鍵をいったん1本のひらがなに潰して、既存 IME に渡すこと
 - 近接キー誤打など、左右以外のあいまいさを候補に出すこと

@@ -1,70 +1,58 @@
 # 開発環境
 
-管理者で入れるものと、ユーザー権限で足りるものを分ける。
+## Linux（変換エンジン・ブローカー・TIP の判断の試験）
 
-## あなたが管理者で入れるもの（推奨）
+Python 3.12 以上、CMake、C++17 のコンパイラ。Windows が無くても、Python の全試験、ブローカー（POSIX 版）の
+試験、TIP の判断（`tip_logic.h`）の試験が回る。CI の Linux ジョブと同じ。
 
-Notepad / VS Code 用の TSF DLL をこの PC でビルドするのに必要。CUDA Toolkit 本体は、PyTorch を pip するだけなら **入れなくてよい**（ドライバ 610 は既にある）。
+```sh
+python -m tools.wp0.fetch_mozc_dict                 # 初回のみ。Mozc OSS 辞書
+python -m yuragi.lattice.dict_manifest verify       # 辞書がマニフェストと一致するか
+python -m unittest $(ls tests/test_*.py | sed 's#/#.#;s#\.py$##')
+cmake -S src/broker -B build/broker -DCMAKE_BUILD_TYPE=Release && cmake --build build/broker && ctest --test-dir build/broker
+cmake -S src/tip -B build/tip -DCMAKE_BUILD_TYPE=Release && cmake --build build/tip && ctest --test-dir build/tip
+```
 
-### 1. Visual Studio 2026 Build Tools（C++）
+- `tests/test_installer_scripts.py` はワークフローの PowerShell も検査するので、PyYAML と `pwsh` を使う。
+- LM の試験（`tests/test_lm_rescore.py` の実モデルの部分）は、環境変数 `YURAGI_LM_TESTS=1` と
+  `transformers` `sentencepiece` `torch` があるときだけ動く。版は `packaging/requirements.txt` に固定してある
+  （torch は PyTorch の CPU 用の配布元から入れる）。
 
-管理者コマンドプロンプトで:
+## Windows（TIP の DLL とブローカーの exe）
+
+### 管理者で入れるもの
+
+Visual Studio Build Tools（C++。MSVC、Windows SDK、CMake を含む）。管理者のコマンドプロンプトで:
 
 ```bat
 winget install --id Microsoft.VisualStudio.BuildTools -e --accept-package-agreements --accept-source-agreements --override "--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
 ```
 
-ID は `Microsoft.VisualStudio.2022.BuildTools` ではない。現行は **2026**（18.x）。
+`dev-build.ps1` は `vswhere` で最新の Build Tools を探し、開発者環境を自分で読み込む。
 
-入るもの: MSVC、Windows SDK（`msctf.h`）、CMake コンポーネント。所要約 5–8 GB。
+### 利用者の権限で入れるもの
 
-確認（新しい「x64 Native Tools Command Prompt for VS 2026」で）:
+Python 3.13（64 ビット）。CMake と Ninja は Build Tools の CMake コンポーネントに入っている
+（無ければ `python -m pip install cmake ninja`）。エンジンを開発用に動かすなら、
+`packaging/requirements.txt` の依存と torch（CPU 版で足りる）も。
 
-```bat
-cl
-cmake --version
-```
-
-### 2. 入れなくてよいもの
-
-| 名前 | 理由 |
-| --- | --- |
-| CUDA Toolkit（nvcc） | 推論だけなら pip の PyTorch 車輪にランタイムが付く |
-| Visual Studio 本体（Community） | ビルドだけなら Build Tools で足りる。IDE が欲しければ別途 |
-| AutoHotkey | 使わない |
-| 自前 `src/tip` の旧版の再登録 | 初版は入力全体を止めた。使わない。現行版の登録は下の節 |
-
-## ユーザー権限で入れるもの
-
-Python 3.13 は既にある。GPU は `NVIDIA GeForce RTX 4060 Laptop GPU`、ドライバ `610.74`。
-
-```bat
-python -m pip install -U pip
-python -m pip install cmake ninja
-python -m pip install torch --index-url https://download.pytorch.org/whl/cu124
-```
-
-確認:
-
-```bat
-python -c "import torch; print(torch.__version__, torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else '')"
-```
-
-`True` と `4060` が出ればよい。
-
-## Notepad 用: 自前 TIP とブローカー（登録のときだけ管理者）
+### ビルドと登録
 
 構成は [REDESIGN.md](REDESIGN.md)。TIP は打鍵をブローカーへ送るだけで、Python を起動しない。
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\src\tip\dev-build.ps1      # ビルドと試験（管理者不要）
+powershell -ExecutionPolicy Bypass -File .\src\tip\dev-build.ps1      # ビルドと試験（管理者不要）。CI もこれ
 powershell -ExecutionPolicy Bypass -File .\src\tip\dev-register.ps1   # タグ dev として登録（UAC 1 回）
 ```
 
-外す: 製品版と同じ `packaging\uninstall.ps1`（登録されている DLL と同じフォルダの `elevated.ps1` を使う。
-`dev-register.ps1` が `dist\` に置く）。
+- `dev-build.ps1` は `dist\yuragi_tip.dll` と `dist\yuragi-broker.exe` を Release で作る。
+- `dev-register.ps1 [-Python <python.exe>]` は、エンジンをリポジトリから指定の Python で動かす形で登録する。
+  DLL は `dist\yuragi_tip-a.dll`、`-b.dll`、… のうち、登録中でも使用中でもない最初のものにコピーして
+  登録するので、古い DLL を読み込んだアプリを閉じなくても入れ直せる。
+- 外すときは、製品版と同じ `packaging\uninstall.ps1`（登録されている DLL と同じフォルダの `elevated.ps1` を使う。
+  `dev-register.ps1` が `dist\` に置く）。
+- TSF を通さずにセッションを試す窓: `python -m yuragi.ime.host_win32`。
 
-## 入れたあとこちらで進めること
-
-1. fail-open の TIP を Notepad で確認する（サーバ起動前は QWERTY 素通し）
-2. 既読／記憶の n-best を、上文つきで小さい GPU モデルが点数する
+> **注意**: TIP の登録は `ITfInputProcessorProfileMgr` だけで行う。HKCU への手書きの登録や、古い
+> `Register` / `AddLanguageProfile` との二重登録をすると、一覧に出ても別のエンジンを掴んだり、
+> ホットキーがおかしくなったりする。
