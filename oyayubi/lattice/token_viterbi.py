@@ -130,8 +130,10 @@ def decode_tokens(tokens: list[dict], lex: MozcLex, *, learning=None,
         for w in spans:
             wi = len(words)
             words.append(w)
+            # admits()/after() inlined: this loop runs once per (state, word).
+            bound, enter, exit = w.sides.bound, w.sides.enter, w.sides.exit
             for si, st in enumerate(states[i]):
-                if not admits(w.sides, st.side):
+                if bound and enter is not None and enter != st.side:
                     continue
                 nsc = st.score + word_cost(lex, st.rid, w)
                 context = ""
@@ -142,7 +144,7 @@ def decode_tokens(tokens: list[dict], lex: MozcLex, *, learning=None,
                                                     boundary=st.rid == BOUNDARY_RID)
                 states[w.end].append(
                     _St(nsc, w.rid, wi, si, st.reading + w.entry.reading, context,
-                        after(w.sides, st.side))
+                        exit if bound else st.side)
                 )
 
     if not states[n]:
