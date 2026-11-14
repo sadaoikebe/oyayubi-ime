@@ -107,7 +107,9 @@ def to_lattice_token(tok: Token | Literal, table: dict) -> dict | None:
         if not faces:
             return None
         kind = "amb" if len(faces) > 1 else "shift"
-        return {"kind": kind, "key": tok.key, "faces": faces}
+        # Where the chord was typed: the conversion alternates the thumbs of one press.
+        return {"kind": kind, "key": tok.key, "faces": faces,
+                "press": tok.press, "turn": tok.turn}
     return None
 
 
