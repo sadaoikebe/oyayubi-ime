@@ -47,10 +47,10 @@ jobs:
       - name: アセットの組み立て
         shell: pwsh
         run: |
-          git archive --format=zip -o oyayubi-ime-source.zip HEAD
-          Copy-Item dist/NicolaIME3.dll .
-          Copy-Item dist/oyayubi-broker.exe .
-          foreach ($name in @("NicolaIME3.dll", "oyayubi-broker.exe", "oyayubi-ime-source.zip")) {
+          git archive --format=zip -o yuragi-ime-source.zip HEAD
+          Copy-Item dist/yuragi_tip.dll .
+          Copy-Item dist/yuragi-broker.exe .
+          foreach ($name in @("yuragi_tip.dll", "yuragi-broker.exe", "yuragi-ime-source.zip")) {
             (Get-FileHash $name -Algorithm SHA256).Hash.ToLower() | Set-Content "$name.sha256" -Encoding ASCII -NoNewline
           }
           # setup.ps1 にタグと、同梱 Python の公式ハッシュを刻む。
@@ -84,12 +84,12 @@ jobs:
           body: "インストール・更新・アンインストールは README の「インストール・更新」を参照してください。"
           files: |
             setup.ps1
-            NicolaIME3.dll
-            NicolaIME3.dll.sha256
-            oyayubi-broker.exe
-            oyayubi-broker.exe.sha256
-            oyayubi-ime-source.zip
-            oyayubi-ime-source.zip.sha256
+            yuragi_tip.dll
+            yuragi_tip.dll.sha256
+            yuragi-broker.exe
+            yuragi-broker.exe.sha256
+            yuragi-ime-source.zip
+            yuragi-ime-source.zip.sha256
 
   # 公開したプレリリースの setup.ps1 で、まっさらなランナーに実際に入れる (経路は 1 本)。
   # インストール → 動作 (ブローカーが ready) → 同じ版の入れ直し (学習データが残るか)
@@ -106,11 +106,11 @@ jobs:
         run: |
           # ASCII only: this step runs in Windows PowerShell 5.1.
           $ErrorActionPreference = "Stop"
-          $setup = Join-Path $env:RUNNER_TEMP "oyayubi-setup.ps1"
+          $setup = Join-Path $env:RUNNER_TEMP "yuragi-setup.ps1"
           Invoke-WebRequest -UseBasicParsing "https://github.com/$env:REPO/releases/download/$env:TAG/setup.ps1" -OutFile $setup
-          $program = Join-Path $env:ProgramFiles "oyayubi-ime\$env:TAG"
-          $local = Join-Path $env:LOCALAPPDATA "oyayubi-ime"
-          $userData = Join-Path $env:USERPROFILE ".oyayubi-ime"
+          $program = Join-Path $env:ProgramFiles "yuragi-ime\$env:TAG"
+          $local = Join-Path $env:LOCALAPPDATA "yuragi-ime"
+          $userData = Join-Path $env:USERPROFILE ".yuragi-ime"
           $inproc = "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Classes\CLSID\{A7C4E201-0B3A-4F11-9E61-0C1A0B7E0A01}\InprocServer32"
 
           function Invoke-Logged([string]$label, [string[]]$argv) {
@@ -126,7 +126,7 @@ jobs:
           function Get-BrokerState {
             $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
             $session = (Get-Process -Id $PID).SessionId
-            $pipe = New-Object System.IO.Pipes.NamedPipeClientStream(".", "oyayubi-ime-$sid-$session", [IO.Pipes.PipeDirection]::InOut)
+            $pipe = New-Object System.IO.Pipes.NamedPipeClientStream(".", "yuragi-ime-$sid-$session", [IO.Pipes.PipeDirection]::InOut)
             $pipe.Connect(5000)
             $writer = New-Object IO.StreamWriter($pipe); $writer.AutoFlush = $true; $writer.NewLine = "`n"
             $reader = New-Object IO.StreamReader($pipe)
@@ -136,12 +136,12 @@ jobs:
             return $state
           }
           function Assert-Installed {
-            foreach ($f in @("NicolaIME3.dll", "oyayubi-broker.exe", "elevated.ps1")) {
+            foreach ($f in @("yuragi_tip.dll", "yuragi-broker.exe", "elevated.ps1")) {
               if (-not (Test-Path (Join-Path $program $f))) { throw "missing $f in Program Files" }
             }
-            if ((Get-ItemProperty $inproc).'(default)' -ne (Join-Path $program "NicolaIME3.dll")) { throw "TIP is not registered to Program Files" }
-            if ((Get-ItemProperty "HKCU:\Software\oyayubi-ime").Tag -ne $env:TAG) { throw "HKCU Tag is not $env:TAG" }
-            if (-not (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run")."oyayubi-ime") { throw "no Run key" }
+            if ((Get-ItemProperty $inproc).'(default)' -ne (Join-Path $program "yuragi_tip.dll")) { throw "TIP is not registered to Program Files" }
+            if ((Get-ItemProperty "HKCU:\Software\yuragi-ime").Tag -ne $env:TAG) { throw "HKCU Tag is not $env:TAG" }
+            if (-not (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run")."yuragi-ime") { throw "no Run key" }
             if (-not (Test-Path (Join-Path $local "versions\$env:TAG\engine.json"))) { throw "no engine.json" }
             $state = Get-BrokerState
             if ($state -ne "ready") { throw "broker state is $state, not ready" }
@@ -164,8 +164,8 @@ jobs:
           Invoke-Logged "uninstall" @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $uninstall, "-Yes")
           if (Test-Path $inproc) { throw "TIP registration remains after uninstall" }
           if (Test-Path $local) { throw "$local remains after uninstall" }
-          if (Test-Path (Join-Path $env:ProgramFiles "oyayubi-ime")) { throw "Program Files\oyayubi-ime remains (nothing had the DLL loaded)" }
-          if ((Get-ItemProperty "HKCU:\Software\oyayubi-ime" -ErrorAction SilentlyContinue).Tag) { throw "HKCU Tag remains" }
-          if (Get-Process -Name "oyayubi-broker" -ErrorAction SilentlyContinue) { throw "a broker is still running" }
+          if (Test-Path (Join-Path $env:ProgramFiles "yuragi-ime")) { throw "Program Files\yuragi-ime remains (nothing had the DLL loaded)" }
+          if ((Get-ItemProperty "HKCU:\Software\yuragi-ime" -ErrorAction SilentlyContinue).Tag) { throw "HKCU Tag remains" }
+          if (Get-Process -Name "yuragi-broker" -ErrorAction SilentlyContinue) { throw "a broker is still running" }
           if (-not (Test-Path $learning)) { throw "uninstall removed the learning history (I-7)" }
           Write-Host "uninstall OK (user data kept)"

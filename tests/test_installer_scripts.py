@@ -8,7 +8,7 @@
   module from the working directory when Python is isolated (the bundled
   runtime's ._pth leaves the working directory off sys.path).
 
-pwsh runs these (GitHub's Ubuntu runners have it; OYAYUBI_PWSH names another).
+pwsh runs these (GitHub's Ubuntu runners have it; YURAGI_PWSH names another).
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = sorted(list((ROOT / "packaging").glob("*.ps1")) + list((ROOT / "src").rglob("*.ps1")))
-PWSH = os.environ.get("OYAYUBI_PWSH") or shutil.which("pwsh")
+PWSH = os.environ.get("YURAGI_PWSH") or shutil.which("pwsh")
 
 
 def boot_string() -> str:
@@ -53,7 +53,7 @@ def function_text(path: Path, name: str) -> str:
     return out
 
 
-@unittest.skipIf(PWSH is None, "pwsh is not installed (set OYAYUBI_PWSH)")
+@unittest.skipIf(PWSH is None, "pwsh is not installed (set YURAGI_PWSH)")
 class PowerShellTest(unittest.TestCase):
     def test_every_script_parses_and_has_a_bom(self):
         self.assertTrue(SCRIPTS)
@@ -89,7 +89,7 @@ class PowerShellTest(unittest.TestCase):
     def test_elevated_arguments_survive_encoding(self):
         odd = {
             "Tag": "v0.2.0",
-            "DllSource": r"C:\Users\テスト user\AppData\Local\oyayubi-ime\versions\v0.2.0\download\NicolaIME3.dll",
+            "DllSource": r"C:\Users\テスト user\AppData\Local\yuragi-ime\versions\v0.2.0\download\yuragi_tip.dll",
             "Leftover": r"C:\Users\O'Brien\AppData\Local\oyayubi-ime\app",
             "ResultFile": "",
         }

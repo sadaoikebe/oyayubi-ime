@@ -40,7 +40,7 @@ from yuragi.lattice.expand import is_literal_face
 from yuragi.lattice.mozc_dict import DEFAULT_NOUN_ID, Entry, MozcLex
 from .bunsetsu import Candidate, content
 
-DEFAULT_LEARNING_PATH = Path.home() / ".oyayubi-ime" / "learning.jsonl"
+DEFAULT_LEARNING_PATH = Path.home() / ".yuragi-ime" / "learning.jsonl"
 PAIR_BONUS = 2400
 CONTEXT_BONUS = 3600  # additional to PAIR_BONUS
 HALF_LIFE_SECONDS = 30 * 24 * 60 * 60

@@ -139,8 +139,8 @@ class SessionRescoreTest(unittest.TestCase):
 HAVE_TORCH = all(importlib.util.find_spec(m) for m in ("torch", "transformers", "sentencepiece"))
 
 
-@unittest.skipUnless(HAVE_TORCH and os.environ.get("OYAYUBI_LM_TESTS"),
-                     "set OYAYUBI_LM_TESTS=1 with torch/transformers and the model cached")
+@unittest.skipUnless(HAVE_TORCH and os.environ.get("YURAGI_LM_TESTS"),
+                     "set YURAGI_LM_TESTS=1 with torch/transformers and the model cached")
 class RealModelTest(unittest.TestCase):
     """The optimized scorer must give E6's (naive) numbers exactly."""
 

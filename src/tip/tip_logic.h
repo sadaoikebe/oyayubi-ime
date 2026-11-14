@@ -304,8 +304,8 @@ private:
 
 // §7.3: whether this TIP may start the broker. Every condition must hold.
 struct SpawnFacts {
-    bool tag_matches = false;  // HKCU\Software\oyayubi-ime\Tag == this DLL's tag
-    bool maintenance = false;  // Local\oyayubi-ime-maintenance exists
+    bool tag_matches = false;  // HKCU\Software\yuragi-ime\Tag == this DLL's tag
+    bool maintenance = false;  // Local\yuragi-ime-maintenance exists
     bool medium_integrity = false;  // not sandboxed (AppContainer/low), not elevated
     uint32_t spawns = 0;  // this sign-in, from the volatile key
 };

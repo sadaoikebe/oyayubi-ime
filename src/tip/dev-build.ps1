@@ -3,7 +3,7 @@
 #
 #   powershell -ExecutionPolicy Bypass -File .\src\tip\dev-build.ps1 [-Tag dev]
 #
-# 出力: dist\NicolaIME3.dll と dist\oyayubi-broker.exe (Release、タグを埋め込む)。
+# 出力: dist\yuragi_tip.dll と dist\yuragi-broker.exe (Release、タグを埋め込む)。
 param([string]$Tag = "dev")
 $ErrorActionPreference = 'Stop'
 $Repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
@@ -35,7 +35,7 @@ if (-not $env:LIB) {
 foreach ($part in @('tip', 'broker')) {
     $source = Join-Path $Repo "src\$part"
     $build = Join-Path $Repo "build\$part-release"
-    & cmake -S $source -B $build -G Ninja -DCMAKE_BUILD_TYPE=Release "-DOYAYUBI_TAG=$Tag"
+    & cmake -S $source -B $build -G Ninja -DCMAKE_BUILD_TYPE=Release "-DYURAGI_TAG=$Tag"
     if ($LASTEXITCODE -ne 0) { throw "${part}: CMake の構成に失敗しました。" }
     & cmake --build $build
     if ($LASTEXITCODE -ne 0) { throw "${part}: ビルドに失敗しました。" }

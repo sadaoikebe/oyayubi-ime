@@ -9,7 +9,7 @@ from pathlib import Path
 import re
 import unittest
 
-TIP = Path(__file__).resolve().parents[1] / "src" / "tip" / "oyayubi_tip.cpp"
+TIP = Path(__file__).resolve().parents[1] / "src" / "tip" / "yuragi_tip.cpp"
 
 # (what was removed, a pattern that would find it)
 REMOVED = [
@@ -51,7 +51,7 @@ class RemovedFromTipTest(unittest.TestCase):
     def test_the_only_process_it_starts_is_the_broker(self):
         starts = re.findall(r"CreateProcess\w*\(", self.code)
         self.assertEqual(len(starts), 1)
-        self.assertIn('L"\\\\oyayubi-broker.exe"', self.code)
+        self.assertIn('L"\\\\yuragi-broker.exe"', self.code)
         # §7.3: no handles inherited, away from the application's job, no window.
         call = self.code[self.code.index("CreateProcessW("):]
         call = call[:call.index(";")]

@@ -4,8 +4,8 @@
 // PR_SET_PDEATHSIG, the notification is a line in logs/notices.log, and the
 // maintenance mutex is a lock held on <data-dir>/maintenance.lock.
 //
-//   oyayubi-broker --engine-json PATH [--data-dir DIR] [--socket PATH] [--test-hooks]
-//   oyayubi-broker --selftest PATH [--data-dir DIR]
+//   yuragi-broker --engine-json PATH [--data-dir DIR] [--socket PATH] [--test-hooks]
+//   yuragi-broker --selftest PATH [--data-dir DIR]
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
@@ -403,7 +403,7 @@ int main(int argc, char** argv) {
     using namespace broker;
     signal(SIGPIPE, SIG_IGN);
     const char* home = std::getenv("HOME");
-    fs::path data_dir = fs::path(home ? home : ".") / ".oyayubi-ime";
+    fs::path data_dir = fs::path(home ? home : ".") / ".yuragi-ime";
     fs::path engine_json, socket_path, selftest;
     bool test_hooks = false;
     for (int i = 1; i < argc; ++i) {
@@ -437,7 +437,7 @@ int main(int argc, char** argv) {
 
     std::error_code ec;
     fs::create_directories(data_dir, ec);
-    // One broker per user (Local\oyayubi-ime-broker on Windows).
+    // One broker per user (Local\yuragi-ime-broker on Windows).
     int lock = open((data_dir / "broker.lock").c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0600);
     if (lock < 0 || flock(lock, LOCK_EX | LOCK_NB) != 0) return 0;
 

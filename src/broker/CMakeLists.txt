@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.20)
-project(oyayubi_broker LANGUAGES CXX)
+project(yuragi_broker LANGUAGES CXX)
 
 # The tag this build belongs to (REDESIGN §4.2): the broker only runs when
-# HKCU\Software\oyayubi-ime\Tag names it. Release builds pass -DOYAYUBI_TAG=<tag>.
-set(OYAYUBI_TAG "dev" CACHE STRING "the version tag compiled into the broker")
+# HKCU\Software\yuragi-ime\Tag names it. Release builds pass -DYURAGI_TAG=<tag>.
+set(YURAGI_TAG "dev" CACHE STRING "the version tag compiled into the broker")
 
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
 set(CMAKE_CXX_STANDARD 17)
@@ -17,25 +17,25 @@ else()
 endif()
 
 if(WIN32)
-  add_executable(oyayubi-broker WIN32 platform_win.cpp broker.rc)
-  target_compile_definitions(oyayubi-broker PRIVATE
+  add_executable(yuragi-broker WIN32 platform_win.cpp broker.rc)
+  target_compile_definitions(yuragi-broker PRIVATE
     UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX WINVER=0x0A00 _WIN32_WINNT=0x0A00
-    OYAYUBI_TAG="${OYAYUBI_TAG}")
-  target_link_libraries(oyayubi-broker PRIVATE broker_core
+    YURAGI_TAG="${YURAGI_TAG}")
+  target_link_libraries(yuragi-broker PRIVATE broker_core
     advapi32 userenv shell32 user32 comctl32 ole32 uuid)
   if(MSVC)  # broker.rc carries the manifest; the linker must not add a second one
-    target_link_options(oyayubi-broker PRIVATE /MANIFEST:NO)
+    target_link_options(yuragi-broker PRIVATE /MANIFEST:NO)
   endif()
   if(MINGW)  # wWinMain (MSVC finds it by itself); used to compile-check on Linux
-    target_link_options(oyayubi-broker PRIVATE -municode)
+    target_link_options(yuragi-broker PRIVATE -municode)
   endif()
   # The generator expression keeps multi-config generators from adding Release/.
-  set_target_properties(oyayubi-broker PROPERTIES
+  set_target_properties(yuragi-broker PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "$<1:${CMAKE_SOURCE_DIR}/../../dist>")
 else()
   # The same broker on POSIX, for the tests (platform_posix.cpp).
-  add_executable(oyayubi-broker platform_posix.cpp)
-  target_link_libraries(oyayubi-broker PRIVATE broker_core)
+  add_executable(yuragi-broker platform_posix.cpp)
+  target_link_libraries(yuragi-broker PRIVATE broker_core)
 endif()
 
 enable_testing()

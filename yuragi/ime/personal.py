@@ -22,7 +22,7 @@ import threading
 from yuragi.lattice.expand import is_literal_face
 from yuragi.lattice.mozc_dict import Entry, MozcLex
 
-DEFAULT_PERSONAL_PATH = Path.home() / ".oyayubi-ime" / "personal_lexicon.jsonl"
+DEFAULT_PERSONAL_PATH = Path.home() / ".yuragi-ime" / "personal_lexicon.jsonl"
 # The median cost of the 71 hand-written entries in data/user_lexicon.jsonl:
 # a registered word competes like those corrections do, not like an unknown word.
 DEFAULT_COST = 2600

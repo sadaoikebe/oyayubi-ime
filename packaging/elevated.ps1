@@ -1,10 +1,10 @@
-﻿# oyayubi-ime: the only part that runs as administrator (REDESIGN §8.1).
+﻿# yuragi-ime: the only part that runs as administrator (REDESIGN §8.1).
 # setup.ps1 / uninstall.ps1 pass this script's text with -EncodedCommand (never
 # a path the user can rewrite) and read the result file. Three things only:
-#   install:   put the DLL, the broker and this script in Program Files\oyayubi-ime\<tag>\
+#   install:   put the DLL, the broker and this script in Program Files\yuragi-ime\<tag>\
 #              (hashes checked where they land), register the DLL, read it back,
 #              remove the other versions there (in use: deleted at the next start)
-#   uninstall: unregister, read it back, remove Program Files\oyayubi-ime
+#   uninstall: unregister, read it back, remove Program Files\yuragi-ime
 #   both:      -Leftover <dir> is removed too (in use: at the next start)
 # No Python runs here.
 param(
@@ -21,11 +21,11 @@ param(
 )
 $ErrorActionPreference = "Stop"
 $Clsid = "{A7C4E201-0B3A-4F11-9E61-0C1A0B7E0A01}"
-$Root = Join-Path $env:ProgramFiles "oyayubi-ime"
+$Root = Join-Path $env:ProgramFiles "yuragi-ime"
 $InprocKey = "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Classes\CLSID\$Clsid\InprocServer32"
 $pending = New-Object System.Collections.ArrayList
 
-Add-Type -Namespace OyayubiElevated -Name Native -MemberDefinition @'
+Add-Type -Namespace YuragiElevated -Name Native -MemberDefinition @'
 [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
 public static extern bool MoveFileEx(string existing, string replacement, int flags);
 '@
@@ -49,7 +49,7 @@ function Remove-OrSchedule([string]$path) {
         if (-not (Test-Path -LiteralPath $item.FullName)) { continue }
         try { Remove-Item -LiteralPath $item.FullName -Force -Recurse -ErrorAction Stop; continue } catch { }
         # MOVEFILE_DELAY_UNTIL_REBOOT
-        if ([OyayubiElevated.Native]::MoveFileEx($item.FullName, $null, 4)) { [void]$pending.Add($item.FullName) }
+        if ([YuragiElevated.Native]::MoveFileEx($item.FullName, $null, 4)) { [void]$pending.Add($item.FullName) }
         else { throw "cannot remove or schedule $($item.FullName)" }
     }
 }
@@ -77,9 +77,9 @@ try {
     if ($Action -eq "install") {
         $dir = Join-Path $Root $Tag
         New-Item -ItemType Directory -Force $dir | Out-Null
-        $dll = Join-Path $dir "NicolaIME3.dll"
+        $dll = Join-Path $dir "yuragi_tip.dll"
         Place $DllSource $DllSha256 $dll
-        Place $BrokerSource $BrokerSha256 (Join-Path $dir "oyayubi-broker.exe")
+        Place $BrokerSource $BrokerSha256 (Join-Path $dir "yuragi-broker.exe")
         # uninstall.ps1 runs this copy: only administrators can change it there.
         Place $ScriptSource $ScriptSha256 (Join-Path $dir "elevated.ps1")
         $proc = Start-Process "$env:SystemRoot\System32\regsvr32.exe" -ArgumentList @("/s", "`"$dll`"") -Wait -PassThru

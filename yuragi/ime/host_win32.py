@@ -205,7 +205,7 @@ def paint(hwnd) -> None:
     comp = session.composition
     status = "変換済" if session.converted else "入力中"
     text = (
-        "oyayubi-ime 試験窓  （Notepad 用ではない。TSF TIP は src/tip）\n"
+        "ゆらぎ 試験窓  （Notepad 用ではない。TSF TIP は src/tip）\n"
         "Space+文字 = 親指シフト（左右不明）。Space 単独 = 変換。Enter = 確定。Esc = 取消。\n"
         "F6 = 注目候補の学習を忘却。F7 = 直前の学習を戻す（確定文字は保持）。\n"
         f"[{status}] tokens={len(session.tokens)} fsm={session.fsm.state}\n\n"
@@ -250,7 +250,7 @@ def wndproc(hwnd, msg, wparam, lparam):
         # before showing it, otherwise a failed flush could recurse forever.
         _callback_failed = True
         user32.MessageBoxW(hwnd, f"処理を停止しました: {type(exc).__name__}: {exc}",
-                          "oyayubi-ime 記録エラー", 0x10)
+                          "ゆらぎ 記録エラー", 0x10)
         user32.PostQuitMessage(1)
         return 0
 
@@ -330,7 +330,7 @@ def main() -> None:
 
 def run_window() -> None:
     inst = kernel32.GetModuleHandleW(None)
-    cls_name = "OyayubiImeHost"
+    cls_name = "YuragiImeHost"
     wc = WNDCLASSW()
     wc.style = CS_HREDRAW | CS_VREDRAW
     wc.lpfnWndProc = wndproc
@@ -345,7 +345,7 @@ def run_window() -> None:
     hwnd = user32.CreateWindowExW(
         0,
         cls_name,
-        "oyayubi-ime 試験窓",
+        "ゆらぎ 試験窓",
         WS_OVERLAPPEDWINDOW,
         origin,
         origin,

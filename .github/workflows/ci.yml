@@ -1,7 +1,7 @@
 # 毎回の push と PR で: Python の全試験、ブローカーの試験 (REDESIGN §5.7, §10)、
 # TIP の判断の試験 (§7.8)。
 # Linux ではブローカーを POSIX の層でビルドして偽エンジン・偽 TIP で動かし、
-# Windows では MSVC で本物の oyayubi-broker.exe を作って、名前付きパイプで同じ試験を
+# Windows では MSVC で本物の yuragi-broker.exe を作って、名前付きパイプで同じ試験を
 # 回す (ウィンドウが 1 枚も出ないことも数える)。
 name: ci
 
@@ -100,7 +100,7 @@ jobs:
       - name: ブローカーの §5.7 試験 (名前付きパイプ・ジョブ・ウィンドウ 0 枚)
         shell: pwsh
         env:
-          OYAYUBI_BROKER: ${{ github.workspace }}\dist\oyayubi-broker.exe
+          YURAGI_BROKER: ${{ github.workspace }}\dist\yuragi-broker.exe
         run: |
           python -m unittest -v tests.test_broker
           if ($LASTEXITCODE -ne 0) { throw "broker tests failed" }

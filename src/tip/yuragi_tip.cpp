@@ -1,4 +1,4 @@
-// oyayubi-ime TSF text service (REDESIGN §7).
+// yuragi-ime TSF text service (REDESIGN §7).
 //
 // The TIP runs inside other people's applications, so it does as little as
 // possible: it sends keys to the broker over a named pipe and writes the
@@ -37,8 +37,8 @@
 #include "tip_json.h"
 #include "tip_logic.h"
 
-#ifndef OYAYUBI_TAG
-#define OYAYUBI_TAG "dev"
+#ifndef YURAGI_TAG
+#define YURAGI_TAG "dev"
 #endif
 
 using tip_logic::Link;
@@ -47,18 +47,18 @@ using tip_logic::Mode;
 using tip_logic::Notice;
 
 // {A7C4E201-0B3A-4F11-9E61-0C1A0B7E0A01}
-static const CLSID CLSID_OyayubiTip = {
+static const CLSID CLSID_YuragiTip = {
     0xa7c4e201, 0x0b3a, 0x4f11, {0x9e, 0x61, 0x0c, 0x1a, 0x0b, 0x7e, 0x0a, 0x01}};
 // {A7C4E202-0B3A-4F11-9E61-0C1A0B7E0A01}
-static const GUID GUID_OyayubiProfile = {
+static const GUID GUID_YuragiProfile = {
     0xa7c4e202, 0x0b3a, 0x4f11, {0x9e, 0x61, 0x0c, 0x1a, 0x0b, 0x7e, 0x0a, 0x01}};
 // {A7C4E206-0B3A-4F11-9E61-0C1A0B7E0A01}
-static const GUID GUID_OyayubiToggle = {
+static const GUID GUID_YuragiToggle = {
     0xa7c4e206, 0x0b3a, 0x4f11, {0x9e, 0x61, 0x0c, 0x1a, 0x0b, 0x7e, 0x0a, 0x01}};
 // {A7C4E207-0B3A-4F11-9E61-0C1A0B7E0A01}
 // Alt+` on the Japanese 101 layout (kbd101.dll) reaches TSF as Alt+VK_KANJI,
 // never as VK_OEM_3, so the default toggle also preserves that alias.
-static const GUID GUID_OyayubiToggleKanji = {
+static const GUID GUID_YuragiToggleKanji = {
     0xa7c4e207, 0x0b3a, 0x4f11, {0x9e, 0x61, 0x0c, 0x1a, 0x0b, 0x7e, 0x0a, 0x01}};
 
 static const GUID kCats[] = {
@@ -74,17 +74,17 @@ static LONG g_locks = 0;
 static HINSTANCE g_hinst = nullptr;
 static bool g_log = false;  // tip.json "log": true
 
-static const wchar_t kProductKey[] = L"Software\\oyayubi-ime";
-static const wchar_t kSessionKey[] = L"Software\\oyayubi-ime\\Session";
-static const wchar_t kMaintenanceMutex[] = L"Local\\oyayubi-ime-maintenance";
-static const wchar_t kSpawnMutex[] = L"Local\\oyayubi-ime-spawn";
+static const wchar_t kProductKey[] = L"Software\\yuragi-ime";
+static const wchar_t kSessionKey[] = L"Software\\yuragi-ime\\Session";
+static const wchar_t kMaintenanceMutex[] = L"Local\\yuragi-ime-maintenance";
+static const wchar_t kSpawnMutex[] = L"Local\\yuragi-ime-spawn";
 
 // Only when tip.json asks for it: every application writes here.
 static void Log(const wchar_t* fmt, ...) {
     if (!g_log) return;
     wchar_t path[MAX_PATH];
     GetTempPathW(MAX_PATH, path);
-    wcscat_s(path, L"oyayubi_tip.log");
+    wcscat_s(path, L"yuragi_tip.log");
     FILE* f = nullptr;
     _wfopen_s(&f, path, L"ab");
     if (!f) return;
@@ -222,7 +222,7 @@ static bool ReadJsonFile(const std::wstring& path, tip_json::Value& value) {
     return tip_json::Parser(bytes).Parse(value) && value.kind == tip_json::Value::Object;
 }
 
-// %USERPROFILE%\.oyayubi-ime\tip.json (optional):
+// %USERPROFILE%\.yuragi-ime\tip.json (optional):
 //   {"toggle_vk":192,"toggle_mods":["alt"],"log":false,"log_text":false}
 struct TipConfig {
     UINT toggle_vk = VK_OEM_3;
@@ -233,7 +233,7 @@ struct TipConfig {
         DWORD n = GetEnvironmentVariableW(L"USERPROFILE", profile, MAX_PATH);
         if (!n || n >= MAX_PATH) return;
         tip_json::Value v;
-        if (!ReadJsonFile(std::wstring(profile) + L"\\.oyayubi-ime\\tip.json", v)) return;
+        if (!ReadJsonFile(std::wstring(profile) + L"\\.yuragi-ime\\tip.json", v)) return;
         int vk;
         if (tip_logic::ReadInt(v, "toggle_vk", vk) && vk > 0 && vk < 256) toggle_vk = (UINT)vk;
         const auto& mods = v.Get("toggle_mods");
@@ -257,7 +257,7 @@ struct TipConfig {
 // -- the broker: whether this process may start it (§7.3) --------------------------
 
 static std::wstring PipeName() {
-    std::wstring name = L"\\\\.\\pipe\\oyayubi-ime-";
+    std::wstring name = L"\\\\.\\pipe\\yuragi-ime-";
     HANDLE token = nullptr;
     if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
         DWORD size = 0;
@@ -283,7 +283,7 @@ static bool TagMatches() {
     if (RegGetValueW(HKEY_CURRENT_USER, kProductKey, L"Tag", RRF_RT_REG_SZ, nullptr, value, &size) !=
         ERROR_SUCCESS)
         return false;
-    return Utf8ToWide(OYAYUBI_TAG) == value;
+    return Utf8ToWide(YURAGI_TAG) == value;
 }
 
 static bool MaintenanceActive() {
@@ -317,7 +317,7 @@ static bool MediumIntegrity() {
 }
 
 // The spawn count of this sign-in, in a volatile key (gone at sign-out),
-// read and raised under Local\oyayubi-ime-spawn. Returns the decision.
+// read and raised under Local\yuragi-ime-spawn. Returns the decision.
 static tip_logic::SpawnDecision ClaimSpawn() {
     tip_logic::SpawnFacts facts;
     facts.tag_matches = TagMatches();
@@ -357,7 +357,7 @@ static tip_logic::SpawnDecision ClaimSpawn() {
 // away from the application's job, with no handles and the user's default
 // environment. A failure is not retried here (§7.3).
 static bool SpawnBroker() {
-    std::wstring exe = DllDir() + L"\\oyayubi-broker.exe";
+    std::wstring exe = DllDir() + L"\\yuragi-broker.exe";
     std::wstring command = L"\"" + exe + L"\"";
     LPVOID environment = nullptr;
     HANDLE token = nullptr;
@@ -483,7 +483,7 @@ private:
             }
             // The hello goes first; only then may the UI thread write (keys).
             HANDLE hello_done = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-            bool greeted = WriteTo(pipe, hello_done, tip_logic::Hello(OYAYUBI_TAG),
+            bool greeted = WriteTo(pipe, hello_done, tip_logic::Hello(YURAGI_TAG),
                                    tip_logic::KEY_BUDGET_MS);
             CloseHandle(hello_done);
             if (!greeted) {
@@ -632,7 +632,7 @@ public:
     }
     HRESULT STDMETHODCALLTYPE GetDescription(BSTR* b) override {
         if (!b) return E_POINTER;
-        const wchar_t* names[] = {L"NicolaIME input", L"NicolaIME converted", L"NicolaIME focused segment"};
+        const wchar_t* names[] = {L"yuragi input", L"yuragi converted", L"yuragi focused segment"};
         *b = SysAllocString(names[index_]); return *b ? S_OK : E_OUTOFMEMORY;
     }
     HRESULT STDMETHODCALLTYPE GetAttributeInfo(TF_DISPLAYATTRIBUTE* a) override {
@@ -1022,7 +1022,7 @@ static const wchar_t* NoticeText(Notice n) {
         case Notice::Preparing: return L"変換の準備をしています…";
         case Notice::Stopped: return L"日本語変換が止まっています。タスクバーの「!」を押してください";
         case Notice::TooLong: return L"長すぎます。いったん確定してください";
-        case Notice::Reopen: return L"oyayubi-ime を更新しました。このアプリを開き直すと使えます";
+        case Notice::Reopen: return L"ゆらぎを更新しました。このアプリを開き直すと使えます";
         case Notice::None: break;
     }
     return L"";
@@ -1273,8 +1273,8 @@ public:
     HRESULT STDMETHODCALLTYPE OnPreservedKey(ITfContext*, REFGUID guid, BOOL* e) override {
         if (!e) return E_INVALIDARG;
         *e = FALSE;
-        bool alias = guid == GUID_OyayubiToggleKanji;
-        if (guid != GUID_OyayubiToggle && !alias) return S_OK;
+        bool alias = guid == GUID_YuragiToggleKanji;
+        if (guid != GUID_YuragiToggle && !alias) return S_OK;
         if (!Eligible()) return S_OK;
         UINT vk = alias ? preserved_alias_.uVKey : settings_.toggle_vk;
         if (!ToggleKey(vk)) return S_OK;
@@ -1304,12 +1304,12 @@ public:
     // -- the taskbar item (§9.1, §9.4) ----------------------------------------------------
     HRESULT STDMETHODCALLTYPE GetInfo(TF_LANGBARITEMINFO* info) override {
         if (!info) return E_INVALIDARG;
-        info->clsidService = CLSID_OyayubiTip;
+        info->clsidService = CLSID_YuragiTip;
         info->guidItem = GUID_LBI_INPUTMODE;
         info->dwStyle = TF_LBI_STYLE_BTN_BUTTON | TF_LBI_STYLE_SHOWNINTRAY;
         info->ulSort = 0;
         wcsncpy_s(info->szDescription, ARRAYSIZE(info->szDescription),
-                  L"oyayubi-ime 入力モード", _TRUNCATE);
+                  L"ゆらぎ 入力モード", _TRUNCATE);
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE GetStatus(DWORD* status) override {
@@ -1323,12 +1323,12 @@ public:
         const wchar_t* text = L"";
         switch (CurrentMode()) {
             case Mode::Normal:
-                text = direct_ ? L"oyayubi-ime: 直接入力（クリックでかな入力）"
-                               : L"oyayubi-ime: かな入力（クリックで直接入力）";
+                text = direct_ ? L"ゆらぎ: 直接入力（クリックでかな入力）"
+                               : L"ゆらぎ: かな入力（クリックで直接入力）";
                 break;
-            case Mode::Preparing: text = L"oyayubi-ime: 変換の準備をしています"; break;
-            case Mode::Stopped: text = L"oyayubi-ime: 日本語変換が止まっています（右クリックで操作）"; break;
-            case Mode::Excluded: text = L"oyayubi-ime: このアプリでは日本語変換を使えません"; break;
+            case Mode::Preparing: text = L"ゆらぎ: 変換の準備をしています"; break;
+            case Mode::Stopped: text = L"ゆらぎ: 日本語変換が止まっています（右クリックで操作）"; break;
+            case Mode::Excluded: text = L"ゆらぎ: このアプリでは日本語変換を使えません"; break;
         }
         *tip = SysAllocString(text);
         return *tip ? S_OK : E_OUTOFMEMORY;
@@ -1464,7 +1464,7 @@ private:
         WNDCLASSW wc{};
         wc.lpfnWndProc = WindowProc;
         wc.hInstance = g_hinst;
-        wc.lpszClassName = L"OyayubiTip";
+        wc.lpszClassName = L"YuragiTip";
         RegisterClassW(&wc);
         hwnd_ = CreateWindowExW(0, wc.lpszClassName, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
                                 g_hinst, nullptr);
@@ -1790,18 +1790,18 @@ private:
         if (settings_.toggle_mods & 2) preserved_toggle_.uModifiers |= TF_MOD_CONTROL;
         if (settings_.toggle_mods & 4) preserved_toggle_.uModifiers |= TF_MOD_ALT;
         // TSF has no Win modifier flag; ToggleKey checks the full mask.
-        toggle_preserved_ = SUCCEEDED(km->PreserveKey(client_, GUID_OyayubiToggle,
+        toggle_preserved_ = SUCCEEDED(km->PreserveKey(client_, GUID_YuragiToggle,
                                                       &preserved_toggle_, nullptr, 0));
         if (UINT alias = ToggleAlias(settings_.toggle_vk, settings_.toggle_mods)) {
             preserved_alias_ = {alias, preserved_toggle_.uModifiers};
-            alias_preserved_ = SUCCEEDED(km->PreserveKey(client_, GUID_OyayubiToggleKanji,
+            alias_preserved_ = SUCCEEDED(km->PreserveKey(client_, GUID_YuragiToggleKanji,
                                                          &preserved_alias_, nullptr, 0));
         }
         km->Release();
     }
     void UnpreserveToggle(ITfKeystrokeMgr* km) {
-        if (alias_preserved_) km->UnpreserveKey(GUID_OyayubiToggleKanji, &preserved_alias_);
-        if (toggle_preserved_) km->UnpreserveKey(GUID_OyayubiToggle, &preserved_toggle_);
+        if (alias_preserved_) km->UnpreserveKey(GUID_YuragiToggleKanji, &preserved_alias_);
+        if (toggle_preserved_) km->UnpreserveKey(GUID_YuragiToggle, &preserved_toggle_);
         alias_preserved_ = toggle_preserved_ = false;
     }
 
@@ -1891,7 +1891,7 @@ private:
             HideCands();
             return;
         }
-        if (!cand_hwnd_) cand_hwnd_ = Popup(L"OyayubiCand", CandProc);
+        if (!cand_hwnd_) cand_hwnd_ = Popup(L"YuragiCand", CandProc);
         int rows = (int)cands_.size();
         // Placement and showing happen under an edit cookie (GetTextExt).
         SetWindowPos(cand_hwnd_, nullptr, 0, 0, Px(cand_hwnd_, 280),
@@ -2041,7 +2041,7 @@ void Tip::CheckScope() {
 void Tip::ShowNotice(Notice n) {
     if (!hwnd_) return;
     notice_ = n;
-    if (!notice_hwnd_) notice_hwnd_ = Popup(L"OyayubiNotice", NoticeProc);
+    if (!notice_hwnd_) notice_hwnd_ = Popup(L"YuragiNotice", NoticeProc);
     HDC dc = GetDC(notice_hwnd_);
     HFONT font = CreateFontW(Px(notice_hwnd_, 16), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                              SHIFTJIS_CHARSET, 0, 0, 0, 0, L"Yu Gothic UI");
@@ -2124,12 +2124,12 @@ static std::wstring GuidStr(const GUID& g) {
     return s;
 }
 
-static std::wstring ClsidKey() { return L"Software\\Classes\\CLSID\\" + GuidStr(CLSID_OyayubiTip); }
+static std::wstring ClsidKey() { return L"Software\\Classes\\CLSID\\" + GuidStr(CLSID_YuragiTip); }
 
 // The machine's registration only (every user's applications load the DLL).
 static HRESULT RegisterCom() {
     std::wstring clsid = ClsidKey();
-    HRESULT hr = SetSz(HKEY_LOCAL_MACHINE, clsid.c_str(), nullptr, L"NicolaIME");
+    HRESULT hr = SetSz(HKEY_LOCAL_MACHINE, clsid.c_str(), nullptr, L"ゆらぎ");
     if (FAILED(hr)) return hr;
     std::wstring inproc = clsid + L"\\InprocServer32";
     hr = SetSz(HKEY_LOCAL_MACHINE, inproc.c_str(), nullptr, DllPath().c_str());
@@ -2143,8 +2143,8 @@ static HRESULT RegisterCategories(BOOL add) {
                                   IID_ITfCategoryMgr, (void**)&cat);
     if (FAILED(hr)) return hr;
     for (const GUID& g : kCats) {
-        HRESULT one = add ? cat->RegisterCategory(CLSID_OyayubiTip, g, CLSID_OyayubiTip)
-                          : cat->UnregisterCategory(CLSID_OyayubiTip, g, CLSID_OyayubiTip);
+        HRESULT one = add ? cat->RegisterCategory(CLSID_YuragiTip, g, CLSID_YuragiTip)
+                          : cat->UnregisterCategory(CLSID_YuragiTip, g, CLSID_YuragiTip);
         if (FAILED(one) && SUCCEEDED(hr)) hr = one;
     }
     cat->Release();
@@ -2161,8 +2161,8 @@ static HRESULT RegisterProfile(BOOL add) {
     LANGID ja = MAKELANGID(LANG_JAPANESE, SUBLANG_JAPANESE_JAPAN);
     if (add) {
         std::wstring path = DllPath();
-        hr = mgr->RegisterProfile(CLSID_OyayubiTip, ja, GUID_OyayubiProfile, L"NicolaIME",
-                                  (ULONG)wcslen(L"NicolaIME"), path.c_str(), (ULONG)path.size(), 0,
+        hr = mgr->RegisterProfile(CLSID_YuragiTip, ja, GUID_YuragiProfile, L"ゆらぎ",
+                                  (ULONG)wcslen(L"ゆらぎ"), path.c_str(), (ULONG)path.size(), 0,
                                   nullptr, 0, TRUE, 0);
         mgr->Release();
         HRESULT categories = RegisterCategories(TRUE);
@@ -2171,7 +2171,7 @@ static HRESULT RegisterProfile(BOOL add) {
     // Categories first: UnregisterProfile deletes the TIP's whole key, categories
     // included, after which UnregisterCategory fails with E_FAIL.
     HRESULT categories = RegisterCategories(FALSE);
-    hr = mgr->UnregisterProfile(CLSID_OyayubiTip, ja, GUID_OyayubiProfile, TF_URP_ALLPROFILES);
+    hr = mgr->UnregisterProfile(CLSID_YuragiTip, ja, GUID_YuragiProfile, TF_URP_ALLPROFILES);
     mgr->Release();
     return FAILED(categories) ? categories : hr;
 }
@@ -2184,7 +2184,7 @@ BOOL APIENTRY DllMain(HINSTANCE h, DWORD reason, LPVOID) {
 STDAPI DllCanUnloadNow() { return g_locks ? S_FALSE : S_OK; }
 
 STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, void** ppv) {
-    if (!IsEqualCLSID(rclsid, CLSID_OyayubiTip)) return CLASS_E_CLASSNOTAVAILABLE;
+    if (!IsEqualCLSID(rclsid, CLSID_YuragiTip)) return CLASS_E_CLASSNOTAVAILABLE;
     auto* f = new Factory();
     HRESULT hr = f->QueryInterface(riid, ppv);
     f->Release();

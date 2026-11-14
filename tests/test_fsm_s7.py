@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # The 2026-11-11 laptop recording (40 sentences). data/recordings/ is not in
 # git (the user's own keystrokes); the tests that need it skip without it.
 STAGE1_LOG = Path(os.environ.get(
-    "OYAYUBI_STAGE1_LOG", ROOT / "data" / "recordings" / "stage1-20261111-213449.jsonl"))
+    "YURAGI_STAGE1_LOG", ROOT / "data" / "recordings" / "stage1-20261111-213449.jsonl"))
 
 
 def run(events, fsm=None):

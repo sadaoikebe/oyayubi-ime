@@ -417,7 +417,7 @@ class AdminWindow:
         self._comboboxes = []
         # Pixel sizes below are at 96 dpi; the window is dpi aware (declare_dpi_aware).
         self.scale = root.winfo_fpixels("1i") / 96
-        root.title("oyayubi-ime 設定")
+        root.title("ゆらぎ 設定")
         root.geometry(f"{self.px(860)}x{self.px(540)}")
         from tkinter import font
         line = font.nametofont("TkDefaultFont").metrics("linespace")
@@ -505,7 +505,7 @@ class AdminWindow:
 
     def _ask(self, question: str) -> bool:
         from tkinter import messagebox
-        return messagebox.askyesno("oyayubi-ime", question, parent=self.root)
+        return messagebox.askyesno("ゆらぎ", question, parent=self.root)
 
     # tabs
     def _words_tab(self, frame):

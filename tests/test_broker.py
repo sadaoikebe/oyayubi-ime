@@ -3,7 +3,7 @@
 POSIX: the broker is built here with CMake (src/broker) into build/broker. It
 is the same Broker core with a POSIX platform layer: a Unix domain socket
 stands for the named pipe, PR_SET_PDEATHSIG for the job object.
-Windows: OYAYUBI_BROKER names the built oyayubi-broker.exe; the TIP side is the
+Windows: YURAGI_BROKER names the built yuragi-broker.exe; the TIP side is the
 named pipe, and after every test no top-level window may belong to the broker
 or the processes it started.
 
@@ -38,18 +38,18 @@ WINDOWS = sys.platform == "win32"
 
 
 def broker_binary() -> Path:
-    """Build the broker once per test run (CMake, Release); on Windows, OYAYUBI_BROKER."""
+    """Build the broker once per test run (CMake, Release); on Windows, YURAGI_BROKER."""
     global _built
     if _built is None and WINDOWS:
-        if not os.environ.get("OYAYUBI_BROKER"):
-            raise AssertionError("set OYAYUBI_BROKER to the built oyayubi-broker.exe")
-        _built = Path(os.environ["OYAYUBI_BROKER"])
+        if not os.environ.get("YURAGI_BROKER"):
+            raise AssertionError("set YURAGI_BROKER to the built yuragi-broker.exe")
+        _built = Path(os.environ["YURAGI_BROKER"])
     if _built is None:
         subprocess.run(["cmake", "-S", str(SOURCE), "-B", str(BUILD),
                         "-DCMAKE_BUILD_TYPE=Release"], check=True, capture_output=True)
         subprocess.run(["cmake", "--build", str(BUILD), "-j", "4"], check=True,
                        capture_output=True)
-        _built = BUILD / "oyayubi-broker"
+        _built = BUILD / "yuragi-broker"
     return _built
 
 
@@ -217,7 +217,7 @@ class BrokerCase(unittest.TestCase):
         self.state = self.dir / "engine-state"
         self.state.mkdir()
         if WINDOWS:
-            self.address = rf"\\.\pipe\oyayubi-ime-test-{os.getpid()}-{id(self)}"
+            self.address = rf"\\.\pipe\yuragi-ime-test-{os.getpid()}-{id(self)}"
         else:
             self.address = str(self.dir / "broker.sock")
         self.engine_json = self.dir / "engine.json"
@@ -438,9 +438,9 @@ class ProcessTest(BrokerCase):
     def test_maintenance_lock_keeps_the_engine_from_starting(self):
         self.plan("normal")
         self.data.mkdir(parents=True)
-        if WINDOWS:  # §8.1: Local\oyayubi-ime-maintenance, as setup.ps1 holds it
+        if WINDOWS:  # §8.1: Local\yuragi-ime-maintenance, as setup.ps1 holds it
             import ctypes
-            mutex = ctypes.windll.kernel32.CreateMutexW(None, True, "Local\\oyayubi-ime-maintenance")
+            mutex = ctypes.windll.kernel32.CreateMutexW(None, True, "Local\\yuragi-ime-maintenance")
             self.addCleanup(ctypes.windll.kernel32.CloseHandle, mutex)
         else:
             import fcntl
@@ -479,7 +479,7 @@ class ProcessTest(BrokerCase):
         from yuragi.ime import broker_client
         sid = subprocess.run(["whoami", "/user", "/fo", "csv", "/nh"], capture_output=True,
                              text=True, check=True).stdout.strip().split(",")[-1].strip('"')
-        prefix = rf"\\.\pipe\oyayubi-ime-{sid}-"
+        prefix = rf"\\.\pipe\yuragi-ime-{sid}-"
         address = broker_client.pipe_address()
         self.assertTrue(address.startswith(prefix), address)
         self.assertTrue(address[len(prefix):].isdigit(), address)

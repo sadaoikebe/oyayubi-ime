@@ -45,7 +45,7 @@ EXIT_PROGRAM = 20
 EXIT_DICTIONARY = 21
 EXIT_CACHE = 22
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_DATA_DIR = Path.home() / ".oyayubi-ime"
+DEFAULT_DATA_DIR = Path.home() / ".yuragi-ime"
 # Warm-up input (§6.3): かいはつしてきた on the NICOLA-A plain layer, then Space.
 WARM_KEYS = (0x57, 0x4C, 0x48, 0x4F, 0x53, 0x44, 0x4B, 0x45)
 
@@ -139,7 +139,7 @@ def argument_parser() -> argparse.ArgumentParser:
                                      description=__doc__.splitlines()[0])
     parser.add_argument("--data-dir", type=Path, default=DEFAULT_DATA_DIR,
                         help="the user's data: config.json, learning.jsonl, "
-                             "personal_lexicon.jsonl (default ~/.oyayubi-ime)")
+                             "personal_lexicon.jsonl (default ~/.yuragi-ime)")
     parser.add_argument("--dict-dir", type=Path, default=None,
                         help="the Mozc dictionary files (default third_party/mozc_oss_dict)")
     parser.add_argument("--cache-dir", type=Path, default=None,

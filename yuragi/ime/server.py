@@ -95,7 +95,7 @@ def snapshot(sess: ImeSession, op) -> dict:
 def argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runtime-dir", type=Path, default=None,
-                        help="the user's data directory (default ~/.oyayubi-ime)")
+                        help="the user's data directory (default ~/.yuragi-ime)")
     parser.add_argument(
         "--log-text", action="store_true", help="log composition/commit text to stderr (private input)"
     )

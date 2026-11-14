@@ -1,13 +1,13 @@
-// oyayubi-broker.exe: the broker on Windows (REDESIGN §5).
+// yuragi-broker.exe: the broker on Windows (REDESIGN §5).
 //
-// One per sign-in (Local\oyayubi-ime-broker). No console; its only window is
+// One per sign-in (Local\yuragi-ime-broker). No console; its only window is
 // a hidden one for the notification icon. Everything else happens on one
 // thread around an I/O completion port: the TIPs' named pipe, the engine's
 // output (read by two threads that post each line), the engine's exit, the
 // notification clicks, and the Broker's timers.
 //
-//   oyayubi-broker.exe                     the normal start (Run key, or a TIP)
-//   oyayubi-broker.exe --selftest ENGINE_JSON
+//   yuragi-broker.exe                     the normal start (Run key, or a TIP)
+//   yuragi-broker.exe --selftest ENGINE_JSON
 //   test/development overrides: --engine-json PATH --data-dir DIR --pipe NAME --test-hooks
 #include <windows.h>
 
@@ -33,20 +33,20 @@
 #include "broker_core.h"
 #include "support.h"
 
-#ifndef OYAYUBI_TAG
-#define OYAYUBI_TAG "dev"
+#ifndef YURAGI_TAG
+#define YURAGI_TAG "dev"
 #endif
 
 namespace broker {
 namespace {
 
-constexpr wchar_t BROKER_MUTEX[] = L"Local\\oyayubi-ime-broker";
-constexpr wchar_t MAINTENANCE_MUTEX[] = L"Local\\oyayubi-ime-maintenance";
-constexpr wchar_t SPAWN_MUTEX[] = L"Local\\oyayubi-ime-spawn";
-constexpr wchar_t PRODUCT_KEY[] = L"Software\\oyayubi-ime";
-constexpr wchar_t SESSION_KEY[] = L"Software\\oyayubi-ime\\Session";
+constexpr wchar_t BROKER_MUTEX[] = L"Local\\yuragi-ime-broker";
+constexpr wchar_t MAINTENANCE_MUTEX[] = L"Local\\yuragi-ime-maintenance";
+constexpr wchar_t SPAWN_MUTEX[] = L"Local\\yuragi-ime-spawn";
+constexpr wchar_t PRODUCT_KEY[] = L"Software\\yuragi-ime";
+constexpr wchar_t SESSION_KEY[] = L"Software\\yuragi-ime\\Session";
 constexpr wchar_t INSTALL_HELP[] =
-    L"https://github.com/sadaoikebe/oyayubi-ime/blob/main/docs/INSTALL.md";
+    L"https://github.com/sadaoikebe/yuragi-ime/blob/main/docs/INSTALL.md";
 constexpr DWORD PIPE_BUFFER = 64 * 1024;
 constexpr UINT WM_APP_NOTICE = WM_APP + 1;
 constexpr UINT WM_APP_CLEAR = WM_APP + 2;
@@ -121,7 +121,7 @@ std::wstring UserSid() {
 std::wstring DefaultPipeName() {
     DWORD session = 0;
     ProcessIdToSessionId(GetCurrentProcessId(), &session);
-    return L"\\\\.\\pipe\\oyayubi-ime-" + UserSid() + L"-" + std::to_wstring(session);
+    return L"\\\\.\\pipe\\yuragi-ime-" + UserSid() + L"-" + std::to_wstring(session);
 }
 
 std::wstring ReadTag() {
@@ -254,7 +254,7 @@ struct Texts {
 };
 
 Texts TextsFor(const Notice& n) {
-    const wchar_t* stopped_title = L"oyayubi-ime: 日本語変換が止まりました";
+    const wchar_t* stopped_title = L"ゆらぎ: 日本語変換が止まりました";
     const wchar_t* stopped_body =
         L"入力済みの文字はそのまま残っています。ここを押すと、原因と直し方を表示します。";
     if (n.stopped) {
@@ -275,21 +275,21 @@ Texts TextsFor(const Notice& n) {
         }
     }
     if (n.warning == "config")
-        return {L"oyayubi-ime: 設定ファイルを読めませんでした", L"標準の設定で動いています。",
-                L"設定ファイル（.oyayubi-ime\\config.json）の一部を読めませんでした。"
+        return {L"ゆらぎ: 設定ファイルを読めませんでした", L"標準の設定で動いています。",
+                L"設定ファイル（.yuragi-ime\\config.json）の一部を読めませんでした。"
                 L"読めなかった項目は標準の値で動いています。設定ウィンドウの「設定」タブで直せます。"};
     if (n.warning == "lm")
-        return {L"oyayubi-ime: 言語モデルを使えません", L"辞書だけで変換しています。",
+        return {L"ゆらぎ: 言語モデルを使えません", L"辞書だけで変換しています。",
                 L"変換の候補を選び直す言語モデルを読み込めませんでした。"
                 L"辞書だけで変換しています。入れ直すと直ることがあります。"};
     if (n.warning == "learning-read")
-        return {L"oyayubi-ime: 学習の記録を読めませんでした", L"学習なしで動いています。",
-                L"学習の記録（.oyayubi-ime\\learning.jsonl）を読めませんでした。"
+        return {L"ゆらぎ: 学習の記録を読めませんでした", L"学習なしで動いています。",
+                L"学習の記録（.yuragi-ime\\learning.jsonl）を読めませんでした。"
                 L"ほかのプログラムが開いている可能性があります。次に起動したとき、もう一度読みます。"};
     if (n.warning == "learning-write")
-        return {L"oyayubi-ime: 学習を保存できませんでした", L"覚えた内容はこの間だけ有効です。",
+        return {L"ゆらぎ: 学習を保存できませんでした", L"覚えた内容はこの間だけ有効です。",
                 L"学習の記録を書き込めませんでした。ディスクの空きを確認してください。"};
-    return {L"oyayubi-ime: 注意", L"", L""};
+    return {L"ゆらぎ: 注意", L"", L""};
 }
 
 class NotifyUi {
@@ -320,10 +320,10 @@ private:
         wc.cbSize = sizeof wc;
         wc.lpfnWndProc = &NotifyUi::Proc;
         wc.hInstance = instance;
-        wc.lpszClassName = L"oyayubi-ime-broker";
+        wc.lpszClassName = L"yuragi-ime-broker";
         RegisterClassExW(&wc);
         // Never shown: it exists to receive the notification icon's messages.
-        hwnd_ = CreateWindowExW(0, wc.lpszClassName, L"oyayubi-ime", WS_OVERLAPPED, 0, 0, 0, 0,
+        hwnd_ = CreateWindowExW(0, wc.lpszClassName, L"ゆらぎ", WS_OVERLAPPED, 0, 0, 0, 0,
                                 nullptr, nullptr, instance, this);
         taskbar_created_ = RegisterWindowMessageW(L"TaskbarCreated");
         SetEvent(created);
@@ -398,7 +398,7 @@ private:
         nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP | NIF_SHOWTIP | NIF_INFO;
         nid.uCallbackMessage = WM_APP_TRAY;
         nid.hIcon = LoadIconW(nullptr, notice.stopped ? IDI_WARNING : IDI_INFORMATION);
-        wcsncpy_s(nid.szTip, L"oyayubi-ime", _TRUNCATE);
+        wcsncpy_s(nid.szTip, L"ゆらぎ", _TRUNCATE);
         wcsncpy_s(nid.szInfoTitle, t.title, _TRUNCATE);
         std::wstring body = t.body;
         if (!notice.stopped) body += L"変換は使えます。ここを押すと詳しく表示します。";
@@ -440,9 +440,9 @@ private:
         TASKDIALOGCONFIG config = {};
         config.cbSize = sizeof config;
         config.dwFlags = TDF_ALLOW_DIALOG_CANCELLATION | TDF_USE_COMMAND_LINKS;
-        config.pszWindowTitle = L"oyayubi-ime";
+        config.pszWindowTitle = L"ゆらぎ";
         config.pszMainIcon = current_.stopped ? TD_WARNING_ICON : TD_INFORMATION_ICON;
-        config.pszMainInstruction = t.title + wcslen(L"oyayubi-ime: ");
+        config.pszMainInstruction = t.title + wcslen(L"ゆらぎ: ");
         config.pszContent = t.detail;
         config.pButtons = buttons.data();
         config.cButtons = (UINT)buttons.size();
@@ -913,7 +913,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     using namespace broker;
     int argc = 0;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-    fs::path data_dir = KnownFolder(FOLDERID_Profile) / L".oyayubi-ime";
+    fs::path data_dir = KnownFolder(FOLDERID_Profile) / L".yuragi-ime";
     fs::path engine_json, selftest;
     std::wstring pipe_name;
     bool test_hooks = false;
@@ -951,15 +951,15 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     if (engine_json.empty()) {
         // §5.2: only the version this user has installed runs.
         std::wstring tag = ReadTag();
-        if (tag != Wide(OYAYUBI_TAG)) return 0;
-        engine_json = KnownFolder(FOLDERID_LocalAppData) / L"oyayubi-ime" / L"versions" / tag /
+        if (tag != Wide(YURAGI_TAG)) return 0;
+        engine_json = KnownFolder(FOLDERID_LocalAppData) / L"yuragi-ime" / L"versions" / tag /
                       L"engine.json";
     }
     EngineConfig config;
     std::string error;
     bool installed = ReadEngineConfig(engine_json, config, error);
     WinPlatform platform(data_dir, config, installed);
-    platform.Log(std::string("broker ") + OYAYUBI_TAG + " start pid " +
+    platform.Log(std::string("broker ") + YURAGI_TAG + " start pid " +
                  std::to_string(GetCurrentProcessId()));
     if (!installed) platform.Log(error + " (not installed for this user)");
     if (pipe_name.empty()) pipe_name = DefaultPipeName();

@@ -1,7 +1,7 @@
 """The management tools' line to the broker (REDESIGN §9.4): its state, and "retry".
 
-The broker listens on \\\\.\\pipe\\oyayubi-ime-<user SID>-<session> (on POSIX, where
-only the tests run it, ~/.oyayubi-ime/broker.sock). These functions connect,
+The broker listens on \\\\.\\pipe\\yuragi-ime-<user SID>-<session> (on POSIX, where
+only the tests run it, ~/.yuragi-ime/broker.sock). These functions connect,
 say hello as a TIP would, and either read the state or ask for a retry (which
 also restarts a running engine, so that new settings are read). Nothing here
 starts anything.
@@ -19,7 +19,7 @@ HELLO = {"op": "hello", "proto": 1, "tag": "manage", "bits": 64}
 
 def pipe_address() -> str:
     if os.name != "nt":
-        return str(Path.home() / ".oyayubi-ime" / "broker.sock")
+        return str(Path.home() / ".yuragi-ime" / "broker.sock")
     import ctypes
     from ctypes import wintypes
     advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
@@ -57,7 +57,7 @@ def pipe_address() -> str:
         kernel32.CloseHandle(token)
     session = wintypes.DWORD()
     kernel32.ProcessIdToSessionId(os.getpid(), ctypes.byref(session))
-    return rf"\\.\pipe\oyayubi-ime-{sid}-{session.value}"
+    return rf"\\.\pipe\yuragi-ime-{sid}-{session.value}"
 
 
 class _Connection:

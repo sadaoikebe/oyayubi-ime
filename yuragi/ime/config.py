@@ -1,11 +1,11 @@
 """One settings file for the conversion server (S1).
 
-~/.oyayubi-ime/config.json holds any of the server's options under their
+~/.yuragi-ime/config.json holds any of the server's options under their
 command-line names (lm_deadline_ms for --lm-deadline-ms). A value in the file
 replaces the built-in default; an option given on the command line still wins.
 No file means the built-in defaults, exactly as before.
 
-The TIP keeps its own ~/.oyayubi-ime/tip.json (read by the C++ side); the
+The TIP keeps its own ~/.yuragi-ime/tip.json (read by the C++ side); the
 settings inventory below lists both so there is one place to look.
 
   python -m yuragi.ime.manage config show   # effective values and their source
@@ -22,7 +22,7 @@ import os
 from pathlib import Path
 import sys
 
-DEFAULT_RUNTIME_DIR = Path.home() / ".oyayubi-ime"  # the user's data: config.json, logs, ...
+DEFAULT_RUNTIME_DIR = Path.home() / ".yuragi-ime"  # the user's data: config.json, logs, ...
 CONFIG_NAME = "config.json"
 
 LEARNING_MODES = ("on", "paused", "off")  # config.json "learning" (REDESIGN §6.7)

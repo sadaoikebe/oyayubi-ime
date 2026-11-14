@@ -3,7 +3,7 @@
 Each test starts ``python -m yuragi.engine`` with pipes and the broker's
 environment, and talks the line protocol. The real dictionary is used (as for
 the other session tests); the LM is used when torch and a local model are
-present (OYAYUBI_LM_MODEL=<model directory>), otherwise the engine reports the
+present (YURAGI_LM_MODEL=<model directory>), otherwise the engine reports the
 "lm" warning and converts without it.
 """
 from __future__ import annotations
@@ -125,7 +125,7 @@ class EngineCase(unittest.TestCase):
         return engine
 
     def write_config(self, values: dict) -> None:
-        model = os.environ.get("OYAYUBI_LM_MODEL")
+        model = os.environ.get("YURAGI_LM_MODEL")
         if model:
             values = {"lm_model": model, **values}
         (self.data / "config.json").write_text(json.dumps(values), encoding="utf-8")
@@ -258,7 +258,7 @@ SHIM = r"""
 #include <sys/socket.h>
 #include <unistd.h>
 static void note(const char *what, int family) {
-    const char *path = getenv("OYAYUBI_NET_LOG");
+    const char *path = getenv("YURAGI_NET_LOG");
     if (!path) return;
     int fd = open(path, O_WRONLY | O_APPEND | O_CREAT, 0600);
     if (fd < 0) return;
@@ -307,7 +307,7 @@ class NetworkTest(EngineCase):
         env = {}
         shim = self.build_shim()
         if shim is not None:
-            env.update(LD_PRELOAD=str(shim), OYAYUBI_NET_LOG=str(native))
+            env.update(LD_PRELOAD=str(shim), YURAGI_NET_LOG=str(native))
         engine = self.start(command=[sys.executable, "-c", AUDIT_RUNNER, str(events)], env=env)
         engine.wait_ready()
         engine.send({"op": "open", "sid": 1})

@@ -1,10 +1,10 @@
-﻿# oyayubi-ime のインストールと更新 (REDESIGN §8.2、docs/INSTALL.md)
+﻿# yuragi-ime のインストールと更新 (REDESIGN §8.2、docs/INSTALL.md)
 #
 #   powershell -ExecutionPolicy Bypass -File setup.ps1 [-Yes]
 #
 # インストールも更新も同じ手順。アプリを開いたままでよい。どこで失敗しても
 # 「前の版が動く」か「新しい版が動く」のどちらか (I-5)。
-#   1 保守中の印を立てる (Local\oyayubi-ime-maintenance。この PowerShell が終われば消える)
+#   1 保守中の印を立てる (Local\yuragi-ime-maintenance。この PowerShell が終われば消える)
 #   2 staging\<tag> に取得・照合・展開。足りない共有物 (ランタイム・辞書・モデル) だけ作る
 #   3 本物のブローカーで試運転 (--selftest)
 #   4 staging\<tag> を versions\<tag> へ
@@ -12,7 +12,7 @@
 #   6 旧ブローカーに quit、HKCU の Tag と Run キー、言語一覧、利用者データの移動 (初回のみ)
 #   7 印を下ろし、新ブローカーを起動して ready を確認
 #   8 使われていないものの片付け (失敗しても次回また試す)
-# 利用者のデータ (%USERPROFILE%\.oyayubi-ime) は移すだけで、消さない (I-7)。
+# 利用者のデータ (%USERPROFILE%\.yuragi-ime) は移すだけで、消さない (I-7)。
 
 param(
     [switch]$Yes
@@ -32,20 +32,22 @@ $env:PYTHONUTF8 = "1"
 $env:PYTHONIOENCODING = "utf-8"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-$Repo = "sadaoikebe/oyayubi-ime"
+$Repo = "sadaoikebe/yuragi-ime"
 $Tag = "__TAG__"                         # リリース時に workflow が刻む
 $EmbedPythonVersion = "3.13.7"
 $EmbedPythonSha256 = "__EMBED_SHA256__"  # 同上 (python.org の公式 zip の SHA-256)
 $TorchVersion = "2.9.1"
-$Local = Join-Path $env:LOCALAPPDATA "oyayubi-ime"
+$Local = Join-Path $env:LOCALAPPDATA "yuragi-ime"
 $Shared = Join-Path $Local "shared"
 $Versions = Join-Path $Local "versions"
 $StagingRoot = Join-Path $Local "staging"
-$ProgramRoot = Join-Path $env:ProgramFiles "oyayubi-ime"
-$UserData = Join-Path $env:USERPROFILE ".oyayubi-ime"
+$ProgramRoot = Join-Path $env:ProgramFiles "yuragi-ime"
+$UserData = Join-Path $env:USERPROFILE ".yuragi-ime"
+# 旧名 (oyayubi-ime) の版の置き場所。移行と旧版の片付けにだけ使う。
+$OldLocal = Join-Path $env:LOCALAPPDATA "oyayubi-ime"
 $Clsid = "{A7C4E201-0B3A-4F11-9E61-0C1A0B7E0A01}"
 $Layout = "0x0411:$Clsid{A7C4E202-0B3A-4F11-9E61-0C1A0B7E0A01}"
-$ProductKey = "HKCU:\Software\oyayubi-ime"
+$ProductKey = "HKCU:\Software\yuragi-ime"
 $RunKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
 # python -m の代わり: 同梱ランタイムは ._pth があるので作業フォルダを import 経路に入れない。
 $Boot = "import os,sys,runpy; sys.path.insert(0, os.getcwd()); m = sys.argv.pop(1); runpy.run_module(m, run_name='__main__', alter_sys=True)"
@@ -73,10 +75,10 @@ if ($Tag -like "__*" -or $EmbedPythonSha256 -like "__*") {
     Fail "この setup.ps1 にはリリースの刻印がありません。リリースページの setup.ps1 を使ってください。"
 }
 $createdNew = $false
-$maintenance = New-Object System.Threading.Mutex($true, "Local\oyayubi-ime-maintenance", [ref]$createdNew)
+$maintenance = New-Object System.Threading.Mutex($true, "Local\yuragi-ime-maintenance", [ref]$createdNew)
 if (-not $createdNew) { Fail "別のインストールかアンインストールが動いています。終わってから実行してください。" }
 
-Say "oyayubi-ime $Tag のインストール"
+Say "ゆらぎ $Tag のインストール"
 Say ""
 Say "== 環境チェック"
 $arch = $env:PROCESSOR_ARCHITECTURE
@@ -143,12 +145,12 @@ if (Test-Path -LiteralPath $Stage) { Remove-Item -LiteralPath $Stage -Recurse -F
 $Download = Join-Path $Stage "download"
 New-Item -ItemType Directory -Force $Download | Out-Null
 $baseUrl = "https://github.com/$Repo/releases/download/$Tag"
-$sourceZip = Join-Path $Download "oyayubi-ime-source.zip"
-$dllPath = Join-Path $Download "NicolaIME3.dll"
-$brokerPath = Join-Path $Download "oyayubi-broker.exe"
-[void](Get-Verified "$baseUrl/oyayubi-ime-source.zip" $sourceZip)
-$DllSha = Get-Verified "$baseUrl/NicolaIME3.dll" $dllPath
-$BrokerSha = Get-Verified "$baseUrl/oyayubi-broker.exe" $brokerPath
+$sourceZip = Join-Path $Download "yuragi-ime-source.zip"
+$dllPath = Join-Path $Download "yuragi_tip.dll"
+$brokerPath = Join-Path $Download "yuragi-broker.exe"
+[void](Get-Verified "$baseUrl/yuragi-ime-source.zip" $sourceZip)
+$DllSha = Get-Verified "$baseUrl/yuragi_tip.dll" $dllPath
+$BrokerSha = Get-Verified "$baseUrl/yuragi-broker.exe" $brokerPath
 $StageApp = Join-Path $Stage "app"
 Expand-Archive -LiteralPath $sourceZip -DestinationPath $StageApp
 
@@ -225,7 +227,7 @@ Say "  試運転 OK"
 function Connect-Broker([int]$timeoutMs) {
     $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
     $session = (Get-Process -Id $PID).SessionId
-    $pipe = New-Object System.IO.Pipes.NamedPipeClientStream(".", "oyayubi-ime-$sid-$session", [IO.Pipes.PipeDirection]::InOut)
+    $pipe = New-Object System.IO.Pipes.NamedPipeClientStream(".", "yuragi-ime-$sid-$session", [IO.Pipes.PipeDirection]::InOut)
     try { $pipe.Connect($timeoutMs) } catch { $pipe.Dispose(); return $null }
     $writer = New-Object IO.StreamWriter($pipe, $Utf8NoBom)
     $writer.AutoFlush = $true
@@ -247,7 +249,7 @@ function Stop-Broker {
         $conn.Pipe.Dispose()
     }
     $session = (Get-Process -Id $PID).SessionId
-    $brokers = @(Get-Process -Name "oyayubi-broker" -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq $session })
+    $brokers = @(Get-Process -Name "yuragi-broker" -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq $session })
     foreach ($b in $brokers) {
         if (-not $b.WaitForExit(15000)) {
             Say "  ブローカーが終わらないので終了させます (PID $($b.Id))。"
@@ -275,7 +277,7 @@ Write-EngineJson (Join-Path $Version "engine.json") $App @()
 # ---------------------------------------------------------------- 5 管理者権限
 # v0.1.0 の旧配置 (%LOCALAPPDATA%\oyayubi-ime\app) は、その DLL を読み込んだアプリが
 # 残っていれば、次の Windows 起動時に消す (今消すと旧 DLL が壊れたサーバーを起動し続ける)。
-$OldApp = Join-Path $Local "app"
+$OldApp = Join-Path $OldLocal "app"
 $leftover = ""
 if (Test-Path -LiteralPath $OldApp) { $leftover = $OldApp }
 
@@ -291,7 +293,7 @@ $ElevatedPath = Join-Path $App "packaging\elevated.ps1"   # from the verified so
 $ElevatedSha = (Get-FileHash -LiteralPath $ElevatedPath -Algorithm SHA256).Hash.ToLower()
 function Invoke-Elevated([string[]]$arguments) {
     $script = [IO.File]::ReadAllText($ElevatedPath)
-    $resultFile = Join-Path $env:TEMP ("oyayubi-elevated-" + [Guid]::NewGuid().ToString("N") + ".json")
+    $resultFile = Join-Path $env:TEMP ("yuragi-elevated-" + [Guid]::NewGuid().ToString("N") + ".json")
     $encoded = New-ElevatedCommand $script ($arguments + @("-ResultFile", $resultFile))
     try {
         $p = Start-Process "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Verb RunAs -Wait -PassThru `
@@ -307,13 +309,13 @@ function Invoke-Elevated([string[]]$arguments) {
 
 Say ""
 Say "== 配置と登録 (管理者権限の確認が 1 回出ます)"
-$result = Invoke-Elevated @("-Action", "install", "-Tag", $Tag, "-DllSource", (Join-Path $Version "download\NicolaIME3.dll"),
-    "-DllSha256", $DllSha, "-BrokerSource", (Join-Path $Version "download\oyayubi-broker.exe"),
+$result = Invoke-Elevated @("-Action", "install", "-Tag", $Tag, "-DllSource", (Join-Path $Version "download\yuragi_tip.dll"),
+    "-DllSha256", $DllSha, "-BrokerSource", (Join-Path $Version "download\yuragi-broker.exe"),
     "-BrokerSha256", $BrokerSha, "-ScriptSource", $ElevatedPath, "-ScriptSha256", $ElevatedSha,
     "-Leftover", $leftover)
 if (-not $result.ok) { Fail "配置と登録に失敗しました: $($result.message)" }
-$DllFinal = Join-Path $ProgramRoot "$Tag\NicolaIME3.dll"
-$BrokerFinal = Join-Path $ProgramRoot "$Tag\oyayubi-broker.exe"
+$DllFinal = Join-Path $ProgramRoot "$Tag\yuragi_tip.dll"
+$BrokerFinal = Join-Path $ProgramRoot "$Tag\yuragi-broker.exe"
 # I-6: 「登録した」と言うのは、読み返して確かめてから。
 $registered = (Get-ItemProperty -LiteralPath "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Classes\CLSID\$Clsid\InprocServer32" -ErrorAction SilentlyContinue).'(default)'
 if ($registered -ne $DllFinal) { Fail "登録を読み返すと $registered でした ($DllFinal のはず)。" }
@@ -326,18 +328,18 @@ Say "== 切り替え"
 Stop-Broker
 New-Item -Force $ProductKey | Out-Null
 Set-ItemProperty -LiteralPath $ProductKey -Name "Tag" -Value $Tag
-Set-ItemProperty -LiteralPath $RunKey -Name "oyayubi-ime" -Value "`"$BrokerFinal`""
+Set-ItemProperty -LiteralPath $RunKey -Name "yuragi-ime" -Value "`"$BrokerFinal`""
 if ((Get-ItemProperty -LiteralPath $ProductKey).Tag -ne $Tag) { Fail "HKCU の Tag を書けませんでした。" }
 # 旧版 (v0.1.0) が利用者側に書いた COM 登録は、HKLM の登録より優先されるので消す。
 $oldUserClsid = "HKCU:\Software\Classes\CLSID\$Clsid"
 if (Test-Path -LiteralPath $oldUserClsid) { Remove-Item -LiteralPath $oldUserClsid -Recurse -Force }
-Add-Type -Namespace OyayubiSetup -Name Input -MemberDefinition @'
+Add-Type -Namespace YuragiSetup -Name Input -MemberDefinition @'
 [DllImport("input.dll", CharSet = CharSet.Unicode)]
 public static extern bool InstallLayoutOrTip(string profile, uint flags);
 '@
-if (-not [OyayubiSetup.Input]::InstallLayoutOrTip($Layout, 0)) { Fail "言語一覧に追加できませんでした。" }
+if (-not [YuragiSetup.Input]::InstallLayoutOrTip($Layout, 0)) { Fail "言語一覧に追加できませんでした。" }
 
-# 学習履歴と個人辞書は %USERPROFILE%\.oyayubi-ime へ (A-15、§4.2)。移すだけで消さない。
+# 学習履歴と個人辞書は %USERPROFILE%\.yuragi-ime へ (A-15、§4.2)。移すだけで消さない。
 New-Item -ItemType Directory -Force $UserData | Out-Null
 $configPath = Join-Path $UserData "config.json"
 $oldData = Join-Path $OldApp "data"
@@ -425,7 +427,7 @@ foreach ($item in $cleanup) {
     try { Remove-Item -LiteralPath $item.FullName -Recurse -Force -ErrorAction Stop } catch { $left += $item.FullName }
 }
 foreach ($old in @("install-manifest.json")) {
-    $path = Join-Path $Local $old
+    $path = Join-Path $OldLocal $old
     if ((Test-Path -LiteralPath $path) -and -not (Test-Path -LiteralPath $OldApp)) { Remove-Item -LiteralPath $path -Force }
 }
 
@@ -436,7 +438,7 @@ if ($pendingDelete.Count) {
     Say "  旧版のファイルが $($pendingDelete.Count) 個、使用中のため残っています。次に Windows を起動したとき自動で消えます。"
 }
 if ($left.Count) { Say "  片付けられなかったもの ($($left.Count) 件) は、次の setup でまた片付けます。" }
-Say "入力切替 (Win+Space) で oyayubi-ime を選ぶと、タスクバーに「あ」が出ます。"
+Say "入力切替 (Win+Space) で「ゆらぎ」を選ぶと、タスクバーに「あ」が出ます。"
 Say "開いていたアプリもそのまま使えます。"
 Say "更新: このコマンドをもう一度実行してください。"
 Say "アンインストール: powershell -ExecutionPolicy Bypass -File `"$(Join-Path $App 'packaging\uninstall.ps1')`""

@@ -1,4 +1,4 @@
-LIBRARY oyayubi_tip
+LIBRARY yuragi_tip
 EXPORTS
     DllCanUnloadNow PRIVATE
     DllGetClassObject PRIVATE
