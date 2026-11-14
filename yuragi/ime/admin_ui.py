@@ -29,6 +29,9 @@ from .learning import LearningStore
 
 POS_NAMES = list(personal.POS_IDS)
 RESTART_NOTE = "変換エンジンを再起動すると反映されます（「状態」タブ）。"
+# The product icon (assets/icon/THEME.md). The installed app is the source tree,
+# so the same relative place holds there too.
+ICON = Path(__file__).resolve().parents[2] / "assets" / "icon" / "yuragi.ico"
 
 
 @dataclass(frozen=True)
@@ -418,6 +421,8 @@ class AdminWindow:
         # Pixel sizes below are at 96 dpi; the window is dpi aware (declare_dpi_aware).
         self.scale = root.winfo_fpixels("1i") / 96
         root.title("ゆらぎ 設定")
+        if sys.platform == "win32":  # .ico is a Windows icon; Tk elsewhere keeps its own
+            root.iconbitmap(default=str(ICON))  # default: the dialogs get it too
         root.geometry(f"{self.px(860)}x{self.px(540)}")
         from tkinter import font
         line = font.nametofont("TkDefaultFont").metrics("linespace")

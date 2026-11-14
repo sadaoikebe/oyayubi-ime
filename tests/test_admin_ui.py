@@ -316,6 +316,12 @@ class WidgetLayerTest(Base):
         self.assertEqual(w.px(100), 150)
         return w
 
+    def test_window_icon_is_the_product_icon(self):
+        self.assertTrue(admin_ui.ICON.is_file())
+        with mock.patch.object(admin_ui.sys, "platform", "win32"):
+            w = self.window()
+        w.root.iconbitmap.assert_called_once_with(default=str(admin_ui.ICON))
+
     @staticmethod
     def select(w, tree, values):
         w._fill(tree, [("other", "row"), values])
