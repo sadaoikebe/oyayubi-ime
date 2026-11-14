@@ -31,7 +31,7 @@
 | TSF | Notepad で「ゆらぎ」として打てる。`かえる`（W 単独→Space+W→Space+I）で「か」が残る |
 | 変換エンジンとブローカー | 2026-11 の全体再設計（[REDESIGN.md](REDESIGN.md)）で置き換えた。サインインごとに 1 つのブローカー（`yuragi-broker.exe`）が、エンジン（`python -m yuragi.engine`、標準入出力）を起動・見張りし、TIP とは名前付きパイプで話す。TIP はプロセスを起動しない（ブローカーが消えたときだけ、条件付きで 1 回）。旧 `--resident`（loopback TCP）は削除 |
 | 管理 | 単語登録・学習の管理・設定・状態を、設定ウィンドウ（`python -m yuragi.ime.admin_ui`）と端末（`python -m yuragi.ime.manage`）の両方から扱える。両者は同じ関数で同じファイルを触る |
-| インストール | 設計は docs/INSTALL.md。持ち込むのは小さな `packaging/setup.ps1` だけで、環境チェック（Python の有無・版・場所、空き容量、取得先への接続。不合格でも入れられるものは承認を取って公式の方法で入れる）→ 本体と DLL を GitHub Releases から SHA-256 照合つきで取得 → 専用 venv（無ければ同梱 Python）へ LM 込みで構築 → 登録 → 実辞書スモークまで自動。再実行はそのまま更新になる（学習データ等は保持、辞書キャッシュは作り直し）。`uninstall.ps1` は完全削除が既定（-KeepData で学習データ等だけ退避）。リリースは `.github/workflows/release.yml` が DLL ビルド・依存ピン留め・モデル固定リビジョン・setup 構文を検証してから公開する。旧「全部同梱 zip」方式は廃止。実機での setup 実行は未実施 |
+| インストール | 手順と置き場所は [INSTALL.md](INSTALL.md)、設計は [REDESIGN.md](REDESIGN.md) §4・§8。インストール・更新はリリースの `setup.ps1`、アンインストールはリリースの `uninstall.ps1`（`packaging/uninstall-entry.ps1`。入っている版の `packaging/uninstall.ps1` を呼ぶ）を、README の1行ずつで取得して実行する。学習データ・登録単語・設定（`%USERPROFILE%\.yuragi-ime`）は更新でもアンインストールでも残し、消すのは `-RemoveData` のときだけ。リリースは `.github/workflows/release.yml` がビルド・試験・依存ピン留め・モデル固定リビジョン・スクリプト構文を検証してから公開し、まっさらなランナーで入れて消す。使う人向けの説明は [USAGE.md](USAGE.md) |
 | 登録 | `ITfInputProcessorProfileMgr` のみ。日本語の第 2 IME。Alt+Shift は言語巡回なので Microsoft IME が当たる。切替は Win+Space かトレイ |
 
 試験窓: `python -m yuragi.ime.host_win32`（TSF を通さない）。
