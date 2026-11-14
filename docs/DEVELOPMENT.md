@@ -77,7 +77,8 @@ TIP は [`src/tip/README.md`](../src/tip/README.md)、ブローカーは [`src/b
 
 ## ライセンス
 
-自前のコードは [MIT](../LICENSE)。Mozc の OSS 辞書（実行時に取得する本体と、同梱の `suffix.txt` など）は
+自前のコードは [MIT](../LICENSE)。Mozc の OSS 辞書（`suffix.txt`・`id.def`・README も含めて全部取得物で、git には無い）は
 Google の BSD-3-Clause に加え、IPAdic（NAIST / ICOT）と沖縄辞書の条件が付きます。
-条文は [NOTICE.md](../NOTICE.md) と `third_party/mozc_oss_dict/README.txt`。
+条文は [NOTICE.md](../NOTICE.md) と、取得した `third_party/mozc_oss_dict/README.txt`。
+インストール時に取得する Python ランタイム・PyTorch などの依存・LM モデルのライセンスも NOTICE.md にまとめてあります。
 GPL の `nicola.c` は入れていません。

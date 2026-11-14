@@ -59,5 +59,5 @@ iwr -UseBasicParsing https://github.com/sadaoikebe/yuragi-ime/releases/latest/do
 
 ## ライセンス
 
-自前のコードは [MIT](LICENSE) です。実行時に取得する Mozc の辞書などには、別の条件が付きます。
+自前のコードは [MIT](LICENSE) です。インストール時に取得する Mozc の辞書・Python と PyTorch などの部品・言語モデルには、それぞれの条件が付きます。
 詳しくは [NOTICE.md](NOTICE.md) を見てください。

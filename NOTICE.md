@@ -1,8 +1,12 @@
 # Third-party notices
 
 Original code in this repository is under the MIT License (`LICENSE`).
-Some bundled or fetched data is under other terms. Those terms do **not**
-relicense the IME source. They apply to the named files only.
+The data and software that the installer fetches (the dictionary, the Python
+runtime and its packages, the language model) are under their own terms.
+Those terms do **not** relicense the IME source. They apply to the named
+items only. None of them is stored in this repository or attached to a
+release: `setup.ps1` downloads each one on the user's PC from the source
+named below.
 
 This project does **not** include GPL code. The QMK NICOLA implementation
 (`nicola.c`) was used only as a specification of behavior; it is not copied
@@ -10,18 +14,23 @@ here. RIME/Weasel and similar GPL IME hosts are not linked.
 
 ## Mozc open-source dictionary
 
-Location: `third_party/mozc_oss_dict/`
+Location: `%LOCALAPPDATA%\yuragi-ime\shared\dict\<commit>\` when installed;
+`third_party/mozc_oss_dict/` in a development checkout.
 
-Large `dictionary*.txt` and `connection_single_column.txt` are fetched by
-`python -m tools.wp0.fetch_mozc_dict` and are not stored in git. Smaller
-files (`suffix.txt`, `id.def`, `evaluation.tsv`, the README copies) are
-committed. Runtime conversion uses this dictionary.
+All files (`dictionary*.txt`, `connection_single_column.txt`, `suffix.txt`,
+`id.def`, `evaluation.tsv`, `README.txt`, `README.md`) are fetched from
+`src/data/dictionary_oss/` at the upstream commit pinned in
+`data/dictionary-manifest.json` by `python -m tools.wp0.fetch_mozc_dict`
+and checked against the SHA-256 in that manifest. None of them is stored
+in git. Runtime conversion uses this dictionary.
 
 Upstream: https://github.com/google/mozc  
 The Mozc project itself is BSD-3-Clause (Google Inc.). Dictionary sources
 inside Mozc additionally include IPAdic (NAIST / ICOT) and the Okinawa
-dictionary (public domain). Full text is in
-`third_party/mozc_oss_dict/README.txt` and is reproduced below as required.
+dictionary (public domain). The IPAdic / ICOT and Okinawa terms are in the
+fetched `README.txt` (kept next to the dictionary). The Google
+BSD-3-Clause text is Mozc's own license, not part of the fetched files.
+All of them are reproduced below as required.
 
 ### Google / Mozc (BSD-3-Clause)
 
@@ -135,6 +144,57 @@ above as far as the program is concerned.
 Public Domain Dataです。使用・変更・配布に関しては一切の制限をつけません。
 商品などに組み込むことも自由に行なってください。すでにいくつかの辞書には沖縄辞書が採用されています。
 勝手ながら、沖縄辞書に寄贈された辞書も in the Public Domain' 扱いとさせていただきます。
+
+## Python runtime and packages (fetched at install time)
+
+Location when installed: `%LOCALAPPDATA%\yuragi-ime\shared\runtime\<id>\`.
+`setup.ps1` builds this runtime on the user's PC from the official sources
+below. Each package keeps the license files its own wheel carries, in
+`Lib\site-packages\<name>-<version>.dist-info\`.
+
+| Component | Version | License | Source |
+| --- | --- | --- | --- |
+| Python (Windows embeddable package) | 3.13.7 | PSF License Agreement (Python Software Foundation License Version 2), together with the licenses of the components Python bundles | https://www.python.org/ftp/python/3.13.7/ |
+| pip | latest at install time (not pinned) | MIT | https://bootstrap.pypa.io/get-pip.py, which installs pip from PyPI |
+| PyTorch (`torch`, CPU build) | 2.9.1 | BSD-3-Clause; the third-party components it bundles are listed with their licenses in its `LICENSE` and `NOTICE` | https://download.pytorch.org/whl/cpu |
+| transformers | 4.57.1 | Apache-2.0 | PyPI |
+| sentencepiece | 0.2.1 | not stated in the wheel's metadata; see https://github.com/google/sentencepiece | PyPI |
+
+The packages above are pinned (`$TorchVersion` in `packaging/setup.ps1`,
+`packaging/requirements.txt`). pip resolves their dependencies at install
+time; those versions are not pinned. For reference, a Linux install of the
+same pins on 2026-11-14 resolved these, with the licenses their wheels
+declare:
+
+| Package | License declared by the wheel |
+| --- | --- |
+| huggingface_hub, tokenizers, safetensors, hf-xet, requests | Apache-2.0 |
+| regex | Apache-2.0 AND CNRI-Python |
+| packaging | Apache-2.0 OR BSD-2-Clause |
+| numpy | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 |
+| fsspec, idna, markupsafe, networkx | BSD-3-Clause |
+| jinja2, mpmath, sympy | BSD |
+| certifi | MPL-2.0 |
+| tqdm | MPL-2.0 AND MIT |
+| filelock, urllib3, charset-normalizer, PyYAML, setuptools | MIT |
+| typing_extensions | PSF-2.0 |
+
+On Windows, tqdm additionally depends on colorama (not in the list above).
+
+## Language model rinna/japanese-gpt2-small (fetched at install time)
+
+Location when installed: `%LOCALAPPDATA%\yuragi-ime\shared\model\<revision>\`.
+
+| | |
+| --- | --- |
+| Model | `rinna/japanese-gpt2-small` (rinna Co., Ltd.) |
+| Revision | `f7fdefe2941d9629a7b2894564435e0e035df6a6` (pinned in `packaging/fetch_model.py`) |
+| License | MIT (`license: mit` in the model card) |
+| Source | https://huggingface.co/rinna/japanese-gpt2-small |
+
+`packaging/fetch_model.py` downloads the whole repository at that revision,
+so the model card (`README.md`, with its license statement) is kept next
+to the model files.
 
 ## Product icon (hand-drawn)
 
