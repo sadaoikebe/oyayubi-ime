@@ -23,6 +23,9 @@ if(WIN32)
     OYAYUBI_TAG="${OYAYUBI_TAG}")
   target_link_libraries(oyayubi-broker PRIVATE broker_core
     advapi32 userenv shell32 user32 comctl32 ole32 uuid)
+  if(MSVC)  # broker.rc carries the manifest; the linker must not add a second one
+    target_link_options(oyayubi-broker PRIVATE /MANIFEST:NO)
+  endif()
   if(MINGW)  # wWinMain (MSVC finds it by itself); used to compile-check on Linux
     target_link_options(oyayubi-broker PRIVATE -municode)
   endif()
