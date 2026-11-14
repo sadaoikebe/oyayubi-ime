@@ -1003,7 +1003,7 @@ static HICON MakeModeIcon(const wchar_t* glyph, bool faint) {
     auto* px = static_cast<BYTE*>(bits);
     for (int i = 0; i < cx * cy; ++i, px += 4) {
         BYTE a = (std::max)(px[0], (std::max)(px[1], px[2]));
-        if (faint) a = (BYTE)(a * 2 / 5);  // "お" drawn faint while preparing
+        if (faint) a = (BYTE)(a * 2 / 5);  // "ゆ" drawn faint while preparing
         px[0] = px[1] = px[2] = fg; px[3] = a;
     }
     HBITMAP mask = CreateBitmap(cx, cy, 1, 1, nullptr);

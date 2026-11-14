@@ -438,7 +438,7 @@ if ($pendingDelete.Count) {
     Say "  旧版のファイルが $($pendingDelete.Count) 個、使用中のため残っています。次に Windows を起動したとき自動で消えます。"
 }
 if ($left.Count) { Say "  片付けられなかったもの ($($left.Count) 件) は、次の setup でまた片付けます。" }
-Say "入力切替 (Win+Space) で「ゆらぎ」を選ぶと、タスクバーに「あ」が出ます。"
+Say "入力切替 (Win+Space) で「ゆらぎ」を選ぶと、タスクバーに「ゆ」が出ます。"
 Say "開いていたアプリもそのまま使えます。"
 Say "更新: このコマンドをもう一度実行してください。"
 Say "アンインストール: powershell -ExecutionPolicy Bypass -File `"$(Join-Path $App 'packaging\uninstall.ps1')`""
