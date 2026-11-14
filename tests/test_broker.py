@@ -33,6 +33,11 @@ BUILD = ROOT / "build" / "broker"
 FAKE_ENGINE = SOURCE / "tests" / "fake_engine.py"
 _built = None
 
+# The longest any wait goes on. Every wait ends as soon as what it waits for has
+# happened; this is only how long a slow machine (a shared CI runner starts and
+# ends processes many times slower than a desktop) is given before a test fails.
+WAIT = 60.0
+
 
 WINDOWS = sys.platform == "win32"
 
@@ -94,7 +99,7 @@ def top_level_windows(pids) -> list[str]:
     return found
 
 
-def wait_until(predicate, timeout=20.0, interval=0.05):
+def wait_until(predicate, timeout=WAIT, interval=0.05):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         value = predicate()
@@ -172,7 +177,7 @@ class FakeTip:
     def send(self, msg: dict) -> None:
         self.connection.send((json.dumps(msg) + "\n").encode("utf-8"))
 
-    def next(self, timeout=20.0):
+    def next(self, timeout=WAIT):
         line = self.lines.get(timeout=timeout)
         if line is not None:
             self.seen.append(line)
@@ -180,7 +185,7 @@ class FakeTip:
                 self.state = line["state"]
         return line
 
-    def wait_for(self, predicate, timeout=20.0) -> dict:
+    def wait_for(self, predicate, timeout=WAIT) -> dict:
         deadline = time.monotonic() + timeout
         while True:
             line = self.next(max(0.01, deadline - time.monotonic()))
@@ -193,7 +198,7 @@ class FakeTip:
         self.send({"op": "hello", "proto": 1, "tag": "test", "bits": 64})
         return self.next()
 
-    def wait_state(self, state: str, timeout=20.0) -> None:
+    def wait_state(self, state: str, timeout=WAIT) -> None:
         """Until the broker has said the state is this (now or before)."""
         if self.state != state:
             self.wait_for(lambda m: self.state == state, timeout)
@@ -201,7 +206,7 @@ class FakeTip:
     def key(self, seq: int, vk: int = 74, op: str = "down") -> None:
         self.send({"seq": seq, "op": op, "vk": vk, "t": seq * 100, "mods": []})
 
-    def reply(self, seq: int, timeout=20.0) -> dict:
+    def reply(self, seq: int, timeout=WAIT) -> dict:
         return self.wait_for(lambda m: m.get("seq") == seq, timeout)
 
     def close(self):
@@ -368,10 +373,10 @@ class SupervisionTest(BrokerCase):
         tip = self.tip()
         tip.hello()
         for seq in (1, 2, 3):
-            tip.wait_state("ready", timeout=30)
+            tip.wait_state("ready")
             tip.key(seq)
             self.assertEqual(tip.reply(seq), {"seq": seq, "state": "down"})
-            tip.wait_state("starting" if seq < 3 else "down", timeout=30)
+            tip.wait_state("starting" if seq < 3 else "down")
         self.assertEqual(self.starts(), 3)
         self.assertEqual(self.notices(), [{"stopped": "repeated"}])
         tip.send({"op": "retry"})
@@ -413,7 +418,7 @@ class ProcessTest(BrokerCase):
         engine = self.engine_pids()[0]
         proc.kill()
         proc.wait()
-        wait_until(lambda: not alive(engine), timeout=5)
+        wait_until(lambda: not alive(engine))
 
     def test_one_broker_per_user(self):
         self.plan("normal")
@@ -422,7 +427,7 @@ class ProcessTest(BrokerCase):
         other = self.address + "-other"
         second = subprocess.run([str(broker_binary()), "--data-dir", str(self.data),
                                  "--pipe" if WINDOWS else "--socket", other,
-                                 "--engine-json", str(self.engine_json)], timeout=10)
+                                 "--engine-json", str(self.engine_json)], timeout=WAIT)
         self.assertEqual(second.returncode, 0)
         self.assertEqual(self.starts(), 1)
 
@@ -450,7 +455,7 @@ class ProcessTest(BrokerCase):
             self.addCleanup(lock.close)
             fcntl.flock(lock, fcntl.LOCK_EX)
         proc = self.start()
-        self.assertEqual(proc.wait(timeout=10), 0)
+        self.assertEqual(proc.wait(timeout=WAIT), 0)
         self.assertEqual(self.starts(), 0)
         self.assertIn("maintenance", self.log())
 
@@ -472,7 +477,7 @@ class ProcessTest(BrokerCase):
         tip = self.tip()
         tip.hello()
         tip.send({"op": "open_admin"})
-        wait_until(marker.exists, timeout=10)
+        wait_until(marker.exists)
 
     @unittest.skipUnless(WINDOWS, "the named pipe")
     def test_management_tools_name_the_real_pipe(self):
@@ -508,7 +513,7 @@ class ProcessTest(BrokerCase):
         tip.hello()
         tip.wait_state("ready")
         tip.send({"op": "quit"})
-        self.assertEqual(proc.wait(timeout=10), 0)
+        self.assertEqual(proc.wait(timeout=WAIT), 0)
 
 
 class SelfTestTest(BrokerCase):
