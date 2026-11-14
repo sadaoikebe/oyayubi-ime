@@ -35,7 +35,8 @@ import sys
 import time
 from uuid import uuid4
 
-from oyayubi.lattice.expand import is_literal_face, token_branches
+from oyayubi.lattice.alternation import Plan
+from oyayubi.lattice.expand import is_literal_face
 from oyayubi.lattice.mozc_dict import DEFAULT_NOUN_ID, Entry, MozcLex
 from .bunsetsu import Candidate, content
 
@@ -197,25 +198,17 @@ class LearningView:
         for _, rows in readings:
             yield from rows
 
-    def spans(self, tokens: list[dict], start: int, lex: MozcLex):
+    def spans(self, tokens: list[dict], start: int, lex: MozcLex, plan: Plan | None = None):
         """Virtual whole-bunsetsu arcs; original entries and costs stay intact.
 
         The learned trie is separate from MAX_WORD_MORA-limited Mozc traversal,
-        so long confirmed unknown words also remain available.
+        so long confirmed unknown words also remain available. The chords of
+        one press alternate, as in every other traversal (alternation.py).
         """
-        stack = [(start, "")]
-        while stack:
-            pos, reading = stack.pop()
+        for pos, reading, _ in (plan or Plan(tokens)).walk(tokens, start, self.has_prefix):
             for row in self._entries.get(reading, ()):
                 if row.lid < lex.pos_size and row.rid < lex.pos_size:
                     yield pos, Entry(row.surface, reading, row.lid, row.rid, row.cost)
-            if pos == len(tokens):
-                continue
-            for kana in token_branches(tokens[pos]):
-                if tokens[pos]["kind"] != "literal" and not is_literal_face(kana):
-                    nxt = reading + kana
-                    if self.has_prefix(nxt):
-                        stack.append((pos + 1, nxt))
 
     @staticmethod
     def next_context(previous: str, word, *, boundary: bool = False) -> str:

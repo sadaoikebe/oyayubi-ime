@@ -2,18 +2,22 @@
 
 Does not expand 2^k full readings. From each position, walks only
 prefixes that exist in the dictionary, then Viterbi over word spans.
+Chords of one press alternate (alternation.py): a path state carries the
+direction of the press open at its end, if any.
 """
 
 from __future__ import annotations
 
 import time
+from collections import Counter
 from dataclasses import dataclass
 from heapq import heappop, heappush
 from itertools import count
 from typing import Literal
 
+from .alternation import FREE, Plan, Sides, admits, after
 from .decode import DecodeResult, Piece
-from .expand import is_literal_face, literal_text, token_branches
+from .expand import is_literal_face, literal_text
 from .mozc_dict import BOS_ID, MAX_WORD_MORA, POS_KEEP, UNK_COST, UNK_LID, Entry, MozcLex
 
 # Distinguish an empty run after a literal from a real dictionary RID=0.
@@ -29,6 +33,7 @@ class Word:
     unknown: bool = False
     literal: bool = False
     learned: bool = False
+    sides: Sides = FREE
 
     @property
     def rid(self) -> int:
@@ -55,35 +60,30 @@ class _St:
     prev: int  # index in states[word.start]
     reading: str
     context: str = ""  # current bunsetsu spelling, used only by the learning layer
+    side: str | None = None  # direction of the press open here (alternation.py)
 
 
-def spans_from(tokens: list[dict], i: int, lex: MozcLex, learning=None) -> list[Word]:
+def spans_from(tokens: list[dict], i: int, lex: MozcLex, learning=None,
+               plan: Plan | None = None) -> list[Word]:
+    plan = plan or Plan(tokens)
     out: list[Word] = []
-    stack = [(i, "")]
-    while stack:
-        pos, acc = stack.pop()
-        if acc:
-            for e in lex.by_reading.get(acc, ()):
-                out.append(Word(i, pos, e))
-        if pos >= len(tokens) or (pos - i) >= MAX_WORD_MORA:
-            continue
-        for kana in token_branches(tokens[pos]):
-            if tokens[pos]["kind"] == "literal" or is_literal_face(kana):
-                continue  # A word may only traverse the reading side of a token.
-            nxt = acc + kana
-            if nxt in lex.prefixes:
-                stack.append((pos + 1, nxt))
+    # A word may only traverse the reading side of a token.
+    for end, acc, sides in plan.walk(tokens, i, lex.prefixes.__contains__, MAX_WORD_MORA):
+        for e in lex.by_reading.get(acc, ()):
+            out.append(Word(i, end, e, sides=sides))
     have_one = {w.entry.reading for w in out if w.end == i + 1}
-    for kana in token_branches(tokens[i]):
+    for kana, sides in plan.single(i):
         if tokens[i]["kind"] == "literal" or is_literal_face(kana):
             # Explicit Stage 2A literals already contain their display text.
             text = kana if tokens[i]["kind"] == "literal" else literal_text(kana)
-            out.append(Word(i, i + 1, Entry(text, text, BOS_ID, BOS_ID, 0), literal=True))
+            out.append(Word(i, i + 1, Entry(text, text, BOS_ID, BOS_ID, 0), literal=True,
+                            sides=sides))
         elif kana not in have_one:
-            out.append(Word(i, i + 1, Entry(kana, kana, UNK_LID, UNK_LID, UNK_COST), True))
+            out.append(Word(i, i + 1, Entry(kana, kana, UNK_LID, UNK_LID, UNK_COST), True,
+                            sides=sides))
     if learning is not None:
-        out.extend(Word(i, end, e, learned=True)
-                   for end, e in learning.spans(tokens, i, lex))
+        out.extend(Word(i, end, e, learned=True, sides=plan.read(i, end, e.reading))
+                   for end, e in learning.spans(tokens, i, lex, plan))
     return out
 
 
@@ -95,13 +95,13 @@ def _prune(sts: list[_St], *, mode: Literal["rid", "reading"]) -> list[_St]:
     future n-best context rescoring (WP0 §13), at a cost to 1-best accuracy.
     """
     sts.sort(key=lambda s: s.score)
-    best: dict[int | str, _St] = {}
+    best: dict[tuple[int, str | None] | str, _St] = {}
+    kept: Counter[str | None] = Counter()  # the cap applies per open-press direction
     for s in sts:
-        key = s.rid if mode == "rid" else s.reading
-        if key not in best:
+        key = (s.rid, s.side) if mode == "rid" else s.reading
+        if key not in best and kept[s.side] < POS_KEEP:
             best[key] = s
-        if len(best) >= POS_KEEP:
-            break
+            kept[s.side] += 1
     return list(best.values())
 
 
@@ -113,6 +113,7 @@ def decode_tokens(tokens: list[dict], lex: MozcLex, *, learning=None,
     """
     n = len(tokens)
     t0 = time.perf_counter()
+    plan = Plan(tokens)
     states: list[list[_St]] = [[] for _ in range(n + 1)]
     states[0] = [_St(0, BOUNDARY_RID if left_id == BOS_ID else left_id, -1, -1, "",
                      left_surface)]
@@ -124,12 +125,14 @@ def decode_tokens(tokens: list[dict], lex: MozcLex, *, learning=None,
             continue
         if len(states[i]) > POS_KEEP:
             states[i] = _prune(states[i], mode="rid")
-        spans = spans_from(tokens, i, lex, learning)
+        spans = spans_from(tokens, i, lex, learning, plan)
         n_spans += len(spans)
         for w in spans:
             wi = len(words)
             words.append(w)
             for si, st in enumerate(states[i]):
+                if not admits(w.sides, st.side):
+                    continue
                 nsc = st.score + word_cost(lex, st.rid, w)
                 context = ""
                 if learning is not None:
@@ -138,7 +141,8 @@ def decode_tokens(tokens: list[dict], lex: MozcLex, *, learning=None,
                     context = learning.next_context(st.context, w,
                                                     boundary=st.rid == BOUNDARY_RID)
                 states[w.end].append(
-                    _St(nsc, w.rid, wi, si, st.reading + w.entry.reading, context)
+                    _St(nsc, w.rid, wi, si, st.reading + w.entry.reading, context,
+                        after(w.sides, st.side))
                 )
 
     if not states[n]:
@@ -199,9 +203,12 @@ def nbest_tokens(
     learning is not consulted. Literal arcs reset both sides to BOS/EOS.
     Each surface retains its cheapest path's reading and pieces; ties are
     deterministic but have no linguistic preference.
+    Chords of one press alternate: forward states are (RID, open-press
+    direction), and a backward suffix carries the direction it needs.
     """
     n = len(tokens)
     t0 = time.perf_counter()
+    plan = Plan(tokens)
     out: list[DecodeResult] = []
     pops = 0
 
@@ -220,41 +227,53 @@ def nbest_tokens(
         return lex.transition(BOS_ID if rid == BOUNDARY_RID else rid, lid)
 
     incoming: list[list[Word]] = [[] for _ in range(n + 1)]
-    forward: list[dict[int, int]] = [{} for _ in range(n + 1)]
-    forward[0][BOUNDARY_RID if left_id == BOS_ID else left_id] = 0
-    # prefix[i][lid] includes the connection into the next word, but not its
-    # word cost. It is an exact completion cost for a backward suffix.
-    prefix: list[dict[int, int]] = [{} for _ in range(n + 1)]
+    # forward[i][(rid, side)]: side is the direction of the press open at i.
+    forward: list[dict[tuple[int, str | None], int]] = [{} for _ in range(n + 1)]
+    forward[0][(BOUNDARY_RID if left_id == BOS_ID else left_id, None)] = 0
+    # prefix[i][(lid, side)] includes the connection into the next word, but
+    # not its word cost. It is an exact completion cost for a backward suffix
+    # that needs that side at i.
+    prefix: list[dict[tuple[int, str | None], int]] = [{} for _ in range(n + 1)]
     for i in range(n):
         if not forward[i]:
             continue
-        for w in spans_from(tokens, i, lex):
+        present = list(dict.fromkeys(side for _, side in forward[i]))
+        for w in spans_from(tokens, i, lex, plan=plan):
             if w.unknown or w.entry.cost >= UNK_COST:
                 continue  # Apply the existing output policy before searching.
             lid = BOUNDARY_RID if w.literal else w.entry.lid
-            if lid not in prefix[i]:
-                prefix[i][lid] = min(cost + connection(rid, lid)
-                                     for rid, cost in forward[i].items())
-            score = prefix[i][lid] + w.entry.cost
-            target = forward[w.end]
-            if w.rid not in target or score < target[w.rid]:
-                target[w.rid] = score
-            incoming[w.end].append(w)
+            reached = False
+            for side in present:
+                if not admits(w.sides, side):
+                    continue
+                reached = True
+                key = (lid, side)
+                if key not in prefix[i]:
+                    prefix[i][key] = min(cost + connection(rid, lid)
+                                         for (rid, s), cost in forward[i].items() if s == side)
+                score = prefix[i][key] + w.entry.cost
+                target = forward[w.end]
+                state = (w.rid, after(w.sides, side))
+                if state not in target or score < target[state]:
+                    target[state] = score
+            if reached:
+                incoming[w.end].append(w)
     if not forward[n]:
         return out, stats()  # No dictionary/literal-only covering path.
 
-    best = min(cost + end_cost(lex, rid) for rid, cost in forward[n].items())
+    best = min(cost + end_cost(lex, rid) for (rid, _), cost in forward[n].items())
     serial = count()
-    # bound, tie-breaker, suffix cost, start, first LID, surface, linked path
-    heap = [(best, next(serial), 0, n, BOUNDARY_RID, "", None)]
-    # Equal (start, first LID, surface) suffixes admit exactly the same
+    # bound, tie-breaker, suffix cost, start, first LID, side needed at start,
+    # surface, linked path
+    heap = [(best, next(serial), 0, n, BOUNDARY_RID, None, "", None)]
+    # Equal (start, first LID, side, surface) suffixes admit exactly the same
     # prefixes. Only their cheapest path matters for distinct-surface k-best.
-    suffix_cost = {(n, BOUNDARY_RID, ""): 0}
+    suffix_cost = {(n, BOUNDARY_RID, None, ""): 0}
     seen = set()
     while heap and len(out) < k:
-        bound, _, cost, pos, next_lid, surface, path = heappop(heap)
+        bound, _, cost, pos, next_lid, need, surface, path = heappop(heap)
         pops += 1
-        if cost != suffix_cost[(pos, next_lid, surface)]:
+        if cost != suffix_cost[(pos, next_lid, need, surface)]:
             continue
         if pos == 0:
             if surface in seen:
@@ -271,14 +290,20 @@ def nbest_tokens(
             out.append(DecodeResult("".join(reading), surface, bound, pieces))
             continue
         for w in incoming[pos]:
+            if w.sides.bound and w.sides.exit != need:
+                continue
             e = w.entry
             lid = BOUNDARY_RID if w.literal else e.lid
+            needed = w.sides.enter if w.sides.bound else need
+            potential = prefix[w.start].get((lid, needed))
+            if potential is None:
+                continue  # no prefix reaches w.start with that side
             nc = cost + connection(w.rid, next_lid) + e.cost
             ns = e.surface + surface
-            key = (w.start, lid, ns)
+            key = (w.start, lid, needed, ns)
             if key in suffix_cost and nc >= suffix_cost[key]:
                 continue
             suffix_cost[key] = nc
-            heappush(heap, (nc + prefix[w.start][lid], next(serial), nc,
-                            w.start, lid, ns, (w, path)))
+            heappush(heap, (nc + potential, next(serial), nc,
+                            w.start, lid, needed, ns, (w, path)))
     return out, stats()

@@ -5,10 +5,11 @@ from __future__ import annotations
 import re
 import unittest
 
+from oyayubi.chord.keys import VK_SPACE, VK_TO_M
 from oyayubi.ime.session import ImeSession
 from oyayubi.lattice.table import load_table
 
-VK = {"space": 0x20, "u": 0x55, "f": 0x46, "a": 0x41, "[": 0xDB, "j": 0x4A}
+VK = {key: vk for vk, key in VK_TO_M.items()} | {"space": VK_SPACE}
 
 
 def type_events(session: ImeSession, events: str) -> None:

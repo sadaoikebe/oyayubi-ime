@@ -62,11 +62,12 @@ class AmbShift:
 
     press/turn say where it was typed (the press serial number, and 1, 2, ...
     among that press's chords), not what it is, so they do not take part in
-    equality.
+    equality. The state machine always sets them; a chord made without them
+    (a test, an expected reading) belongs to no press.
     """
     key: str
-    press: int = field(default=0, compare=False)
-    turn: int = field(default=1, compare=False)
+    press: int | None = field(default=None, compare=False)
+    turn: int | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True, slots=True)

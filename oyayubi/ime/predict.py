@@ -35,7 +35,7 @@ from bisect import bisect_left
 from heapq import nsmallest
 from typing import Callable, Iterable
 
-from oyayubi.lattice.expand import is_literal_face, token_branches
+from oyayubi.lattice.alternation import Plan
 from oyayubi.lattice.mozc_dict import MozcLex
 from .bunsetsu import Candidate, content
 
@@ -55,19 +55,12 @@ def typed_readings(tokens: list[dict], is_prefix: Callable[[str], bool],
     if not tokens or any(t["kind"] == "literal" for t in tokens):
         return []  # a digit or punctuation inside: not one word being typed
     out: list[str] = []
-    stack = [(0, "")]
-    while stack and len(out) < MAX_READINGS:
-        pos, reading = stack.pop()
-        if pos == len(tokens):
-            if len(reading) >= minimum:
-                out.append(reading)
-            continue
-        for kana in token_branches(tokens[pos]):
-            if is_literal_face(kana):
-                continue
-            nxt = reading + kana
-            if is_prefix(nxt):
-                stack.append((pos + 1, nxt))
+    # The chords of one press alternate, as in every other traversal (alternation.py).
+    for end, reading, _ in Plan(tokens).walk(tokens, 0, is_prefix):
+        if end == len(tokens) and len(reading) >= minimum:
+            out.append(reading)
+            if len(out) >= MAX_READINGS:
+                break
     return out
 
 

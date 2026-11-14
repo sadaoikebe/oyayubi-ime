@@ -16,6 +16,7 @@ from oyayubi.chord.fsm import AmbShift, ChordFsm, Plain, ThumbTap, Token
 from oyayubi.chord.keys import (
     SHIFT_VKS, SHORTCUT_VKS, VK_BACK, VK_ESCAPE, VK_RETURN, classify, literal_character,
 )
+from oyayubi.lattice.alternation import SIDES, Plan, restrict
 from oyayubi.lattice.expand import is_literal_face, literal_text
 from oyayubi.lattice.mozc_dict import MozcLex, left_id_after, load_lex
 from oyayubi.lattice.table import load_table
@@ -107,9 +108,11 @@ def to_lattice_token(tok: Token | Literal, table: dict) -> dict | None:
         if not faces:
             return None
         kind = "amb" if len(faces) > 1 else "shift"
-        # Where the chord was typed: the conversion alternates the thumbs of one press.
-        return {"kind": kind, "key": tok.key, "faces": faces,
-                "press": tok.press, "turn": tok.turn}
+        token = {"kind": kind, "key": tok.key, "faces": faces}
+        if tok.press is not None:
+            # Where the chord was typed: the conversion alternates the thumbs of one press.
+            token.update(press=tok.press, turn=tok.turn)
+        return token
     return None
 
 
@@ -401,7 +404,10 @@ class ImeSession:
                 head = self.segments
                 self.tokens = tokens
             left = head[-1].selected.surface if head else self._left_surface
-            found = predict(lattice[start:], self._lex, self.predict_index, learning, left,
+            # A press crossing into the tail keeps the head's direction.
+            tail = restrict(lattice, start, len(lattice),
+                            self._pins(lattice, start, len(lattice), head))
+            found = predict(tail, self._lex, self.predict_index, learning, left,
                             self.personal.revision if self.personal is not None else None)
             if not found:
                 if redecoded:
@@ -616,13 +622,18 @@ class ImeSession:
         left_surface = (self.segments[index - 1].selected.surface
                         if index > 0 else self._left_surface)
         learning = self._learning.snapshot() if self._learning is not None else None
+        lattice = self._lattice()
+        # A press crossing the segment's boundary keeps its neighbors' direction.
+        pins = self._pins(lattice, segment.start, segment.end,
+                          (s for k, s in enumerate(self.segments) if k != index))
         context = (left, right, left_surface,
                    (learning.revision, learning.now) if learning is not None else None,
-                   self.personal.revision if self.personal is not None else None)
+                   self.personal.revision if self.personal is not None else None,
+                   tuple(sorted((p, tuple(sorted(d))) for p, d in pins.items())))
         if segment.choices is None or segment.context != context:
             assert self._lex is not None
             segment.choices = CandidateStream(candidates(
-                self._lattice()[segment.start:segment.end], self._lex, left, right,
+                restrict(lattice, segment.start, segment.end, pins), self._lex, left, right,
                 learning=learning, left_surface=left_surface, now=self.clock()))
             segment.context = context
             if not reselect:
@@ -772,6 +783,8 @@ class ImeSession:
         return [d for t in self.tokens if (d := to_lattice_token(t, self._table)) is not None]
 
     def _parts(self) -> list[str | list[dict]]:
+        """Literal texts and kana runs; a literal ends the press (ChordFsm.reset),
+        so no press crosses one."""
         parts: list[str | list[dict]] = []
         run: list[dict] = []
         for token in self._lattice():
@@ -785,6 +798,21 @@ class ImeSession:
         if run:
             parts.append(run)
         return parts
+
+    def _pins(self, lattice: list[dict], start: int, end: int,
+              others) -> dict[int, frozenset[str]]:
+        """Directions that the selections of other segments give the presses of
+        [start, end): a press that crosses a boundary keeps one direction."""
+        plan = Plan(lattice)
+        presses = {plan.press[i] for i in range(start, end)} - {None}
+        pins: dict[int, frozenset[str]] = {}
+        if presses:
+            for other in others:
+                for press, dirs in plan.directions(other.start, other.end,
+                                                   other.selected.reading).items():
+                    if press in presses:
+                        pins[press] = pins.get(press, SIDES) & dirs
+        return pins
 
     def _refresh(self, *, rescore: bool = False, picks=None) -> None:
         """Rebuild segments from the 1-best; with rescore or picks, from the LM's picks."""

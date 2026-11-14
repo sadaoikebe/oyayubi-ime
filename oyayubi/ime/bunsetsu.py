@@ -8,6 +8,7 @@ from heapq import heappop, heappush
 from itertools import count
 from typing import Iterator
 
+from oyayubi.lattice.alternation import Plan, admits, after
 from oyayubi.lattice.decode import Piece
 from oyayubi.lattice.mozc_dict import BOS_ID, DICT_DIR, UNK_COST, MozcLex, require_dict_files
 from oyayubi.lattice.token_viterbi import BOUNDARY_RID, end_cost, spans_from, word_cost
@@ -83,36 +84,41 @@ def _paths(tokens: list[dict], lex: MozcLex, left: int, right: int,
     surfaces. Kana mode includes unknown arcs and keeps the cheapest prefix for
     each (position, RID, reading): spelling/POS variants cannot multiply work for
     the same reading. Both permit negative word/connection costs.
+    The chords of one press alternate: a state is (RID, direction of the press
+    open at that position), as in token_viterbi.
     """
     n = len(tokens)
-    arcs = [[w for w in spans_from(tokens, i, lex, learning) if kana or not w.unknown]
+    plan = Plan(tokens)
+    arcs = [[w for w in spans_from(tokens, i, lex, learning, plan) if kana or not w.unknown]
             for i in range(n)]
-    # Suffix costs for every reachable previous RID; compute iteratively so a
-    # long unknown segment cannot exceed Python's recursion limit.
-    rids = [set() for _ in range(n + 1)]
-    initial = BOUNDARY_RID if left == BOS_ID else left
-    rids[0].add(initial)
+    # Suffix costs for every reachable previous (RID, side); compute iteratively
+    # so a long unknown segment cannot exceed Python's recursion limit.
+    states: list[set[tuple[int, str | None]]] = [set() for _ in range(n + 1)]
+    initial = (BOUNDARY_RID if left == BOS_ID else left, None)
+    states[0].add(initial)
     for i in range(n):
-        if rids[i]:
+        for side in {side for _, side in states[i]}:
             for w in arcs[i]:
-                rids[w.end].add(w.rid)
+                if admits(w.sides, side):
+                    states[w.end].add((w.rid, after(w.sides, side)))
     suffix = [{} for _ in range(n + 1)]
-    suffix[n] = {rid: end_cost(lex, rid, right) for rid in rids[n]}
+    suffix[n] = {state: end_cost(lex, state[0], right) for state in states[n]}
     inf = float("inf")
     # The dictionary score band must be anchored to a path with a real word.
     # A zero-cost literal alone must not displace the kana side's dictionary
     # candidates. This second potential requires at least one nonliteral arc.
     word_suffix = [{} for _ in range(n + 1)]
-    word_suffix[n] = {rid: inf for rid in rids[n]}
+    word_suffix[n] = {state: inf for state in states[n]}
     for i in range(n - 1, -1, -1):
-        for rid in rids[i]:
-            suffix[i][rid] = min((word_cost(lex, rid, w)
-                                 + suffix[w.end][w.rid] for w in arcs[i]), default=inf)
+        for rid, side in states[i]:
+            suffix[i][(rid, side)] = min((
+                word_cost(lex, rid, w) + suffix[w.end][(w.rid, after(w.sides, side))]
+                for w in arcs[i] if admits(w.sides, side)), default=inf)
             if not kana:
-                word_suffix[i][rid] = min((
+                word_suffix[i][(rid, side)] = min((
                     word_cost(lex, rid, w)
-                    + (word_suffix if w.literal else suffix)[w.end][w.rid]
-                    for w in arcs[i]), default=inf)
+                    + (word_suffix if w.literal else suffix)[w.end][(w.rid, after(w.sides, side))]
+                    for w in arcs[i] if admits(w.sides, side)), default=inf)
     best = suffix[0].get(initial, inf)
     if best == inf:
         return
@@ -121,16 +127,16 @@ def _paths(tokens: list[dict], lex: MozcLex, left: int, right: int,
     discount = learning.max_bonus if learning is not None and not kana else 0
     limit = inf if discount or kana else word_suffix[0].get(initial, inf) + COST_WINDOW
     serial = count()
-    # priority, tie break, cost-so-far, position, RID, first LID, surface, reading,
-    # whether every arc so far is literal
-    heap = [(best - discount, next(serial), 0, 0, initial, BOS_ID, "", "", True)]
+    # priority, tie break, cost-so-far, position, RID, open-press side, first LID,
+    # surface, reading, whether every arc so far is literal
+    heap = [(best - discount, next(serial), 0, 0, initial[0], None, BOS_ID, "", "", True)]
     seen = set()
     prefixes = {}
     while heap:
-        bound, _, cost, pos, rid, lid, surface, reading, all_literal = heappop(heap)
+        bound, _, cost, pos, rid, side, lid, surface, reading, all_literal = heappop(heap)
         if bound > limit:
             break
-        if kana and cost != prefixes.get((pos, rid, reading), cost):
+        if kana and cost != prefixes.get((pos, rid, side, reading), cost):
             continue
         if pos == n:
             if not kana and not all_literal and limit == inf:
@@ -141,25 +147,28 @@ def _paths(tokens: list[dict], lex: MozcLex, left: int, right: int,
                 yield Candidate(surface, reading, int(bound), lid,
                                 BOS_ID if rid == BOUNDARY_RID else rid,
                                 "literal" if all_literal else "dictionary",
-                                cost - lex.transition(BOS_ID if initial == BOUNDARY_RID
-                                                      else initial, lid))
+                                cost - lex.transition(BOS_ID if initial[0] == BOUNDARY_RID
+                                                      else initial[0], lid))
             continue
         for w in arcs[pos]:
+            if not admits(w.sides, side):
+                continue
             e = w.entry
+            out = after(w.sides, side)
             nc = cost + word_cost(lex, rid, w)
             nr = reading + e.reading
             ns = surface + e.surface
             bonus = (learning.bonus(nr, ns, left_surface)
                      if discount and w.end == n else discount)
-            bound = nc + suffix[w.end][w.rid] - bonus
+            bound = nc + suffix[w.end][(w.rid, out)] - bonus
             if bound > limit:
                 continue
             if kana:
-                key = (w.end, w.rid, nr)
+                key = (w.end, w.rid, out, nr)
                 if nc >= prefixes.get(key, inf):
                     continue
                 prefixes[key] = nc
-            heappush(heap, (bound, next(serial), nc, w.end, w.rid,
+            heappush(heap, (bound, next(serial), nc, w.end, w.rid, out,
                             e.lid if pos == 0 else lid, ns, nr,
                             all_literal and w.literal))
 
