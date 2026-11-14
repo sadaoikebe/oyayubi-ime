@@ -472,6 +472,18 @@ class ProcessTest(BrokerCase):
         tip.send({"op": "open_admin"})
         wait_until(marker.exists, timeout=10)
 
+    @unittest.skipUnless(WINDOWS, "the named pipe")
+    def test_management_tools_name_the_real_pipe(self):
+        # It once raised (ERROR_INVALID_HANDLE) and the window showed "not running"
+        # beside a running broker.
+        from oyayubi.ime import broker_client
+        sid = subprocess.run(["whoami", "/user", "/fo", "csv", "/nh"], capture_output=True,
+                             text=True, check=True).stdout.strip().split(",")[-1].strip('"')
+        prefix = rf"\\.\pipe\oyayubi-ime-{sid}-"
+        address = broker_client.pipe_address()
+        self.assertTrue(address.startswith(prefix), address)
+        self.assertTrue(address[len(prefix):].isdigit(), address)
+
     @unittest.skipIf(WINDOWS, "the management tools find the real pipe by the user's SID")
     def test_management_tools_reach_the_broker(self):
         from oyayubi.ime import broker_client
