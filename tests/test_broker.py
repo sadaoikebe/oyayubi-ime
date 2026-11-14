@@ -17,8 +17,7 @@ import json
 import os
 from pathlib import Path
 import queue
-import shutil
-import signal
+import runpy
 import socket
 import subprocess
 import sys
@@ -31,6 +30,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src" / "broker"
 BUILD = ROOT / "build" / "broker"
 FAKE_ENGINE = SOURCE / "tests" / "fake_engine.py"
+birth = runpy.run_path(str(FAKE_ENGINE))["birth"]
 _built = None
 
 # The longest any wait goes on. Every wait ends as soon as what it waits for has
@@ -58,24 +58,9 @@ def broker_binary() -> Path:
     return _built
 
 
-def alive(pid: int) -> bool:
-    """The process exists and has not exited (a zombie counts as gone)."""
-    if WINDOWS:
-        import ctypes
-        kernel32 = ctypes.windll.kernel32
-        handle = kernel32.OpenProcess(0x00100000, False, pid)  # SYNCHRONIZE
-        if not handle:
-            return False
-        try:
-            return kernel32.WaitForSingleObject(handle, 0) == 0x102  # WAIT_TIMEOUT
-        finally:
-            kernel32.CloseHandle(handle)
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    with open(f"/proc/{pid}/stat") as stat:
-        return stat.read().split()[2] != "Z"
+def alive(pid: int, born: int) -> bool:
+    """That process (as the fake engine recorded it) has not exited."""
+    return birth(pid) == born
 
 
 def top_level_windows(pids) -> list[str]:
@@ -236,7 +221,7 @@ class BrokerCase(unittest.TestCase):
         self.engine_json.write_text(json.dumps({
             "format": 1, "python": python, "pythonw": pythonw or python,
             "app": str(app or self.dir), "args": args,
-            "admin_args": [str(self.dir / "admin.py")]}), encoding="utf-8")
+            "admin_args": [str(FAKE_ENGINE), "--admin", str(self.state)]}), encoding="utf-8")
 
     def start(self, *extra) -> subprocess.Popen:
         argv = [str(broker_binary()), "--data-dir", str(self.data),
@@ -247,9 +232,9 @@ class BrokerCase(unittest.TestCase):
         return proc
 
     def stop(self, proc):
-        if WINDOWS:
-            # §5.7: across every test, no window from the broker or its children.
-            self.assertEqual(top_level_windows([proc.pid, *self.engine_pids()]), [])
+        # §5.7: across every test, no window from the broker or its children.
+        windows = top_level_windows([proc.pid, *(pid for pid, _ in self.engines())]) \
+            if WINDOWS else []
         for tip in self.tips:
             tip.close()
         if proc.poll() is None:
@@ -257,9 +242,11 @@ class BrokerCase(unittest.TestCase):
         proc.wait()
         for stream in (proc.stdout, proc.stderr):
             stream.close()
-        for pid in self.engine_pids():
-            if alive(pid):
-                os.kill(pid, signal.SIGTERM if WINDOWS else signal.SIGKILL)
+        # The job object (POSIX: PR_SET_PDEATHSIG) ends the engines with the broker,
+        # and the admin command ends by itself; they run in the temporary folder,
+        # which cannot be removed until they have.
+        wait_until(lambda: not any(alive(*p) for p in self.engines() + self.admins()))
+        self.assertEqual(windows, [])
 
     def tip(self) -> FakeTip:
         def connect():
@@ -271,12 +258,20 @@ class BrokerCase(unittest.TestCase):
         self.tips.append(tip)
         return tip
 
-    def engine_pids(self) -> list[int]:
-        starts = self.state / "starts"
-        return [int(p) for p in starts.read_text().split()] if starts.exists() else []
+    def recorded(self, name: str) -> list[tuple[int, int]]:
+        """The processes the fake engine wrote down in this file: (pid, birth)."""
+        path = self.state / name
+        lines = path.read_text().splitlines() if path.exists() else []
+        return [tuple(map(int, line.split())) for line in lines]
+
+    def engines(self) -> list[tuple[int, int]]:
+        return self.recorded("starts")
+
+    def admins(self) -> list[tuple[int, int]]:
+        return self.recorded("admins")
 
     def starts(self) -> int:
-        return len(self.engine_pids())
+        return len(self.engines())
 
     def received(self, start: int) -> list[dict]:
         path = self.state / f"received-{start}.jsonl"
@@ -415,10 +410,10 @@ class ProcessTest(BrokerCase):
         tip = self.tip()
         tip.hello()
         tip.wait_state("ready")
-        engine = self.engine_pids()[0]
+        engine = self.engines()[0]
         proc.kill()
         proc.wait()
-        wait_until(lambda: not alive(engine))
+        wait_until(lambda: not alive(*engine))
 
     def test_one_broker_per_user(self):
         self.plan("normal")
@@ -469,15 +464,12 @@ class ProcessTest(BrokerCase):
         self.assertEqual(tip.reply(1), {"seq": 1, "state": "incompatible"})
 
     def test_open_admin_runs_the_admin_command(self):
-        marker = self.dir / "admin-ran"
-        (self.dir / "admin.py").write_text(
-            f"open({str(marker)!r}, 'w').write('yes')\n", encoding="utf-8")
         self.plan("normal")
         self.start()
         tip = self.tip()
         tip.hello()
         tip.send({"op": "open_admin"})
-        wait_until(marker.exists)
+        wait_until(self.admins)
 
     @unittest.skipUnless(WINDOWS, "the named pipe")
     def test_management_tools_name_the_real_pipe(self):
