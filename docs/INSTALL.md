@@ -86,8 +86,8 @@ powershell -ExecutionPolicy Bypass -File $env:LOCALAPPDATA\oyayubi-ime\versions\
   CI もこれを使う。
 - `src\tip\dev-register.ps1 [-Python <python.exe>]`: タグ `dev` として登録する。エンジンは
   リポジトリから指定の Python で動き、DLL とブローカーは `dist\` から読み込む（Program Files には
-  置かない）。DLL は A/B の 2 つに交互にコピーして登録するので、古い DLL を読み込んだアプリを
-  閉じなくても更新できる。
+  置かない）。DLL は `NicolaIME3-a.dll`、`-b.dll`、… のうち、登録中でも使用中でもない最初のものに
+  コピーして登録するので、古い DLL を読み込んだアプリを閉じなくても更新や入れ直しができる。
 
 ## 既知の限界
 

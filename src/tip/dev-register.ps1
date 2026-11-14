@@ -5,8 +5,8 @@
 # - HKCU の Tag を dev にし、%LOCALAPPDATA%\oyayubi-ime\versions\dev\engine.json を
 #   このリポジトリに向ける (エンジンは指定の Python で python -m oyayubi.engine)。
 # - DLL とブローカーは dist\ から読み込む (開発機に限り Program Files に置かない)。
-#   DLL は dist\NicolaIME3-a.dll / -b.dll に交互にコピーして登録するので、
-#   古い DLL を読み込んだアプリを閉じなくても更新できる。
+#   DLL は dist\NicolaIME3-a.dll / -b.dll / ... のうち、登録中でなく使用中でもないものに
+#   コピーして登録するので、古い DLL を読み込んだアプリを閉じなくても更新できる。
 # - 登録 (regsvr32) だけ管理者権限 (UAC 1 回)。登録後にレジストリを読み返して確かめる。
 param([string]$Python = "")
 $ErrorActionPreference = 'Stop'
@@ -38,15 +38,23 @@ foreach ($b in @(Get-Process -Name 'oyayubi-broker' -ErrorAction SilentlyContinu
     if (-not $b.WaitForExit(15000)) { throw "ブローカー (PID $($b.Id)) が終わりません。" }
 }
 
-# DLL のスロット: いま登録されていない方へ。
+# DLL のスロット: いま登録されていなくて、上書きできる最初のもの (a, b, c, ...)。
+# 登録を解いても、読み込んだアプリ (explorer など) は DLL を掴んだままなので、
+# 解除して入れ直すと a も b も使用中のことがある。
 $inproc = "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Classes\CLSID\$Clsid\InprocServer32"
 $registered = (Get-ItemProperty -LiteralPath $inproc -ErrorAction SilentlyContinue).'(default)'
-$slot = Join-Path $Dist 'NicolaIME3-a.dll'
-if ($registered -eq $slot) { $slot = Join-Path $Dist 'NicolaIME3-b.dll' }
-try {
-    Copy-Item -LiteralPath (Join-Path $Dist 'NicolaIME3.dll') -Destination $slot -Force
-} catch {
-    throw "コピー先 $slot は使用中です。この DLL を使う古いアプリを終了してから再実行してください。"
+$slot = $null
+foreach ($letter in [char[]]'abcdefghijklmnopqrstuvwxyz') {
+    $candidate = Join-Path $Dist "NicolaIME3-$letter.dll"
+    if ($candidate -eq $registered) { continue }
+    try {
+        Copy-Item -LiteralPath (Join-Path $Dist 'NicolaIME3.dll') -Destination $candidate -Force
+        $slot = $candidate
+        break
+    } catch { }
+}
+if (-not $slot) {
+    throw "dist\NicolaIME3-a.dll から -z.dll まですべて使用中です。古い DLL を使うアプリを終了してから再実行してください。"
 }
 # packaging\uninstall.ps1 は登録済み DLL と同じフォルダの elevated.ps1 を使う。
 Copy-Item -LiteralPath (Join-Path $Repo 'packaging\elevated.ps1') -Destination (Join-Path $Dist 'elevated.ps1') -Force
