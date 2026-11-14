@@ -47,7 +47,7 @@ class Word:
 
 def validate(reading: str, surface: str, pos: str) -> None:
     if not reading or is_literal_face(reading):
-        raise ValueError("読みはひらがな（と ー）で入力してください")
+        raise ValueError("読みは、ひらがなと長音記号（ー）で入力してください")
     if not surface or surface != surface.strip():
         raise ValueError("単語を入力してください（前後に空白は入れられません）")
     if pos not in POS_IDS:

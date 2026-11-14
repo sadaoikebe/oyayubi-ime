@@ -54,7 +54,7 @@ class AdminModelTest(Base):
     def test_restart_engine_reports_no_broker(self):
         outcome = self.model.restart_engine()
         self.assertFalse(outcome.ok)
-        self.assertEqual(outcome.message, "ブローカーが動いていません")
+        self.assertEqual(outcome.message, "ゆらぎの常駐プログラムが動いていません")
 
     def test_restart_engine_when_running(self):
         # REDESIGN §9.4: a settings restart is the broker's "retry".
@@ -77,7 +77,7 @@ class AdminModelTest(Base):
                self.model.add_word("かた", "", "名詞"), self.model.add_word("かた", "型", "動詞")]
         self.assertEqual([o.ok for o in bad], [False] * 4)
         self.assertEqual([o.message for o in bad], [
-            "読みはひらがな（と ー）で入力してください",
+            "読みは、ひらがなと長音記号（ー）で入力してください",
             "コストは整数で入力してください（「x」は使えません）",
             "単語を入力してください（前後に空白は入れられません）",
             "品詞「動詞」は使えません。次から選んでください: "
@@ -261,7 +261,7 @@ class StatusTest(Base):
         self.assertEqual(rows["登録した単語"], "1 件")
         self.assertEqual(rows["個人辞書の読めなかった行"], "0 行")
         self.assertEqual(rows["設定ファイル"], str(self.config))
-        self.assertIn(rows["辞書"], ("正常", "照合の記録（マニフェスト）がありません"))
+        self.assertIn(rows["辞書"], ("正常", "辞書を確かめるための記録がありません"))
 
     def test_no_broker_and_a_last_stop(self):
         logs = self.dir / "logs"
@@ -270,10 +270,10 @@ class StatusTest(Base):
             json.dumps({"time": "2026-11-14T16:00:00", "stopped": "hang"}) + "\n",
             encoding="utf-8")
         rows = dict(self.model.status_rows())
-        self.assertEqual(rows["変換エンジン"], "ブローカーが動いていません")
+        self.assertEqual(rows["変換エンジン"], "ゆらぎの常駐プログラムが動いていません")
         self.assertEqual(rows["注意"], "なし")
         self.assertEqual(rows["最後に止まった理由"],
-                         "変換エンジンが反応しなくなった（2026-11-14T16:00:00）")
+                         "変換エンジンが反応しなくなった（2026-11-14 16:00:00）")
         self.assertEqual(rows["学習した変換"], "0 件（学習履歴はまだありません）")
 
     def test_dictionary_problems_in_japanese(self):

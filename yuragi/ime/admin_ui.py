@@ -66,8 +66,8 @@ SETTINGS: dict[str, SettingText] = {
         "続きの候補を出します。",
         {"tab": "Tab キーで出す", "off": "使わない"}),
     "lm_rescore": SettingText(
-        "言語モデル", "変換するとき、言語モデルで候補の順位を見直します。使わないときは"
-        "辞書だけで変換します。",
+        "言語モデル", "変換するとき、言語モデル（文のつながりが自然かを判断するもの）で"
+        "候補の順位を見直します。使わないときは、辞書だけで変換します。",
         {"true": "使う", "false": "使わない"}, implied="true"),
     "lm_prefetch": SettingText(
         "言語モデルの先読み", "変換を速くするため、変換キーを押す前から言語モデルの"
@@ -77,11 +77,11 @@ SETTINGS: dict[str, SettingText] = {
         "言語モデルを待つ上限（ミリ秒）", "変換キーを押してからこの時間を過ぎても言語モデルの"
         "結果が出ないときは、辞書だけの結果を出します。", {}),
     "lm_grace_ms": SettingText(
-        "変換キーでその場で待つ時間（ミリ秒）", "変換キーを押したあと、表示を変える前に"
+        "変換キーを押したあとに待つ時間（ミリ秒）", "変換キーを押したあと、表示を変える前に"
         "言語モデルの結果を待つ時間です。間に合わないときは表示をそのままにして待ち続け、"
         "その間に打ったキーは結果が出てから順に処理します。", {}),
     "lm_prefetch_delay_ms": SettingText(
-        "先読みを始めるまで（ミリ秒）", "「親指キーを押したとき」の先読みで、親指キーを"
+        "先読みを始めるまでの時間（ミリ秒）", "「親指キーを押したとき」の先読みで、親指キーを"
         "押してから計算を始めるまでの時間です。", {}),
     "lm_model": SettingText(
         "言語モデルの種類", "使う言語モデル（Hugging Face のモデル名か、モデルのフォルダ）。"
@@ -91,20 +91,21 @@ SETTINGS: dict[str, SettingText] = {
         "言語モデルの重み", "大きいほど、辞書より言語モデルの判断を重く見ます。", {},
         implied="1.0"),
     "lm_k": SettingText(
-        "言語モデルで比べる候補の数", "辞書の候補のうち、上位いくつを言語モデルで比べるか。",
+        "言語モデルで比べる候補の数", "辞書で出した候補のうち、上から何件を言語モデルで"
+        "比べるかです。",
         {}, implied="8"),
     "lm_threads": SettingText(
-        "言語モデルの CPU スレッド数", "言語モデルの計算に使う CPU のスレッド数。"
-        "空欄にすると自動で決めます。", {}, unset="自動"),
+        "言語モデルが使う CPU のスレッド数", "言語モデルの計算に使う CPU のスレッド数です。"
+        "空欄にすると、自動で決めます。", {}, unset="自動"),
     "personal_file": SettingText(
-        "個人辞書のファイル", "「単語登録」で登録した単語を保存するファイル。", {}),
+        "個人辞書のファイル", "「単語登録」で登録した単語を保存するファイルです。", {}),
     "learning_file": SettingText(
-        "学習履歴のファイル", "学習した内容を保存するファイル。", {}),
+        "学習履歴のファイル", "学習した内容を保存するファイルです。", {}),
     "no_learning": SettingText(
         "学習を無効にする（旧設定）", "古い版の設定です。オンは「学習」を「使わない」に"
         "するのと同じです。", ON_OFF),
     "log_text": SettingText(
-        "入力した文字をログに残す（開発用）", "入力中と確定した文字を変換エンジンのログに"
+        "入力した文字をログに残す（開発用）", "入力中の文字と確定した文字を、変換エンジンのログに"
         "書きます。入力内容がファイルに残るので、普段はオフにします。", ON_OFF),
     "lm_timing": SettingText(
         "言語モデルの処理時間をログに残す（開発用）", "変換ごとの言語モデルの処理時間を"
@@ -118,7 +119,7 @@ WARNINGS = {
     "lm": "言語モデルを使えません（辞書だけで変換しています）",
     "config": "設定ファイルの一部を読めませんでした（その項目は既定値で動いています）",
     "learning-read": "学習履歴を読めませんでした（学習なしで動いています）",
-    "learning-write": "学習を保存できませんでした（覚えた内容はこの間だけ有効です）",
+    "learning-write": "学習を保存できませんでした（覚えた内容は保存されず、今だけ有効です）",
 }
 STOP_REASONS = {
     "program-files": "必要なプログラムのファイルが見つからないか、壊れていた",
@@ -337,7 +338,7 @@ class AdminModel:
         rows = []
         broker = broker_client.status()
         if broker is None:
-            rows.append(("変換エンジン", "ブローカーが動いていません"))
+            rows.append(("変換エンジン", "ゆらぎの常駐プログラムが動いていません"))
         else:
             rows.append(("変換エンジン", ENGINE_STATES.get(broker["state"], broker["state"])))
         warnings = [WARNINGS.get(w, w) for w in (broker or {}).get("warnings", [])]
@@ -345,16 +346,18 @@ class AdminModel:
         runtime_dir = self.settings.runtime_dir or config.DEFAULT_RUNTIME_DIR
         stop = broker_client.last_stop(runtime_dir / "logs")
         rows.append(("最後に止まった理由",
-                     f"{STOP_REASONS.get(stop['stopped'], stop['stopped'])}（{stop['time']}）"
+                     f"{STOP_REASONS.get(stop['stopped'], stop['stopped'])}"
+                     f"（{stop['time'].replace('T', ' ')}）"
                      if stop else "なし"))
 
         manifest = dict_manifest.MANIFEST
         if manifest.exists():
             problems = dict_manifest.verify(json.loads(manifest.read_text(encoding="utf-8")))
             rows.append(("辞書", "正常" if not problems else
-                         "記録と違います: " + "、".join(map(_dictionary_problem, problems))))
+                         "記録と違うファイルがあります: "
+                         + "、".join(map(_dictionary_problem, problems))))
         else:
-            rows.append(("辞書", "照合の記録（マニフェスト）がありません"))
+            rows.append(("辞書", "辞書を確かめるための記録がありません"))
 
         rows.append(("学習", LEARNING_STATES[self.learning_state()]))
         if self.learning_file.exists():
@@ -370,7 +373,8 @@ class AdminModel:
         rows += [("登録した単語", f"{len(words)} 件"),
                  ("個人辞書の読めなかった行", f"{skipped} 行"),
                  ("設定ファイル", str(self.config_file)
-                  + ("" if self.config_file.exists() else "（未作成。すべて既定値）")),
+                  + ("" if self.config_file.exists()
+                     else "（まだありません。すべて既定値で動いています）")),
                  ("学習履歴のファイル", str(self.learning_file)),
                  ("個人辞書のファイル", str(self.personal_file))]
         return rows
@@ -379,7 +383,7 @@ class AdminModel:
         """REDESIGN §9.4: the broker's "retry" starts the engine again (new settings)."""
         if broker_client.retry():
             return Outcome(True, "変換エンジンを新しい設定で起動し直します")
-        return Outcome(False, "ブローカーが動いていません")
+        return Outcome(False, "ゆらぎの常駐プログラムが動いていません")
 
 
 def declare_dpi_aware() -> None:
@@ -567,7 +571,7 @@ class AdminWindow:
         self._combobox(actions, self.l_pos, POS_NAMES, 9).pack(side="left", padx=(0, self.px(4)))
         ttk.Button(actions, text="選択を単語登録", command=self._promote).pack(side="left")
         self.learning_tree = self._table(
-            frame, ("読み", "変換", "文脈数", "最終確定", "単語として覚えた"),
+            frame, ("読み", "変換", "文脈の数", "最後の確定", "単語として覚えた"),
             (160, 200, 70, 140, 110))
 
     def _forget(self):
