@@ -10,6 +10,8 @@
 - engine.json says what the broker needs, and its "-c" bootstrap really runs a
   module from the working directory when Python is isolated (the bundled
   runtime's ._pth leaves the working directory off sys.path).
+- The release publishes the tkinter files setup.ps1 adds to the runtime, taken
+  from the same Python version, and the runtime's name tells it from v0.1.0's.
 
 pwsh runs these (GitHub's Ubuntu runners have it; YURAGI_PWSH names another).
 """
@@ -189,6 +191,31 @@ class BootstrapTest(unittest.TestCase):
                                 cwd=ROOT, capture_output=True, text=True)
         self.assertEqual(booted.returncode, 0, booted.stdout + booted.stderr)
         self.assertIn(": OK", booted.stdout)
+
+
+class TkinterAssetTest(unittest.TestCase):
+    """The release builds the tkinter asset that setup.ps1 fetches into the runtime."""
+
+    def test_release_and_setup_agree(self):
+        import yaml
+        setup = (ROOT / "packaging" / "setup.ps1").read_text(encoding="utf-8-sig")
+        version = re.search(r'^\$EmbedPythonVersion = "([0-9.]+)"$', setup, re.M).group(1)
+        build = yaml.safe_load((ROOT / ".github" / "workflows" / "release.yml")
+                               .read_text(encoding="utf-8"))["jobs"]["build"]["steps"]
+        # The normal Python the tkinter files are taken from is the embedded one's version.
+        python = next(s for s in build if s.get("uses", "").startswith("actions/setup-python"))
+        self.assertEqual(python["with"]["python-version"], version)
+        # What setup.ps1 downloads is published, with its hash.
+        self.assertIn('"$baseUrl/python-$EmbedPythonVersion-tkinter-amd64.zip"', setup)
+        files = next(s for s in build if s.get("uses", "").startswith("softprops/"))["with"]["files"].split()
+        self.assertIn(f"python-{version}-tkinter-amd64.zip", files)
+        self.assertIn(f"python-{version}-tkinter-amd64.zip.sha256", files)
+        # The asset puts tkinter in Lib\tkinter; the runtime's ._pth has Lib on the path.
+        assemble = next(s for s in build if s.get("name") == "アセットの組み立て")["run"]
+        self.assertIn('"Lib\\tkinter"', assemble)
+        self.assertRegex(setup, r'"\.", "Lib", "Lib\\site-packages", "import site"')
+        # A runtime without tkinter (v0.1.0's) is not taken for this one.
+        self.assertIn('$runtimeId = "py$EmbedPythonVersion-tk-torch', setup)
 
 
 if __name__ == "__main__":

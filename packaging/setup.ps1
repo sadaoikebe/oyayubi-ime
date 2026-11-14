@@ -96,7 +96,7 @@ if ($free -lt 3GB) { Fail "空き容量が足りません (必要 3GB、現在 $
 Say "  Windows $($os.Major).$($os.Minor) 64bit、空き $([math]::Round($free / 1GB, 1))GB OK"
 Say ""
 Say "次を取得します (足りないものだけ。2 回目からは大半を取り直しません):"
-Say "  GitHub Releases: 本体 (約 30MB)、TIP とブローカー"
+Say "  GitHub Releases: 本体 (約 30MB)、TIP とブローカー、設定ウィンドウ用の tkinter 一式 (約 5MB)"
 Say "  python.org: Python $EmbedPythonVersion 埋め込み版 (約 30MB) / PyTorch 公式: torch CPU 版 (約 200MB) / PyPI: 依存"
 Say "  github.com (google/mozc): 辞書 (約 93MB) / HuggingFace: LM モデル (約 500MB)"
 if (-not (Ask "続けますか？")) { Fail "取り消しました。" }
@@ -159,9 +159,11 @@ $StageApp = Join-Path $Stage "app"
 Expand-Archive -LiteralPath $sourceZip -DestinationPath $StageApp
 
 # 同梱ランタイム: Python の版・依存の固定・torch の版で名前が決まる。中身が同じなら共有する。
+# 「tk」は tkinter 一式 (リリースのアセット。同じ版の通常版 Python から取ったもの) 入りの印。
+# これの無い v0.1.0 のランタイムとは別物として作り直し、古い方は片付けで消える。
 $requirements = Join-Path $StageApp "packaging\requirements.txt"
 $reqHash = (Get-FileHash -LiteralPath $requirements -Algorithm SHA256).Hash.Substring(0, 12).ToLower()
-$runtimeId = "py$EmbedPythonVersion-torch$TorchVersion-$reqHash"
+$runtimeId = "py$EmbedPythonVersion-tk-torch$TorchVersion-$reqHash"
 $Runtime = Join-Path $Shared "runtime\$runtimeId"
 New-Shared $Runtime {
     param($dir)
@@ -172,8 +174,12 @@ New-Shared $Runtime {
         Fail "Python 埋め込み版の SHA-256 が一致しません。"
     }
     Expand-Archive -LiteralPath $embedZip -DestinationPath $dir
+    # 埋め込み版に無い tkinter 一式 (_tkinter.pyd と Tcl/Tk の DLL は直下、tcl\、Lib\tkinter\)。
+    $tkZip = Join-Path $Download "python-tkinter.zip"
+    [void](Get-Verified "$baseUrl/python-$EmbedPythonVersion-tkinter-amd64.zip" $tkZip)
+    Expand-Archive -LiteralPath $tkZip -DestinationPath $dir
     $pth = Get-ChildItem -LiteralPath $dir -Filter "python*._pth" | Select-Object -First 1 -ExpandProperty FullName
-    @(("python" + $EmbedPythonVersion.Substring(0, 4).Replace(".", "") + ".zip"), ".", "Lib\site-packages", "import site") |
+    @(("python" + $EmbedPythonVersion.Substring(0, 4).Replace(".", "") + ".zip"), ".", "Lib", "Lib\site-packages", "import site") |
         Set-Content -LiteralPath $pth -Encoding ASCII
     $py = Join-Path $dir "python.exe"
     $getPip = Join-Path $Download "get-pip.py"
@@ -185,7 +191,9 @@ New-Shared $Runtime {
     Invoke-Checked "依存パッケージ (PyPI、バージョン固定)" {
         & $py -m pip install --no-warn-script-location -r $requirements
     }
-    Invoke-Checked "依存の読み込み確認" { & $py -c "import torch, transformers, sentencepiece, huggingface_hub" }
+    Invoke-Checked "依存の読み込み確認" {
+        & $py -c "import torch, transformers, sentencepiece, huggingface_hub, tkinter; tkinter.Tcl()"
+    }
 }
 $script:Python = Join-Path $Runtime "python.exe"
 

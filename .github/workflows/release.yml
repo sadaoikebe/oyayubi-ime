@@ -21,10 +21,11 @@ jobs:
         shell: pwsh
         run: ./src/tip/dev-build.ps1 -Tag "${{ github.ref_name }}"
 
-      # setup.ps1 が使う Python (同梱ランタイム 3.13) で確かめる。
+      # setup.ps1 の同梱ランタイムと同じ版 ($EmbedPythonVersion)。依存の検証に使い、
+      # 埋め込み版に無い tkinter 一式もこの通常版から取る。
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version: "3.13.7"
 
       - name: 依存ピン留めの実地検証 (torch CPU + requirements + import)
         shell: pwsh
@@ -50,12 +51,27 @@ jobs:
           git archive --format=zip -o yuragi-ime-source.zip HEAD
           Copy-Item dist/yuragi_tip.dll .
           Copy-Item dist/yuragi-broker.exe .
-          foreach ($name in @("yuragi_tip.dll", "yuragi-broker.exe", "yuragi-ime-source.zip")) {
+          $pyVersion = (Select-String -Path packaging/setup.ps1 -Pattern '^\$EmbedPythonVersion = "([0-9.]+)"').Matches[0].Groups[1].Value
+          # 設定ウィンドウ用の tkinter 一式。埋め込み版には無いので、同じ版の通常版
+          # (setup-python が入れたもの) から取り、setup.ps1 がランタイムの直下に展開する。
+          $base = @(python -c "import sys, platform; print(platform.python_version()); print(platform.architecture()[0]); print(sys.base_prefix)")
+          if ($base[0] -ne $pyVersion -or $base[1] -ne "64bit") { throw "setup-python gave $($base[0]) $($base[1]), not $pyVersion 64bit" }
+          $tkDir = Join-Path $env:RUNNER_TEMP "tkinter"
+          New-Item -ItemType Directory (Join-Path $tkDir "Lib") | Out-Null
+          Get-ChildItem (Join-Path $base[2] "DLLs") -File | Where-Object { $_.Name -match '^(_tkinter\.pyd|tcl.*\.dll|tk.*\.dll|zlib.*\.dll)$' } |
+            Copy-Item -Destination $tkDir
+          Copy-Item (Join-Path $base[2] "tcl") (Join-Path $tkDir "tcl") -Recurse
+          Copy-Item (Join-Path $base[2] "Lib\tkinter") (Join-Path $tkDir "Lib\tkinter") -Recurse
+          Get-ChildItem $tkDir -Recurse -Directory -Filter __pycache__ | Remove-Item -Recurse -Force
+          Get-ChildItem $tkDir -File | ForEach-Object { Write-Host "tkinter asset: $($_.Name)" }
+          $tkName = "python-$pyVersion-tkinter-amd64.zip"
+          Compress-Archive -Path (Join-Path $tkDir "*") -DestinationPath $tkName
+          foreach ($name in @("yuragi_tip.dll", "yuragi-broker.exe", "yuragi-ime-source.zip", $tkName)) {
             (Get-FileHash $name -Algorithm SHA256).Hash.ToLower() | Set-Content "$name.sha256" -Encoding ASCII -NoNewline
           }
           # setup.ps1 にタグと、同梱 Python の公式ハッシュを刻む。
-          $embedName = "python-3.13.7-embed-amd64.zip"
-          Invoke-WebRequest -UseBasicParsing "https://www.python.org/ftp/python/3.13.7/$embedName" -OutFile $embedName
+          $embedName = "python-$pyVersion-embed-amd64.zip"
+          Invoke-WebRequest -UseBasicParsing "https://www.python.org/ftp/python/$pyVersion/$embedName" -OutFile $embedName
           $embedHash = (Get-FileHash $embedName -Algorithm SHA256).Hash.ToLower()
           $setup = Get-Content packaging/setup.ps1 -Raw
           $setup = $setup -replace "__TAG__", $env:GITHUB_REF_NAME -replace "__EMBED_SHA256__", $embedHash
@@ -93,6 +109,8 @@ jobs:
             yuragi-broker.exe.sha256
             yuragi-ime-source.zip
             yuragi-ime-source.zip.sha256
+            python-3.13.7-tkinter-amd64.zip
+            python-3.13.7-tkinter-amd64.zip.sha256
 
   # 公開したプレリリースの setup.ps1 で、まっさらなランナーに実際に入れる (経路は 1 本)。
   # インストール → 動作 (ブローカーが ready) → 同じ版の入れ直し (学習データが残るか)
