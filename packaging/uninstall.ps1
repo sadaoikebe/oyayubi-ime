@@ -79,7 +79,7 @@ if ($RemoveData -and (Test-Path -LiteralPath $UserData)) {
 Say "== 自動起動と入力方法の一覧から外す (この利用者)"
 if (Test-Path -LiteralPath $ProductKey) { Remove-ItemProperty -LiteralPath $ProductKey -Name "Tag" -ErrorAction SilentlyContinue }
 Remove-ItemProperty -LiteralPath $RunKey -Name "yuragi-ime" -ErrorAction SilentlyContinue
-if ((Test-Path -LiteralPath $ProductKey) -and (Get-ItemProperty -LiteralPath $ProductKey).Tag) { Fail "入っている版の記録を、レジストリから消せませんでした。" }
+if ((Test-Path -LiteralPath $ProductKey) -and (Get-ItemProperty -LiteralPath $ProductKey).Tag) { Fail "HKCU の Tag を消せませんでした。" }
 $oldUserClsid = "HKCU:\Software\Classes\CLSID\$Clsid"   # v0.1.0 が書いたもの
 if (Test-Path -LiteralPath $oldUserClsid) { Remove-Item -LiteralPath $oldUserClsid -Recurse -Force }
 Add-Type -Namespace YuragiUninstall -Name Input -MemberDefinition @'
@@ -141,7 +141,7 @@ Say "  取り外しました"
             try { [IO.File]::Move($oldDll, "$oldDll.unused"); [IO.File]::Move("$oldDll.unused", $oldDll) } catch { $free = $false }
         }
         if ($free) { Remove-Item -LiteralPath $leftover -Recurse -Force }
-        else { Say "  旧版のファイルがアプリに使われているので、旧版のフォルダ ($leftover) を残しました。アプリをすべて閉じてから、もう一度実行すると消えます。" }
+        else { Say "  旧版 ($leftover) の DLL が使用中なので、旧版のフォルダを残しました。アプリを閉じてからもう一度実行すると消えます。" }
     }
 }
 

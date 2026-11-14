@@ -97,10 +97,9 @@ Say "  Windows $($os.Major).$($os.Minor) (64bit)、ディスクの空き $([math
 Say ""
 Say "インターネットから次のものを取得します。"
 Say "すでに入っているものは取得しないので、2 回目からは、ほとんど取得しません。"
-Say "  ・ゆらぎのプログラム (約 35MB)"
-Say "  ・ゆらぎを動かすための Python $EmbedPythonVersion と、計算用の部品 (PyTorch など。約 230MB)"
-Say "  ・かな漢字変換の辞書 (Google の日本語入力 Mozc の辞書。約 93MB)"
-Say "  ・候補の順番を決める言語モデル (約 500MB)"
+Say "  GitHub Releases: 本体 (約 30MB)、yuragi_tip.dll と yuragi-broker.exe、設定ウィンドウ用の tkinter 一式 (約 5MB)"
+Say "  python.org: Python $EmbedPythonVersion (約 30MB) / PyTorch 公式: torch CPU 版 (約 200MB) / PyPI: transformers、sentencepiece、huggingface_hub など"
+Say "  github.com (google/mozc): 辞書 (約 93MB) / HuggingFace: 言語モデル rinna/japanese-gpt2-small (約 500MB)"
 if (-not (Ask "続けますか？")) { Fail "取り消しました。" }
 
 function Get-Verified([string]$url, [string]$dest) {
@@ -109,7 +108,7 @@ function Get-Verified([string]$url, [string]$dest) {
     if ($expected -is [byte[]]) { $expected = [Text.Encoding]::ASCII.GetString($expected) }
     $expected = $expected.Trim().ToLower()
     $actual = (Get-FileHash -LiteralPath $dest -Algorithm SHA256).Hash.ToLower()
-    if ($actual -ne $expected) { Fail "取得した $(Split-Path $dest -Leaf) が壊れています (中身が記録と一致しません)。" }
+    if ($actual -ne $expected) { Fail "SHA-256 が一致しません: $(Split-Path $dest -Leaf)" }
     Say "  $(Split-Path $dest -Leaf) を取得しました (中身が正しいことを確かめました)"
     return $expected
 }
@@ -169,11 +168,11 @@ $runtimeId = "py$EmbedPythonVersion-tk-torch$TorchVersion-$reqHash"
 $Runtime = Join-Path $Shared "runtime\$runtimeId"
 New-Shared $Runtime {
     param($dir)
-    Say "== ゆらぎを動かすための Python の準備"
+    Say "== 同梱ランタイム ($runtimeId)"
     $embedZip = Join-Path $Download "python-embed.zip"
     Invoke-WebRequest -UseBasicParsing "https://www.python.org/ftp/python/$EmbedPythonVersion/python-$EmbedPythonVersion-embed-amd64.zip" -OutFile $embedZip
     if ((Get-FileHash -LiteralPath $embedZip -Algorithm SHA256).Hash.ToLower() -ne $EmbedPythonSha256.ToLower()) {
-        Fail "取得した Python が壊れています (中身が記録と一致しません)。"
+        Fail "Python $EmbedPythonVersion の SHA-256 が一致しません。"
     }
     Expand-Archive -LiteralPath $embedZip -DestinationPath $dir
     # 埋め込み版に無い tkinter 一式 (_tkinter.pyd と Tcl/Tk の DLL は直下、tcl\、Lib\tkinter\)。
@@ -186,14 +185,14 @@ New-Shared $Runtime {
     $py = Join-Path $dir "python.exe"
     $getPip = Join-Path $Download "get-pip.py"
     Invoke-WebRequest -UseBasicParsing "https://bootstrap.pypa.io/get-pip.py" -OutFile $getPip
-    Invoke-Checked "Python の部品を入れる道具 (pip) の取得" { & $py $getPip --no-warn-script-location }
-    Invoke-Checked "言語モデルの計算に使う部品 (PyTorch) の取得" {
+    Invoke-Checked "pip (公式 get-pip.py)" { & $py $getPip --no-warn-script-location }
+    Invoke-Checked "torch CPU 版 (PyTorch 公式インデックス)" {
         & $py -m pip install --no-warn-script-location --index-url https://download.pytorch.org/whl/cpu "torch==$TorchVersion"
     }
-    Invoke-Checked "そのほかの Python の部品の取得" {
+    Invoke-Checked "transformers と sentencepiece (PyPI、バージョン固定)" {
         & $py -m pip install --no-warn-script-location -r $requirements
     }
-    Invoke-Checked "取得した部品が使えるかの確認" {
+    Invoke-Checked "torch・transformers・sentencepiece・huggingface_hub・tkinter の読み込み確認" {
         & $py -c "import torch, transformers, sentencepiece, huggingface_hub, tkinter; tkinter.Tcl()"
     }
 }
@@ -203,10 +202,10 @@ $manifest = Get-Content -LiteralPath (Join-Path $StageApp "data\dictionary-manif
 $script:Dict = Join-Path $Shared "dict\$($manifest.upstream_commit)"
 New-Shared $script:Dict {
     param($dir)
-    Invoke-Checked "辞書の取得" {
+    Invoke-Checked "辞書の取得 (google/mozc、上流コミット固定)" {
         Invoke-App $script:Python $StageApp @("tools.wp0.fetch_mozc_dict", "--out", $dir)
     }
-    Invoke-Checked "辞書が壊れていないかの確認" {
+    Invoke-Checked "辞書の照合 (SHA-256)" {
         Invoke-App $script:Python $StageApp @("yuragi.lattice.dict_manifest", "verify", "--dict-dir", $dir)
     }
 }
@@ -214,7 +213,7 @@ $revision = (Select-String -LiteralPath (Join-Path $StageApp "packaging\fetch_mo
 $script:Model = Join-Path $Shared "model\$revision"
 New-Shared $script:Model {
     param($dir)
-    Invoke-Checked "言語モデルの取得" {
+    Invoke-Checked "言語モデル rinna/japanese-gpt2-small の取得 (HuggingFace、リビジョン固定)" {
         & $script:Python (Join-Path $StageApp "packaging\fetch_model.py") $dir
     }
 }
@@ -228,7 +227,7 @@ New-Item -ItemType Directory -Force $selftestData | Out-Null
 $stageEngine = Join-Path $Stage "engine.json"
 Write-EngineJson $stageEngine $StageApp @("--data-dir", $selftestData)
 Say ""
-Say "== 試しに 1 回変換する (初めてのときは、辞書の準備に数分かかります)"
+Say "== 試運転 (本物の yuragi-broker.exe でエンジンを起動し、1 回変換。初回は辞書の準備に数分)"
 $selftestOut = Join-Path $Stage "selftest.txt"
 $proc = Start-Process -FilePath $brokerPath -ArgumentList @("--selftest", "`"$stageEngine`"", "--data-dir", "`"$selftestData`"") `
     -Wait -PassThru -RedirectStandardOutput $selftestOut
@@ -363,7 +362,7 @@ Stop-Broker
 New-Item -Force $ProductKey | Out-Null
 Set-ItemProperty -LiteralPath $ProductKey -Name "Tag" -Value $Tag
 Set-ItemProperty -LiteralPath $RunKey -Name "yuragi-ime" -Value "`"$BrokerFinal`""
-if ((Get-ItemProperty -LiteralPath $ProductKey).Tag -ne $Tag) { Fail "入っている版の記録を、レジストリに書けませんでした。" }
+if ((Get-ItemProperty -LiteralPath $ProductKey).Tag -ne $Tag) { Fail "HKCU の Tag を書けませんでした。" }
 # 旧版 (v0.1.0) が利用者側に書いた COM 登録は、HKLM の登録より優先されるので消す。
 $oldUserClsid = "HKCU:\Software\Classes\CLSID\$Clsid"
 if (Test-Path -LiteralPath $oldUserClsid) { Remove-Item -LiteralPath $oldUserClsid -Recurse -Force }

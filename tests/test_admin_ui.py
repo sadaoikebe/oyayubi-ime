@@ -261,7 +261,7 @@ class StatusTest(Base):
         self.assertEqual(rows["登録した単語"], "1 件")
         self.assertEqual(rows["個人辞書の読めなかった行"], "0 行")
         self.assertEqual(rows["設定ファイル"], str(self.config))
-        self.assertIn(rows["辞書"], ("正常", "辞書を確かめるための記録がありません"))
+        self.assertIn(rows["辞書"], ("正常", "照合の記録（マニフェスト）がありません"))
 
     def test_no_broker_and_a_last_stop(self):
         logs = self.dir / "logs"

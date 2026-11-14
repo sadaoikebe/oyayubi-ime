@@ -357,7 +357,7 @@ class AdminModel:
                          "記録と違うファイルがあります: "
                          + "、".join(map(_dictionary_problem, problems))))
         else:
-            rows.append(("辞書", "辞書を確かめるための記録がありません"))
+            rows.append(("辞書", "照合の記録（マニフェスト）がありません"))
 
         rows.append(("学習", LEARNING_STATES[self.learning_state()]))
         if self.learning_file.exists():

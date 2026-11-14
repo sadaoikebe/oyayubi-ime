@@ -62,7 +62,7 @@ function Place([string]$source, [string]$sha256, [string]$dest) {
     Copy-Item -LiteralPath $source -Destination $tmp -Force
     if ((Get-Sha256 $tmp) -ne $sha256.ToLower()) {
         Remove-Item -LiteralPath $tmp -Force
-        throw "$(Split-Path $dest -Leaf) が壊れています (中身が記録と一致しません)"
+        throw "SHA-256 mismatch for $(Split-Path $dest -Leaf)"
     }
     Move-Item -LiteralPath $tmp -Destination $dest -Force
 }
