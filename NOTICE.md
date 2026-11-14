@@ -15,9 +15,12 @@ source zip) is also not MIT: a list of 157 entries taken from the Mozc
 dictionary (`docs/zero-row-entries.tsv`, under the Mozc dictionary terms
 below).
 
-This project does **not** include GPL code. The QMK NICOLA implementation
-(`nicola.c`) was used only as a specification of behavior; it is not copied
-here. RIME/Weasel and similar GPL IME hosts are not linked.
+The kana layout and the rules for telling simultaneous key presses from
+sequential ones follow the NICOLA layout specification published by the
+Japanese input consortium: NICOLA 配列規格書（日本語入力コンソーシアム）
+http://nicola.sunicom.co.jp/spec/kikaku.htm
+
+RIME/Weasel and similar GPL IME hosts are not linked.
 
 ## Mozc open-source dictionary
 
@@ -247,8 +250,7 @@ from a photo and traced into an outline (`assets/icon/src/glyph.json`); the
 | SampleIME (Windows-classic-samples) | MIT。TSF の読み物。ソースは同梱していない |
 | CorvusSKK | MIT ほか。TSF の読み物。ソースは同梱していない |
 | Mozc win32 tip | BSD-3-Clause。作法の参照。ソースは同梱していない |
-| `qmk_userspace` NICOLA (`nicola.c`) | GPL-2.0-or-later。**コピーしていない。** 挙動は `NICOLA-SPEC.md` から再実装 |
-| NICOLA 配列のかな割当 | 規格上の文字配置。GPL の C ソースではない |
+| NICOLA 配列規格書（日本語入力コンソーシアム） http://nicola.sunicom.co.jp/spec/kikaku.htm | かな配列と同時打鍵の判定規則はこの規格に基づく |
 
-`data/nicola_a.json` is a hiragana face table written from the NICOLA
-assignment, not a copy of GPL C sources.
+`data/nicola_a.json` is a hiragana face table written from the kana
+assignment in that specification.

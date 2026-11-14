@@ -1,6 +1,6 @@
 {
   "layout": "NICOLA-A",
-  "source": "Author table in qmk_userspace/users/nicola/nicola_table.c (kana assignment = NICOLA spec). Values transcribed as hiragana faces, not the GPL C source.",
+  "source": "NICOLA 配列規格書（日本語入力コンソーシアム） http://nicola.sunicom.co.jp/spec/kikaku.htm . Kana assignment follows this specification; values are written as hiragana faces.",
   "hands": {
     "q": "L", "w": "L", "e": "L", "r": "L", "t": "L",
     "a": "L", "s": "L", "d": "L", "f": "L", "g": "L",

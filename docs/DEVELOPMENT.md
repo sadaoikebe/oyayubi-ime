@@ -81,4 +81,4 @@ TIP は [`src/tip/README.md`](../src/tip/README.md)、ブローカーは [`src/b
 Google の BSD-3-Clause に加え、IPAdic（NAIST / ICOT）と沖縄辞書の条件が付きます。
 条文は [NOTICE.md](../NOTICE.md) と、取得した `third_party/mozc_oss_dict/README.txt`。
 インストール時に取得する Python ランタイム・PyTorch などの依存・LM モデルのライセンスも NOTICE.md にまとめてあります。
-GPL の `nicola.c` は入れていません。
+かな配列と同時打鍵の判定規則は NICOLA 配列規格書（日本語入力コンソーシアム、http://nicola.sunicom.co.jp/spec/kikaku.htm）に基づきます。

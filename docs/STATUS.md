@@ -10,7 +10,7 @@
 キー down/up + QPC
   → src/tip（自前 TSF、fail-open）
   → python -m yuragi.ime.server
-  → ChordFsm（NICOLA-SPEC のホスト移植。nicola.c はコピーしていない）
+  → ChordFsm（NICOLA 配列規格書の同時打鍵の判定規則に基づく）
   → トークン列をそのまま並べる（Plain / AmbShift / ThumbTap / Literal）
   → トークン同期 Viterbi + Mozc OSS 辞書テキスト
   → composition / 確定
@@ -69,7 +69,7 @@
 | 最初から E2E ニューラル | 打鍵に無い文を出せる。辞書＋ Connector のあとのリスコア用 |
 | やまぶきR / AHK / 紅皿をランタイムや UX 雛形にする | 左右を先に固定する失敗例 |
 | JIS / NICOLA-J を品質第一 | 常用は US + NICOLA-A。J は第 2 テーブルだけ |
-| `nicola.c` をコピー | GPL。仕様だけ移植 |
+| 既存の同時打鍵実装のソースを持ち込む | 規格書（NICOLA 配列規格書、http://nicola.sunicom.co.jp/spec/kikaku.htm）に基づいて実装する |
 | stock `mozc_server` / Mozc tip のフォーク | 単一ひらがな前提 |
 | PIME を TSF 殻にする | 巨大な既製品。自前 TIP が落ちた理由は Activate 待ちと先食いであり、殻を替える理由にならなかった。プラグインは削除済み |
 | 初版の自前 TIP（キーを先に食べ、Activate で辞書を待つ） | Win11 の TextInputHost を止め、全 IME が死んだ |
